@@ -17,14 +17,19 @@ import numpy as np
 from PIL import Image
 from sklearn.cluster import KMeans
 
+import pose
 from classify_stls import load_file_list
 from test_categories import load_embedding_matrix
 
 
-def contact_sheet(members, renders_dir, out_path, thumb=160, cols=6, max_tiles=36):
+def contact_sheet(members, renders_dir, out_path, thumb=160, cols=6, max_tiles=36,
+                  poses=None):
     tiles = []
     for f in members[:max_tiles]:
-        img_path = renders_dir / f"{f.stem}_view0.png"
+        front = (poses or {}).get(pose.file_identity(f), {}).get("front_view", 0)
+        img_path = renders_dir / f"{f.stem}_view{front}.png"
+        if not img_path.exists():
+            img_path = renders_dir / f"{f.stem}_view0.png"
         if img_path.exists():
             im = Image.open(img_path)
             im.thumbnail((thumb, thumb))
@@ -57,6 +62,7 @@ def main():
 
     files = load_file_list(Path(args.input), args.cache_dir)
     matrix, files, missing = load_embedding_matrix(files, args)
+    poses = pose.load_pose_cache(args.cache_dir)
     matrix = matrix.mean(axis=1)  # pool the per-view embeddings
     matrix /= np.linalg.norm(matrix, axis=1, keepdims=True)
     print(f"clustering {len(files)} models into {args.k} groups"
@@ -81,7 +87,7 @@ def main():
               + (" ..." if len(names) > 6 else ""))
         if renders_dir:
             if contact_sheet([files[i] for i in members], renders_dir,
-                             sheets_dir / f"cluster_{c:02d}.png"):
+                             sheets_dir / f"cluster_{c:02d}.png", poses=poses):
                 print(f"  sheet: {sheets_dir}/cluster_{c:02d}.png")
         for i in members:
             rows.append({"file": str(files[i]), "cluster": int(c),

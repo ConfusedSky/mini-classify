@@ -119,12 +119,14 @@ def main():
     files = load_file_list(root, args.cache_dir)
     matrix, files, missing = load_embedding_matrix(files, args)
     renders_dir = Path(args.renders_dir)
+    poses = pose.load_pose_cache(args.cache_dir)
 
     # display name: path relative to the input root, minus filler dirs.
     # Links open the render image (what SigLIP saw) when available, else the STL.
     def display(f):
         rel = str(f.relative_to(root)) if f.is_relative_to(root) else str(f)
-        render = renders_dir / f"{f.stem}_view0.png"
+        front = poses.get(pose.file_identity(f), {}).get("front_view", 0)
+        render = renders_dir / f"{f.stem}_view{front}.png"
         target = render.resolve() if render.exists() else f
         return link(target, rel.replace("/No Supports", "").removesuffix(".stl"))
     names = [display(f) for f in files]
