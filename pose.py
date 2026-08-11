@@ -2,10 +2,14 @@
 front-view scoring, a per-file pose cache, and a VLM arbiter for
 ambiguous cases. classify_stls.py orchestrates; this module never
 imports classify_stls (no rendering / model code here)."""
+import base64
+import io
 import json
+import subprocess
 from pathlib import Path
 
 import numpy as np
+from PIL import Image, ImageDraw
 
 UP_CANDIDATES = [np.array(u, dtype=float) for u in
                  [(0, 0, 1), (0, 0, -1), (0, 1, 0), (0, -1, 0), (1, 0, 0), (-1, 0, 0)]]
@@ -93,3 +97,93 @@ def front_view_index(view_embeds, front_embeds, back_embeds):
     score = ((view_embeds @ front_embeds.T).mean(1)
              - (view_embeds @ back_embeds.T).mean(1))
     return int(np.argmax(score))
+
+
+OLLAMA_URL = "http://localhost:11434"
+
+UP_PROMPT = (
+    "Each numbered tile shows the same 3D model in a different orientation. "
+    "Which tile shows the model standing upright, the way it would sit on a "
+    'table? Answer with JSON only: {"tile": <number>}'
+)
+
+
+def make_contact_sheet(tiles, thumb=256, cols=3):
+    """Grid of tiles labeled 1..n (red corner numbers) for the VLM prompt."""
+    rows = (len(tiles) + cols - 1) // cols
+    sheet = Image.new("RGB", (cols * thumb, rows * thumb), "white")
+    draw = ImageDraw.Draw(sheet)
+    for i, im in enumerate(tiles):
+        im = im.copy()
+        im.thumbnail((thumb, thumb))
+        x, y = (i % cols) * thumb, (i // cols) * thumb
+        sheet.paste(im, (x, y))
+        draw.text((x + 8, y + 4), str(i + 1), fill="red")
+    return sheet
+
+
+def parse_tile_answer(text, n_tiles):
+    """Extract {"tile": n} from a model reply. Returns 0-based index or None."""
+    try:
+        tile = json.loads(text[text.index("{"):text.rindex("}") + 1])["tile"]
+    except (ValueError, KeyError, TypeError):
+        return None
+    if isinstance(tile, int) and 1 <= tile <= n_tiles:
+        return tile - 1
+    return None
+
+
+def ollama_available():
+    import requests
+    try:
+        requests.get(f"{OLLAMA_URL}/api/version", timeout=2)
+        return True
+    except requests.RequestException:
+        return False
+
+
+def _ask_ollama(png_bytes, n_tiles, model):
+    import requests
+    resp = requests.post(f"{OLLAMA_URL}/api/chat", timeout=120, json={
+        "model": model,
+        "stream": False,
+        "format": {"type": "object", "properties": {"tile": {"type": "integer"}},
+                   "required": ["tile"]},
+        "messages": [{"role": "user", "content": UP_PROMPT,
+                      "images": [base64.b64encode(png_bytes).decode()]}],
+    })
+    resp.raise_for_status()
+    return parse_tile_answer(resp.json()["message"]["content"], n_tiles)
+
+
+def _ask_claude(sheet_path, n_tiles):
+    out = subprocess.run(
+        ["claude", "-p", f"Read the image at {sheet_path}. {UP_PROMPT}",
+         "--output-format", "json", "--max-turns", "3"],
+        capture_output=True, text=True, timeout=180)
+    if out.returncode != 0:
+        return None
+    return parse_tile_answer(json.loads(out.stdout).get("result", ""), n_tiles)
+
+
+def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma3"):
+    """Ask the VLM which candidate orientation is upright. One retry on a
+    bad/failed answer, then None — the caller keeps the heuristic guess.
+    The pipeline never hard-fails because of the VLM."""
+    sheet = make_contact_sheet(tiles)
+    for _attempt in range(2):
+        try:
+            if backend == "ollama":
+                buf = io.BytesIO()
+                sheet.save(buf, format="PNG")
+                idx = _ask_ollama(buf.getvalue(), len(tiles), vlm_model)
+            else:  # claude
+                sheet_path = Path(scratch_dir) / "pose-sheet.png"
+                sheet.save(sheet_path)
+                idx = _ask_claude(sheet_path, len(tiles))
+        except Exception as e:
+            print(f"  pose VLM error ({backend}): {e}")
+            idx = None
+        if idx is not None:
+            return idx
+    return None

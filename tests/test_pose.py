@@ -1,5 +1,7 @@
 import numpy as np
 import open3d as o3d
+import pytest
+from PIL import Image
 
 import pose
 
@@ -76,3 +78,31 @@ def test_front_view_index_picks_frontmost():
 
 def test_front_prompts_defined():
     assert pose.FRONT_PROMPTS and pose.BACK_PROMPTS
+
+
+def test_parse_tile_answer():
+    assert pose.parse_tile_answer('{"tile": 3}', 6) == 2
+    assert pose.parse_tile_answer('The answer is {"tile": 1}.', 6) == 0
+    assert pose.parse_tile_answer('{"tile": 9}', 6) is None
+    assert pose.parse_tile_answer('{"tile": 0}', 6) is None
+    assert pose.parse_tile_answer("no json here", 6) is None
+    assert pose.parse_tile_answer('{"tile": "two"}', 6) is None
+
+
+def test_make_contact_sheet_grid():
+    tiles = [Image.new("RGB", (512, 512), "gray") for _ in range(6)]
+    sheet = pose.make_contact_sheet(tiles, thumb=100, cols=3)
+    assert sheet.size == (300, 200)  # 3x2 grid of 100px tiles
+
+
+requires_ollama = pytest.mark.skipif(not pose.ollama_available(),
+                                     reason="ollama not running")
+
+
+@requires_ollama
+def test_ask_vlm_up_live_transport(tmp_path):
+    # exercises the real request/parse path; semantic quality isn't asserted,
+    # and a missing/unpulled model must degrade to None, never raise
+    tiles = [Image.new("RGB", (64, 64), "gray") for _ in range(6)]
+    idx = pose.ask_vlm_up(tiles, "ollama", tmp_path)
+    assert idx is None or 0 <= idx < 6
