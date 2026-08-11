@@ -173,7 +173,7 @@ def _ask_claude(sheet_path, n_tiles):
     return parse_tile_answer(json.loads(out.stdout).get("result", ""), n_tiles)
 
 
-def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma3"):
+def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b"):
     """Ask the VLM which candidate orientation is upright. One retry on a
     bad/failed answer, then None — the caller keeps the heuristic guess.
     The pipeline never hard-fails because of the VLM."""

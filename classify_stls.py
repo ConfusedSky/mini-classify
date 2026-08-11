@@ -253,7 +253,7 @@ def main():
                         default="auto",
                         help="arbiter for low-confidence up detection: local ollama "
                              "vision model, claude CLI, or off (auto = ollama if reachable)")
-    parser.add_argument("--pose-vlm-model", default="gemma3",
+    parser.add_argument("--pose-vlm-model", default="gemma4:26b",
                         help="ollama model name used by --pose-vlm")
     parser.add_argument("--up-conf", type=float, default=0.6,
                         help="up-detection ambiguity threshold: runner-up/best flat-base "
