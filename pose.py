@@ -170,7 +170,11 @@ def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma3"):
     """Ask the VLM which candidate orientation is upright. One retry on a
     bad/failed answer, then None — the caller keeps the heuristic guess.
     The pipeline never hard-fails because of the VLM."""
-    sheet = make_contact_sheet(tiles)
+    try:
+        sheet = make_contact_sheet(tiles)
+    except Exception as e:
+        print(f"  pose VLM error ({backend}): {e}")
+        return None
     for _attempt in range(2):
         try:
             if backend == "ollama":
