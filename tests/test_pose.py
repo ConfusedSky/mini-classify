@@ -62,3 +62,17 @@ def test_embed_cache_token_keeps_legacy_key_for_heuristic():
     assert pose.embed_cache_token(None, "auto") == "auto"
     assert pose.embed_cache_token({"up": [0, 0, 1], "source": "forced"}, "z") == "z"
     assert pose.embed_cache_token(vlm, "auto") == "vlm:0,1,0"
+
+
+def test_front_view_index_picks_frontmost():
+    front = np.array([[1.0, 0.0]])
+    back = np.array([[0.0, 1.0]])
+    views = np.array([[0.0, 1.0],    # back-facing
+                      [0.7, 0.7],
+                      [1.0, 0.0],    # front-facing
+                      [0.7, 0.3]])
+    assert pose.front_view_index(views, front, back) == 2
+
+
+def test_front_prompts_defined():
+    assert pose.FRONT_PROMPTS and pose.BACK_PROMPTS

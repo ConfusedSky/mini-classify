@@ -105,13 +105,19 @@ def render_views(renderer, mesh_path, n_views, elevation_deg=20, up_axis="auto")
 
 
 @torch.no_grad()
+def embed_raw(model, processor, texts, device):
+    """Embed raw text strings (no category templates), row-normalized."""
+    inputs = processor(text=texts, padding="max_length", return_tensors="pt").to(device)
+    feat = as_tensor(model.get_text_features(**inputs))
+    return torch.nn.functional.normalize(feat, dim=-1)  # (n_texts, dim)
+
+
+@torch.no_grad()
 def embed_texts(model, processor, categories, device):
     embeds = []
     for cat in categories:
         prompts = [t.format(cat) for t in PROMPT_TEMPLATES]
-        inputs = processor(text=prompts, padding="max_length", return_tensors="pt").to(device)
-        feat = as_tensor(model.get_text_features(**inputs))
-        feat = torch.nn.functional.normalize(feat, dim=-1).mean(0)
+        feat = embed_raw(model, processor, prompts, device).mean(0)
         embeds.append(torch.nn.functional.normalize(feat, dim=-1))
     return torch.stack(embeds)  # (n_categories, dim)
 

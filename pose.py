@@ -75,3 +75,21 @@ def embed_cache_token(entry, up_axis_arg):
     if entry and entry.get("source") == "vlm":
         return "vlm:" + up_str(entry["up"])
     return up_axis_arg
+
+
+FRONT_PROMPTS = [
+    "the front of a miniature figurine, facing the camera",
+    "a miniature figurine seen from the front, face and chest visible",
+]
+BACK_PROMPTS = [
+    "the back of a miniature figurine, facing away from the camera",
+    "a miniature figurine seen from behind, back of the head visible",
+]
+
+
+def front_view_index(view_embeds, front_embeds, back_embeds):
+    """Index of the view that best faces the camera. Front is metadata: this
+    never triggers a re-render, it just names one of the existing views."""
+    score = ((view_embeds @ front_embeds.T).mean(1)
+             - (view_embeds @ back_embeds.T).mean(1))
+    return int(np.argmax(score))
