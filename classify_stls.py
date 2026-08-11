@@ -164,16 +164,20 @@ SKIP_TAGS = ("presupported", "pre-supported", "pre_supported", "supported",
              "base", "hollow", "75mm")
 
 
+def skip(name):
+    # "unsupported" means NO supports — don't let the "supported" tag match inside it
+    low = name.lower().replace("unsupported", "")
+    return any(t in low for t in SKIP_TAGS)
+
+
 def find_stls(root):
     found = []
     for dirpath, dirnames, filenames in os.walk(root):
         # prune skipped directories before descending — big win on slow drives
-        dirnames[:] = [d for d in dirnames
-                       if not d.startswith(".") and not any(t in d.lower() for t in SKIP_TAGS)]
+        dirnames[:] = [d for d in dirnames if not d.startswith(".") and not skip(d)]
         for name in filenames:
-            low = name.lower()
-            if (not name.startswith(".") and low.endswith(".stl")
-                    and not any(t in low for t in SKIP_TAGS)):
+            if (not name.startswith(".") and name.lower().endswith(".stl")
+                    and not skip(name)):
                 found.append(Path(dirpath) / name)
     return sorted(found)
 
@@ -182,7 +186,7 @@ def load_file_list(inp, cache_dir, rescan=False):
     """Directory walk with cached file list (see --rescan)."""
     walk_cache = None
     if cache_dir:
-        walk_id = hashlib.sha1(f"{inp.resolve()}|{SKIP_TAGS}".encode()).hexdigest()
+        walk_id = hashlib.sha1(f"{inp.resolve()}|{SKIP_TAGS}|unsupported-ok".encode()).hexdigest()
         walk_cache = Path(cache_dir) / f"walk-{walk_id}.json"
     if walk_cache and walk_cache.exists() and not rescan:
         saved = json.loads(walk_cache.read_text())

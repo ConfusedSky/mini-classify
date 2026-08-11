@@ -65,7 +65,18 @@ def show_classification(sims, categories, names, prev):
 
 
 def show_query(sims_1d, names, top=10, min_score=None):
+    # z-score: how far a model stands out from the whole collection for this
+    # query. Cosine scores are only comparable within a query; z is comparable
+    # across queries, so it detects "nothing here actually matches".
+    # robust z (median/MAD): unlike mean/std it isn't skewed when many models
+    # genuinely match, so broad queries don't get falsely flagged as weak
+    med = np.median(sims_1d)
+    mad = np.median(np.abs(sims_1d - med)) * 1.4826 + 1e-9
+    z = (sims_1d - med) / mad
     order = np.argsort(-sims_1d)
+    if z[order[0]] < 3.0:
+        print(f"  WEAK QUERY (best z {z[order[0]]:.1f}) — nothing stands out; "
+              f"probably not represented in the collection")
     if min_score is not None:
         order = order[sims_1d[order] >= min_score]
         if len(order) == 0:
@@ -75,7 +86,7 @@ def show_query(sims_1d, names, top=10, min_score=None):
     else:
         order = order[:top]
     for i in order:
-        print(f"  {sims_1d[i]:.3f}  {names[i]}")
+        print(f"  {sims_1d[i]:.3f} (z {z[i]:4.1f})  {names[i]}")
 
 
 def main():
@@ -91,15 +102,22 @@ def main():
     parser.add_argument("--pool", choices=["mean", "max", "softmax"], default="mean")
     parser.add_argument("--min-score", type=float, default=None,
                         help="queries list every model scoring at least this (instead of top 10)")
+    parser.add_argument("--renders-dir", default="my_renders",
+                        help="saved renders; display names link to the render image when it exists")
     args = parser.parse_args()
 
     root = Path(args.input)
     files = load_file_list(root, args.cache_dir)
     matrix, files, missing = load_embedding_matrix(files, args)
-    # display name: path relative to the input root, minus filler dirs
+    renders_dir = Path(args.renders_dir)
+
+    # display name: path relative to the input root, minus filler dirs.
+    # Links open the render image (what SigLIP saw) when available, else the STL.
     def display(f):
         rel = str(f.relative_to(root)) if f.is_relative_to(root) else str(f)
-        return link(f, rel.replace("/No Supports", "").removesuffix(".stl"))
+        render = renders_dir / f"{f.stem}_view0.png"
+        target = render.resolve() if render.exists() else f
+        return link(target, rel.replace("/No Supports", "").removesuffix(".stl"))
     names = [display(f) for f in files]
     print(f"{len(files)} models with cached embeddings"
           + (f" ({missing} not in cache — run classify_stls.py to add them)" if missing else ""))
