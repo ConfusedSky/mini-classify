@@ -12,12 +12,21 @@ Requires classify_stls.py to have been run first (it builds the caches);
 files without cached embeddings are skipped with a warning.
 """
 import argparse
+import sys
 from pathlib import Path
+from urllib.parse import quote
 
 import numpy as np
 import torch
 
 from classify_stls import as_tensor, cache_key, embed_texts, load_file_list, pool_sims
+
+
+def link(f, text):
+    """OSC 8 terminal hyperlink to the file; plain text when piped."""
+    if not sys.stdout.isatty():
+        return text
+    return f"\033]8;;file://{quote(str(f))}\033\\{text}\033]8;;\033\\"
 
 
 def load_embedding_matrix(files, args):
@@ -35,7 +44,7 @@ def load_embedding_matrix(files, args):
     return np.stack(vecs).astype(np.float32), kept, missing  # (n_files, n_views, dim)
 
 
-def show_classification(sims, categories, files, prev):
+def show_classification(sims, categories, names, prev):
     assign = sims.argmax(1)
     print(f"\n{'category':<40} {'count':>5}   best match")
     for c in np.argsort(-np.bincount(assign, minlength=len(categories))):
@@ -44,20 +53,29 @@ def show_classification(sims, categories, files, prev):
             print(f"{categories[c]:<40} {0:>5}   —")
             continue
         best = members[sims[members, c].argmax()]
-        print(f"{categories[c]:<40} {len(members):>5}   {files[best].stem} ({sims[best, c]:.3f})")
+        print(f"{categories[c]:<40} {len(members):>5}   {names[best]} ({sims[best, c]:.3f})")
     if prev is not None:
         changed = np.where(assign != prev["assign"])[0]
-        print(f"\n{len(changed)} of {len(files)} models changed assignment")
+        print(f"\n{len(changed)} of {len(names)} models changed assignment")
         for i in changed[:15]:
-            print(f"  {files[i].stem}: {prev['categories'][prev['assign'][i]]} -> {categories[assign[i]]}")
+            print(f"  {names[i]}: {prev['categories'][prev['assign'][i]]} -> {categories[assign[i]]}")
         if len(changed) > 15:
             print(f"  ... and {len(changed) - 15} more")
     return {"assign": assign, "categories": categories}
 
 
-def show_query(sims_1d, files, top=10):
-    for i in np.argsort(-sims_1d)[:top]:
-        print(f"  {sims_1d[i]:.3f}  {files[i].stem}")
+def show_query(sims_1d, names, top=10, min_score=None):
+    order = np.argsort(-sims_1d)
+    if min_score is not None:
+        order = order[sims_1d[order] >= min_score]
+        if len(order) == 0:
+            print(f"  nothing scores >= {min_score}")
+            return
+        print(f"  {len(order)} models >= {min_score}:")
+    else:
+        order = order[:top]
+    for i in order:
+        print(f"  {sims_1d[i]:.3f}  {names[i]}")
 
 
 def main():
@@ -71,10 +89,18 @@ def main():
     parser.add_argument("--up-axis", choices=["auto", "z", "y"], default="auto")
     parser.add_argument("--cache-dir", default="embed-cache")
     parser.add_argument("--pool", choices=["mean", "max", "softmax"], default="mean")
+    parser.add_argument("--min-score", type=float, default=None,
+                        help="queries list every model scoring at least this (instead of top 10)")
     args = parser.parse_args()
 
-    files = load_file_list(Path(args.input), args.cache_dir)
+    root = Path(args.input)
+    files = load_file_list(root, args.cache_dir)
     matrix, files, missing = load_embedding_matrix(files, args)
+    # display name: path relative to the input root, minus filler dirs
+    def display(f):
+        rel = str(f.relative_to(root)) if f.is_relative_to(root) else str(f)
+        return link(f, rel.replace("/No Supports", "").removesuffix(".stl"))
+    names = [display(f) for f in files]
     print(f"{len(files)} models with cached embeddings"
           + (f" ({missing} not in cache — run classify_stls.py to add them)" if missing else ""))
 
@@ -89,14 +115,16 @@ def main():
         return emb.float().cpu().numpy().T  # (dim, n_texts)
 
     pool = args.pool
+    min_score = args.min_score
 
     def score(texts):  # (n_files, n_texts), pooled over views
         view_sims = matrix @ text_matrix(texts)  # (n_files, n_views, n_texts)
         return pool_sims(view_sims, pool)
 
     prev = None
-    print(f"\nenter = classify with categories.txt | text = query | "
-          f":pool mean|max|softmax (now {pool}) | q = quit")
+    print(f"\nenter = classify with categories.txt | text = query | :find <text> = "
+          f"locate files | :pool mean|max|softmax (now {pool}) | "
+          f":min <score>/off = threshold instead of top-10 | q = quit")
     while True:
         try:
             line = input(f"\ncategory-test[{pool}]> ").strip()
@@ -104,7 +132,24 @@ def main():
             break
         if line.lower() in ("q", "quit", "exit"):
             break
-        if line.startswith(":pool"):
+        if line.startswith(":min"):
+            val = line[4:].strip()
+            if val in ("off", ""):
+                min_score = None
+                print("showing top 10 per query")
+            else:
+                try:
+                    min_score = float(val)
+                    print(f"showing all results >= {min_score}")
+                except ValueError:
+                    print("usage: :min 0.1  or  :min off")
+        elif line.startswith(":find"):
+            needle = line[5:].strip().lower()
+            matches = [f for f in files if needle in str(f).lower()]
+            for f in matches[:20]:
+                print(f"  {link(f, str(f))}")
+            print(f"  ({len(matches)} matches)" if matches else "  no matches")
+        elif line.startswith(":pool"):
             choice = line.split()[-1]
             if choice in ("mean", "max", "softmax"):
                 pool = choice
@@ -112,10 +157,10 @@ def main():
             else:
                 print("usage: :pool mean|max|softmax")
         elif line:
-            show_query(score([line]).ravel(), files)
+            show_query(score([line]).ravel(), names, min_score=min_score)
         else:
             categories = [l.strip() for l in open(args.categories) if l.strip()]
-            prev = show_classification(score(categories), categories, files, prev)
+            prev = show_classification(score(categories), categories, names, prev)
 
 
 if __name__ == "__main__":
