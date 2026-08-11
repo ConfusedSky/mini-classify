@@ -119,6 +119,38 @@ collection itself suggests taxonomy refinements.
   PNGs (~24 s for 73 files), never re-render. Version the cache key ("|pv")
   so old entries orphan cleanly.
 
+## Canonical pose: confidence, VLM arbiter, front view (2026-08-11, verification pending)
+
+- **`sample_points_uniformly` interpolates vertex normals by default**, which
+  blends normals across creases (a cone's base rim inherits mantle tilt) and
+  destroys the flat-base up-detection signal on vertex-sharing meshes. Pass
+  `use_triangle_normal=True`: measures actual face orientation and drops the
+  hidden compute-vertex-normals-first precondition. Real STLs mostly dodge
+  this (the reader duplicates vertices per facet) — procedural test meshes
+  don't, which is how the tests caught it.
+- **Up-detection confidence = runner-up/best flat-base score ratio.** Cone
+  (one flat face) is decisive; torus measured 0.98, cylinder ≈1.0 (±Z caps
+  identical). Ratio > 0.6 or best score < 0.02 escalates to a VLM arbiter;
+  everything else never pays for one. A box is *maximally* ambiguous under
+  this scorer (six flat faces) — don't use one as a "decisive" test fixture.
+- **Warm caches can survive a pose-pipeline redesign.** The heuristic's
+  answer is a deterministic function of the file, so heuristic-resolved
+  poses keep the legacy cache-key token ("auto"); only VLM *overrides* —
+  where the render genuinely differs — re-key as `vlm:x,y,z`. Rebuilding the
+  pose logic invalidated zero existing embeddings.
+- **Front view is metadata, not a render decision.** Score cached per-view
+  embeddings against front/back text prompts (mean front-sim − mean
+  back-sim, argmax) and record the winning index; REPL links and contact
+  sheets reorder views at display time. No re-render, caches untouched, and
+  the choice retunes for free when prompts change (after deleting
+  pose-cache.json — its identity doesn't cover prompts).
+- Don't hardcode ollama model tags: the plan assumed `gemma3`, the actual
+  pull landed as `gemma4:26b` — hence `--pose-vlm-model`.
+- Still unverified as of the pause: poses/fronts eyeballed on real renders,
+  a live VLM answer end-to-end (transport + degrade paths are tested; no
+  model was pulled until late in the session), and the claude CLI backend
+  (may need file-read permission in `-p` mode).
+
 ## Open-set queries: detecting "not in the collection"
 
 - Cosine scores are only comparable *within* a query — some phrasings run
