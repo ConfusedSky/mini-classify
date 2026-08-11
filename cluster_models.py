@@ -57,6 +57,8 @@ def main():
 
     files = load_file_list(Path(args.input), args.cache_dir)
     matrix, files, missing = load_embedding_matrix(files, args)
+    matrix = matrix.mean(axis=1)  # pool the per-view embeddings
+    matrix /= np.linalg.norm(matrix, axis=1, keepdims=True)
     print(f"clustering {len(files)} models into {args.k} groups"
           + (f" ({missing} not in cache — run classify_stls.py to add them)" if missing else ""))
 

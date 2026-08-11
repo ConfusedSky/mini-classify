@@ -141,8 +141,23 @@ def embed_texts(model, processor, categories, device):
 def embed_images(model, processor, images, device):
     inputs = processor(images=images, return_tensors="pt").to(device)
     feat = as_tensor(model.get_image_features(**inputs))
-    feat = torch.nn.functional.normalize(feat, dim=-1).mean(0)
-    return torch.nn.functional.normalize(feat, dim=-1)  # (dim,)
+    return torch.nn.functional.normalize(feat, dim=-1)  # (n_views, dim)
+
+
+def pool_sims(view_sims, mode, axis=-2):
+    """Pool per-view similarity scores (..., n_views, n_categories) over views.
+
+    mean: robust whole-object consensus (a feature seen in 1 of 4 views keeps
+    ~25% weight). max: "clearly visible from some angle" — lets single-view
+    features decide. softmax: in between (sharpness set by BETA).
+    """
+    if mode == "mean":
+        return view_sims.mean(axis)
+    if mode == "max":
+        return view_sims.max(axis)
+    BETA = 50.0
+    w = np.exp(BETA * (view_sims - view_sims.max(axis, keepdims=True)))
+    return (w * view_sims).sum(axis) / w.sum(axis)
 
 
 SKIP_TAGS = ("presupported", "pre-supported", "pre_supported", "supported",
@@ -189,7 +204,8 @@ def load_file_list(inp, cache_dir, rescan=False):
 
 def cache_key(f, args):
     stat = f.stat()
-    raw = f"{f.resolve()}|{stat.st_mtime_ns}|{stat.st_size}|{args.views}|{args.render_size}|{args.up_axis}|{args.model}"
+    # "pv" = per-view cache format: (n_views, dim) instead of one pooled vector
+    raw = f"{f.resolve()}|{stat.st_mtime_ns}|{stat.st_size}|{args.views}|{args.render_size}|{args.up_axis}|{args.model}|pv"
     return hashlib.sha1(raw.encode()).hexdigest()
 
 
@@ -209,6 +225,9 @@ def main():
                              "categories skip rendering/embedding entirely (set '' to disable)")
     parser.add_argument("--rescan", action="store_true",
                         help="re-walk the input directory instead of using the cached file list")
+    parser.add_argument("--pool", choices=["mean", "max", "softmax"], default="mean",
+                        help="how per-view scores combine: mean = whole-object consensus, "
+                             "max = single-view features decide, softmax = in between")
     args = parser.parse_args()
 
     inp = Path(args.input)
@@ -241,24 +260,30 @@ def main():
         renders_saved = rdir is None or all(
             (rdir / f"{f.stem}_view{i}.png").exists() for i in range(args.views))
         if cache_file and cache_file.exists() and renders_saved:
-            img_embed = torch.from_numpy(np.load(cache_file)).to(device, dtype=text_embeds.dtype)
+            img_embeds = torch.from_numpy(np.load(cache_file)).to(device, dtype=text_embeds.dtype)
             hits += 1
         else:
-            if renderer is None:
-                renderer = make_renderer(args.render_size)
-            try:
-                images = render_views(renderer, f, args.views, up_axis=args.up_axis)
-            except Exception as e:
-                rows.append({"file": str(f), "top1": f"RENDER_ERROR: {e}"})
-                continue
-            if rdir:
-                rdir.mkdir(parents=True, exist_ok=True)
-                for i, im in enumerate(images):
-                    im.save(rdir / f"{f.stem}_view{i}.png")
-            img_embed = embed_images(model, processor, images, device)
+            if rdir and renders_saved:
+                # embed straight from previously saved renders — no re-rendering
+                images = [Image.open(rdir / f"{f.stem}_view{i}.png").convert("RGB")
+                          for i in range(args.views)]
+            else:
+                if renderer is None:
+                    renderer = make_renderer(args.render_size)
+                try:
+                    images = render_views(renderer, f, args.views, up_axis=args.up_axis)
+                except Exception as e:
+                    rows.append({"file": str(f), "top1": f"RENDER_ERROR: {e}"})
+                    continue
+                if rdir:
+                    rdir.mkdir(parents=True, exist_ok=True)
+                    for i, im in enumerate(images):
+                        im.save(rdir / f"{f.stem}_view{i}.png")
+            img_embeds = embed_images(model, processor, images, device)
             if cache_file:
-                np.save(cache_file, img_embed.float().cpu().numpy())
-        sims = (text_embeds @ img_embed).float().cpu()
+                np.save(cache_file, img_embeds.float().cpu().numpy())
+        view_sims = (img_embeds @ text_embeds.T).float().cpu().numpy()  # (n_views, n_cats)
+        sims = torch.from_numpy(pool_sims(view_sims, args.pool))
         order = sims.argsort(descending=True)
         row = {"file": str(f)}
         for rank in range(min(3, len(categories))):

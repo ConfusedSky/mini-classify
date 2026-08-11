@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from classify_stls import as_tensor, cache_key, embed_texts, load_file_list
+from classify_stls import as_tensor, cache_key, embed_texts, load_file_list, pool_sims
 
 
 def load_embedding_matrix(files, args):
@@ -32,7 +32,7 @@ def load_embedding_matrix(files, args):
             missing += 1
     if not vecs:
         raise SystemExit("no cached embeddings found — run classify_stls.py first")
-    return np.vstack(vecs).astype(np.float32), kept, missing
+    return np.stack(vecs).astype(np.float32), kept, missing  # (n_files, n_views, dim)
 
 
 def show_classification(sims, categories, files, prev):
@@ -70,6 +70,7 @@ def main():
     parser.add_argument("--model", default="google/siglip2-so400m-patch14-384")
     parser.add_argument("--up-axis", choices=["auto", "z", "y"], default="auto")
     parser.add_argument("--cache-dir", default="embed-cache")
+    parser.add_argument("--pool", choices=["mean", "max", "softmax"], default="mean")
     args = parser.parse_args()
 
     files = load_file_list(Path(args.input), args.cache_dir)
@@ -87,21 +88,34 @@ def main():
         emb = embed_texts(model, processor, texts, device)
         return emb.float().cpu().numpy().T  # (dim, n_texts)
 
+    pool = args.pool
+
+    def score(texts):  # (n_files, n_texts), pooled over views
+        view_sims = matrix @ text_matrix(texts)  # (n_files, n_views, n_texts)
+        return pool_sims(view_sims, pool)
+
     prev = None
-    print("\nenter = classify with categories.txt | any text = query | q = quit")
+    print(f"\nenter = classify with categories.txt | text = query | "
+          f":pool mean|max|softmax (now {pool}) | q = quit")
     while True:
         try:
-            line = input("\ncategory-test> ").strip()
+            line = input(f"\ncategory-test[{pool}]> ").strip()
         except (EOFError, KeyboardInterrupt):
             break
         if line.lower() in ("q", "quit", "exit"):
             break
-        if line:
-            show_query((matrix @ text_matrix([line])).ravel(), files)
+        if line.startswith(":pool"):
+            choice = line.split()[-1]
+            if choice in ("mean", "max", "softmax"):
+                pool = choice
+                print(f"pooling set to {pool}")
+            else:
+                print("usage: :pool mean|max|softmax")
+        elif line:
+            show_query(score([line]).ravel(), files)
         else:
             categories = [l.strip() for l in open(args.categories) if l.strip()]
-            sims = matrix @ text_matrix(categories)
-            prev = show_classification(sims, categories, files, prev)
+            prev = show_classification(score(categories), categories, files, prev)
 
 
 if __name__ == "__main__":
