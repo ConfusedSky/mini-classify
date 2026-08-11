@@ -145,6 +145,48 @@ def embed_images(model, processor, images, device):
     return torch.nn.functional.normalize(feat, dim=-1)  # (dim,)
 
 
+SKIP_TAGS = ("presupported", "pre-supported", "pre_supported", "supported",
+             "base", "hollow", "75mm")
+
+
+def find_stls(root):
+    found = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        # prune skipped directories before descending — big win on slow drives
+        dirnames[:] = [d for d in dirnames
+                       if not d.startswith(".") and not any(t in d.lower() for t in SKIP_TAGS)]
+        for name in filenames:
+            low = name.lower()
+            if (not name.startswith(".") and low.endswith(".stl")
+                    and not any(t in low for t in SKIP_TAGS)):
+                found.append(Path(dirpath) / name)
+    return sorted(found)
+
+
+def load_file_list(inp, cache_dir, rescan=False):
+    """Directory walk with cached file list (see --rescan)."""
+    walk_cache = None
+    if cache_dir:
+        walk_id = hashlib.sha1(f"{inp.resolve()}|{SKIP_TAGS}".encode()).hexdigest()
+        walk_cache = Path(cache_dir) / f"walk-{walk_id}.json"
+    if walk_cache and walk_cache.exists() and not rescan:
+        saved = json.loads(walk_cache.read_text())
+        files = [Path(p) for p in saved["files"]]
+        gone = [f for f in files if not f.exists()]
+        files = [f for f in files if f.exists()]
+        age_days = (time.time() - saved["scanned"]) / 86400
+        note = f", {len(gone)} vanished since scan" if gone else ""
+        print(f"using cached file list: {len(files)} files, scanned "
+              f"{age_days:.1f} days ago{note} (--rescan to refresh)")
+        return files
+    files = find_stls(inp)
+    if walk_cache:
+        walk_cache.parent.mkdir(parents=True, exist_ok=True)
+        walk_cache.write_text(json.dumps(
+            {"scanned": time.time(), "files": [str(f) for f in files]}))
+    return files
+
+
 def cache_key(f, args):
     stat = f.stat()
     raw = f"{f.resolve()}|{stat.st_mtime_ns}|{stat.st_size}|{args.views}|{args.render_size}|{args.up_axis}|{args.model}"
@@ -169,45 +211,8 @@ def main():
                         help="re-walk the input directory instead of using the cached file list")
     args = parser.parse_args()
 
-    SKIP_TAGS = ("presupported", "pre-supported", "pre_supported", "supported",
-                 "base", "hollow", "75mm")
-
-    def find_stls(root):
-        found = []
-        for dirpath, dirnames, filenames in os.walk(root):
-            # prune skipped directories before descending — big win on slow drives
-            dirnames[:] = [d for d in dirnames
-                           if not d.startswith(".") and not any(t in d.lower() for t in SKIP_TAGS)]
-            for name in filenames:
-                low = name.lower()
-                if (not name.startswith(".") and low.endswith(".stl")
-                        and not any(t in low for t in SKIP_TAGS)):
-                    found.append(Path(dirpath) / name)
-        return sorted(found)
-
     inp = Path(args.input)
-    if inp.is_dir():
-        walk_cache = None
-        if args.cache_dir:
-            walk_id = hashlib.sha1(f"{inp.resolve()}|{SKIP_TAGS}".encode()).hexdigest()
-            walk_cache = Path(args.cache_dir) / f"walk-{walk_id}.json"
-        if walk_cache and walk_cache.exists() and not args.rescan:
-            saved = json.loads(walk_cache.read_text())
-            files = [Path(p) for p in saved["files"]]
-            gone = [f for f in files if not f.exists()]
-            files = [f for f in files if f.exists()]
-            age_days = (time.time() - saved["scanned"]) / 86400
-            note = f", {len(gone)} vanished since scan" if gone else ""
-            print(f"using cached file list: {len(files)} files, scanned "
-                  f"{age_days:.1f} days ago{note} (--rescan to refresh)")
-        else:
-            files = find_stls(inp)
-            if walk_cache:
-                walk_cache.parent.mkdir(parents=True, exist_ok=True)
-                walk_cache.write_text(json.dumps(
-                    {"scanned": time.time(), "files": [str(f) for f in files]}))
-    else:
-        files = [inp]
+    files = load_file_list(inp, args.cache_dir, args.rescan) if inp.is_dir() else [inp]
     if not files:
         sys.exit(f"no STL files found under {inp}")
     categories = [l.strip() for l in open(args.categories) if l.strip()]
