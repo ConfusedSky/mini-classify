@@ -1,0 +1,18 @@
+dragon
+knight or armored warrior
+wizard or mage
+archer or ranger
+goblin or orc
+skeleton or undead creature
+demon or monster
+beast or animal
+giant or troll or ogre
+mounted rider on a creature
+robot or mech
+spaceship or vehicle
+terrain or scenery piece
+building or ruin
+bust of a character
+woman
+witch
+human townsperson or worker
