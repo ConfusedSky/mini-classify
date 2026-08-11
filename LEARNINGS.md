@@ -189,8 +189,24 @@ speed cost was acceptable, which made a second view axis worth paying for too.
   `0..n_views-1` remain the first ring — `view0.png` keeps meaning the same
   camera as every previous run, which is what lets saved renders and
   `front_view` indices stay meaningful across the change.
-- Elevations are clamped to ±89°: at ±90 the camera's `up` vector `[0,0,1]`
-  is parallel to its view direction and `setup_camera` degenerates.
+- **A constant `up` silently kills azimuth near the poles.** Passing world
+  `[0,0,1]` to `setup_camera` looks safe at any elevation short of ±90, but
+  Filament's `lookAt` calls `up` degenerate once `|up · view| > 0.999` — that
+  is **|elev| > 87.44°, not 90°** — and substitutes a *fixed* fallback up.
+  The fallback doesn't rotate with azimuth, so a whole ring collapses: a
+  `--elevations 20,89,-89,-20` run rendered its two polar rings as 8 copies
+  of one camera (mean |view₈ − view₁₂| was 3/255, all of it shading; the ±20°
+  rings differ by 13–17). The ±89° clamp was reasoning about the ±90°
+  singularity and landed *inside* the broken band.
+  Fix: carry `up` around the orbit instead of holding it fixed —
+  `(-cos az·sin elev, -sin az·sin elev, cos elev)`. It is exactly orthogonal
+  to the view direction, so `lookAt` never falls back, and below 87° it is
+  the same frame `[0,0,1]` already produced (verified: max pixel delta 2/255,
+  the warm cache stays valid). The poles are now ordinary cameras, so the
+  clamp relaxes to ±90.
+  Generally: a look-at `up` that is *near* the view direction is already
+  broken, and it fails silently — identical-looking frames, no error. Derive
+  `up` from the same parameters as `eye`, don't hardcode it.
 - The pose contact sheet stays pinned at one 20° tile. Up-detection input
   shouldn't change shape as a side effect of a classify-side render flag.
 - **Append-only cache keys, again.** Same trick as the pose token (above): a

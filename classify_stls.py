@@ -116,7 +116,12 @@ def render_views(renderer, mesh, angles):
         eye = center + radius * np.array(
             [np.cos(az) * np.cos(elev), np.sin(az) * np.cos(elev), np.sin(elev)]
         )
-        renderer.setup_camera(45.0, center, eye, [0, 0, 1])
+        # Camera 'up' is world +Z carried along the orbit, not +Z itself: the two
+        # frame the image identically, but past |elev| 87.44 (|up . view| > 0.999)
+        # Filament calls +Z degenerate and swaps in a fixed fallback up, which
+        # freezes the image orientation so azimuth stops changing the render.
+        up = [-np.cos(az) * np.sin(elev), -np.sin(az) * np.sin(elev), np.cos(elev)]
+        renderer.setup_camera(45.0, center, eye, up)
         # headlight: key light shines from the camera, tilted downward in world
         # space so shading is consistent with "up" from every orbit angle
         sun_dir = (center - eye) / np.linalg.norm(center - eye) + [0, 0, -0.6]
@@ -266,9 +271,10 @@ def parse_elevations(text):
         raise argparse.ArgumentTypeError(f"not a list of numbers: {text!r}")
     if not elevs:
         raise argparse.ArgumentTypeError("need at least one elevation")
-    if any(abs(e) > 89 for e in elevs):
-        # at ±90 the camera would look straight down its own 'up' vector
-        raise argparse.ArgumentTypeError("elevations must be within ±89 degrees")
+    if any(abs(e) > 90 for e in elevs):
+        # ±90 is straight down / straight up; render_views carries 'up' around the
+        # orbit so the poles are ordinary cameras, not a degenerate look-at
+        raise argparse.ArgumentTypeError("elevations must be within ±90 degrees")
     return elevs
 
 
