@@ -102,6 +102,57 @@ unsupervised — robots, sci-fi humanoids, brutes, monsters — and "terrain"
 split into fortifications / scatter terrain / weapon accessories, i.e. the
 collection itself suggests taxonomy refinements.
 
+## View pooling (per-view cache format)
+
+- Scoring against the *averaged* view embedding equals averaging per-view
+  scores (dot products are linear) — so mean pooling gives a single-view
+  feature ~25% weight. Fine for whole-object category, bad for categories
+  that hinge on one angle (undead details, held items).
+- Cache stores per-view vectors (4×1152 per file); pooling happens at scoring
+  time via `--pool mean|max|softmax`, so switching modes never re-renders.
+- Measured on 73 models, mean→max changed 13 assignments. Wins: models whose
+  identity is angle-dependent (TatteredTroopers → skeleton/undead,
+  FemaleOrcWarrior → orc). Cost: ornament-driven false positives (Cannon →
+  undead via its skull decorations). Max also runs higher raw scores than
+  mean — raw thresholds are pool-mode-specific.
+- Cache format changes are cheap if renders are saved: re-embed from the
+  PNGs (~24 s for 73 files), never re-render. Version the cache key ("|pv")
+  so old entries orphan cleanly.
+
+## Open-set queries: detecting "not in the collection"
+
+- Cosine scores are only comparable *within* a query — some phrasings run
+  hot, some cold — so a raw threshold alone can't tell "present" from
+  "absent"; something always ranks first.
+- Z-score against the collection's own distribution per query. Plain
+  mean/std z fails when a category is *well*-represented (8 robots inflate
+  the mean → the query looks weak); robust z (median/MAD) fixes it.
+- **Measured: no z cutoff separates modest correct matches from semantic
+  near-misses.** Correct "skeleton" → TatteredTroopers at z 2.4–2.7;
+  wrong-but-nearest "witch on a broomstick" → AurochRider (a mounted rider)
+  at z 3.7. Layer the defenses instead: z < 2.0 = whole query is noise,
+  suppress output entirely; raw score < 0.1 (default --min-score) trims weak
+  individual matches; displayed z + clickable render link covers the
+  judgment calls no threshold can make.
+- Near-misses are often *semantically legitimate* ("wizard with a staff" →
+  OrcShaman, who carries a staff) — treat threshold tuning as UX, not truth.
+
+## Filter gotchas
+
+- Substring tags bite: `"supported"` matched inside "**un**supported", which
+  in miniature packs means NO supports — the files you want. Strip the
+  exception word before tag matching.
+- When filter semantics change, bump the walk-cache key or stale cached file
+  lists silently keep the old behavior.
+
+## REPL affordances that proved useful
+
+- OSC 8 terminal hyperlinks (`file://` URIs, tty-gated) — linking each result
+  to its *render* (what SigLIP actually scored) beats linking the STL for
+  judging classifications at a glance.
+- Paths shown relative to the collection root (pack context), `:find` for
+  absolute paths, `:pool` / `:min` to retune live without restart.
+
 ## Repo hygiene
 
 - Git repo in `mini-classify/`; gitignore all derived outputs (embed-cache/,

@@ -74,9 +74,14 @@ def show_query(sims_1d, names, top=10, min_score=None):
     mad = np.median(np.abs(sims_1d - med)) * 1.4826 + 1e-9
     z = (sims_1d - med) / mad
     order = np.argsort(-sims_1d)
-    if z[order[0]] < 3.0:
+    # 2.0 catches only unambiguous noise: measured on real queries, correct
+    # matches ran z 2.4+ while semantic near-misses ran up to 3.7 — a higher
+    # cutoff would suppress good results without stopping near-misses. Raw
+    # scores < min_score (default 0.1) filter the middle ground instead.
+    if z[order[0]] < 2.0:
         print(f"  WEAK QUERY (best z {z[order[0]]:.1f}) — nothing stands out; "
               f"probably not represented in the collection")
+        return
     if min_score is not None:
         order = order[sims_1d[order] >= min_score]
         if len(order) == 0:
@@ -100,8 +105,9 @@ def main():
     parser.add_argument("--up-axis", choices=["auto", "z", "y"], default="auto")
     parser.add_argument("--cache-dir", default="embed-cache")
     parser.add_argument("--pool", choices=["mean", "max", "softmax"], default="mean")
-    parser.add_argument("--min-score", type=float, default=None,
-                        help="queries list every model scoring at least this (instead of top 10)")
+    parser.add_argument("--min-score", type=float, default=0.1,
+                        help="queries list every model scoring at least this instead of a "
+                             "top-10 (default 0.1; pass -1 or use :min off for top-10 mode)")
     parser.add_argument("--renders-dir", default="my_renders",
                         help="saved renders; display names link to the render image when it exists")
     args = parser.parse_args()
@@ -133,7 +139,7 @@ def main():
         return emb.float().cpu().numpy().T  # (dim, n_texts)
 
     pool = args.pool
-    min_score = args.min_score
+    min_score = args.min_score if args.min_score >= 0 else None
 
     def score(texts):  # (n_files, n_texts), pooled over views
         view_sims = matrix @ text_matrix(texts)  # (n_files, n_views, n_texts)
