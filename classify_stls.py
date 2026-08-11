@@ -23,6 +23,9 @@ import torch
 from PIL import Image
 from tqdm import tqdm
 
+import pose
+from pose import detect_up_axis
+
 def as_tensor(feat):
     return feat if isinstance(feat, torch.Tensor) else feat.pooler_output
 
@@ -47,30 +50,6 @@ def make_renderer(size):
     return renderer
 
 
-UP_CANDIDATES = [np.array(u, dtype=float) for u in
-                 [(0, 0, 1), (0, 0, -1), (0, 1, 0), (0, -1, 0), (1, 0, 0), (-1, 0, 0)]]
-
-
-def detect_up_axis(mesh, n_samples=4000):
-    """Pick the up direction whose 'down' side has a flat, down-facing surface —
-    the print base miniatures stand on. Returns a unit vector."""
-    pcd = mesh.sample_points_uniformly(n_samples)
-    pts = np.asarray(pcd.points)
-    normals = np.asarray(pcd.normals)
-    best, best_score = UP_CANDIDATES[0], -1.0
-    for up in UP_CANDIDATES:
-        h = pts @ up
-        extent = h.max() - h.min()
-        if extent <= 0:
-            continue
-        in_bottom_slab = h < h.min() + 0.02 * extent
-        facing_down = normals @ up < -0.9
-        score = float(np.mean(in_bottom_slab & facing_down))
-        if score > best_score:
-            best, best_score = up, score
-    return best
-
-
 def rotation_to_z_up(up):
     z = np.array([0.0, 0.0, 1.0])
     if np.allclose(up, z):
@@ -89,7 +68,7 @@ def render_views(renderer, mesh_path, n_views, elevation_deg=20, up_axis="auto")
         raise ValueError("no triangles")
     mesh.compute_vertex_normals()
     if up_axis == "auto":
-        up = detect_up_axis(mesh)
+        up, _, _ = detect_up_axis(mesh)
     elif up_axis == "y":
         up = np.array([0.0, 1.0, 0.0])
     else:
