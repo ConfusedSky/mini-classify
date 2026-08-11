@@ -24,16 +24,25 @@ from test_categories import load_embedding_matrix
 
 def contact_sheet(members, renders_dir, out_path, thumb=160, cols=6, max_tiles=36,
                   poses=None):
-    tiles = []
+    tiles, no_front, no_render = [], 0, 0
     for f in members[:max_tiles]:
         front = (poses or {}).get(pose.file_identity(f), {}).get("front_view", 0)
         img_path = renders_dir / f"{f.stem}_view{front}.png"
         if not img_path.exists():
-            img_path = renders_dir / f"{f.stem}_view0.png"
-        if img_path.exists():
+            no_front += 1
+            alts = sorted(renders_dir.glob(f"{f.stem}_view*.png"))
+            img_path = alts[0] if alts else None
+        if img_path is None:
+            no_render += 1
+        else:
             im = Image.open(img_path)
             im.thumbnail((thumb, thumb))
             tiles.append(im)
+    if no_front:
+        print(f"  {out_path.name}: front render missing for {no_front} of "
+              f"{len(members[:max_tiles])} tiles"
+              + (f", {no_render} skipped entirely" if no_render else "")
+              + " — rerun classify_stls.py --save-renders")
     if not tiles:
         return False
     rows = (len(tiles) + cols - 1) // cols

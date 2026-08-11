@@ -122,16 +122,23 @@ def main():
     poses = pose.load_pose_cache(args.cache_dir)
 
     # display name: path relative to the input root, minus filler dirs.
-    # Links open the render image (what SigLIP saw) when available, else the STL.
-    def display(f):
+    # Links open the front ("hero") render when it exists, any other saved
+    # view otherwise, and only fall back to the STL when no render is saved.
+    no_front = 0
+    names = []
+    for f in files:
         rel = str(f.relative_to(root)) if f.is_relative_to(root) else str(f)
         front = poses.get(pose.file_identity(f), {}).get("front_view", 0)
-        render = renders_dir / f"{f.stem}_view{front}.png"
-        target = render.resolve() if render.exists() else f
-        return link(target, rel.replace("/No Supports", "").removesuffix(".stl"))
-    names = [display(f) for f in files]
+        candidates = [renders_dir / f"{f.stem}_view{i}.png"
+                      for i in [front] + [v for v in range(args.views) if v != front]]
+        target = next((p.resolve() for p in candidates if p.exists()), f)
+        no_front += not candidates[0].exists()
+        names.append(link(target, rel.replace("/No Supports", "").removesuffix(".stl")))
     print(f"{len(files)} models with cached embeddings"
           + (f" ({missing} not in cache — run classify_stls.py to add them)" if missing else ""))
+    if no_front:
+        print(f"front render missing for {no_front} of {len(files)} models — links use "
+              f"another view or the STL; run classify_stls.py --save-renders {renders_dir}")
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     from transformers import AutoModel, AutoProcessor
