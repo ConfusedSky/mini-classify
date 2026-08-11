@@ -40,3 +40,38 @@ def detect_up_axis(mesh, n_samples=4000):
 
 def needs_arbiter(ratio, best_score, threshold=0.6):
     return ratio > threshold or best_score < ABS_SCORE_FLOOR
+
+
+def file_identity(f):
+    """Pose-cache key: same identity as the embedding cache (path+mtime+size)."""
+    stat = f.stat()
+    return f"{f.resolve()}|{stat.st_mtime_ns}|{stat.st_size}"
+
+
+def load_pose_cache(cache_dir):
+    if not cache_dir:
+        return {}
+    p = Path(cache_dir) / "pose-cache.json"
+    return json.loads(p.read_text()) if p.exists() else {}
+
+
+def save_pose_cache(cache_dir, cache):
+    if not cache_dir:
+        return
+    p = Path(cache_dir) / "pose-cache.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(cache))
+
+
+def up_str(up):
+    return ",".join(f"{float(v):g}" for v in up)
+
+
+def embed_cache_token(entry, up_axis_arg):
+    """Embedding-cache key token for a file's resolved pose. Heuristic poses
+    are a deterministic function of the file, so the legacy token keeps
+    existing caches valid; only VLM overrides (renders differ from what the
+    heuristic would produce) get their own token."""
+    if entry and entry.get("source") == "vlm":
+        return "vlm:" + up_str(entry["up"])
+    return up_axis_arg
