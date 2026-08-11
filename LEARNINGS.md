@@ -119,7 +119,7 @@ collection itself suggests taxonomy refinements.
   PNGs (~24 s for 73 files), never re-render. Version the cache key ("|pv")
   so old entries orphan cleanly.
 
-## Canonical pose: confidence, VLM arbiter, front view (2026-08-11, verification pending)
+## Canonical pose: confidence, VLM arbiter, front view (2026-08-11)
 
 - **`sample_points_uniformly` interpolates vertex normals by default**, which
   blends normals across creases (a cone's base rim inherits mantle tilt) and
@@ -146,10 +146,34 @@ collection itself suggests taxonomy refinements.
   pose-cache.json — its identity doesn't cover prompts).
 - Don't hardcode ollama model tags: the plan assumed `gemma3`, the actual
   pull landed as `gemma4:26b` — hence `--pose-vlm-model`.
-- Still unverified as of the pause: poses/fronts eyeballed on real renders,
-  a live VLM answer end-to-end (transport + degrade paths are tested; no
-  model was pulled until late in the session), and the claude CLI backend
-  (may need file-read permission in `-p` mode).
+
+Verification results (2026-08-11, all end-to-end on real renders):
+
+- **Poses/fronts confirmed by eye**: bunny detected Y-up (conf 0.16) and
+  rendered upright; its `front_view=3` is the face-toward-camera view (view 1
+  is the rear). Torus (conf 0.97) escalated to the arbiter as designed.
+- **Disable thinking on ollama VLM calls.** gemma4:26b with thinking on
+  spent every token in the `thinking` field and returned *empty* content
+  under `format` constraints — 3859 tokens / 281 s vs 7 tokens / 25 s with
+  `"think": false`. The empty answer degrades identically to a timeout, so
+  the symptom (heuristic fallback) hides the cause. `_ask_ollama` now sends
+  `think: false` and retries without the field if the server 400s on it;
+  timeout bumped 120→300 s for CPU-offloaded models.
+- **VLM + SigLIP contend for VRAM (8 GB GPU, 17 GB model): load order
+  decides who wins.** Pipeline order (SigLIP first, ollama call later) works
+  — ollama CPU-offloads what doesn't fit. Warming ollama *first* leaves
+  SigLIP nothing to load into → hard CUDA OOM.
+- **A fresh VLM override must invalidate saved renders.** `--save-renders`
+  reuses on-disk PNGs on an embedding-cache miss, but those were rendered
+  under the old pose — silent wrong-pose embeddings. Guarded: a newly
+  resolved `source=vlm` pose forces the re-render.
+- Claude CLI backend works in `-p` mode as written (no file-read permission
+  issue; 22 s). On the torus it picked "lying flat" where gemma picked
+  "standing on edge" — both defensible for a symmetric shape; arbiter answers
+  on degenerate geometry are a coin flip between valid conventions.
+- Live-transport test doubles as a degrade-path check: with ollama up but
+  the default `gemma3` tag unpulled, `ask_vlm_up` returns None (heuristic
+  kept), never raises.
 
 ## Open-set queries: detecting "not in the collection"
 

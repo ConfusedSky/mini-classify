@@ -6,6 +6,13 @@ Usage:
 
 Renders each mesh from several viewpoints (Open3D offscreen), embeds the views
 with SigLIP, averages them, and ranks against text embeddings of the categories.
+
+Meshes are stood upright first: the up axis is detected from flat print-base
+evidence and reported with a confidence ratio, and ambiguous meshes can be
+arbitrated by a local VLM (--pose-vlm). The front-facing view index is recorded
+per file (front_view column) so downstream tools can show the render that
+actually faces the viewer, and resolved poses persist in
+<cache-dir>/pose-cache.json.
 """
 import argparse
 import csv
@@ -298,6 +305,7 @@ def main():
     try:
         for f in tqdm(files, desc="classifying"):
             mesh = None
+            pose_changed = False
             if args.up_axis in ("z", "y"):
                 up = [0.0, 0.0, 1.0] if args.up_axis == "z" else [0.0, 1.0, 0.0]
                 entry = {"up": up, "confidence": 0.0, "source": "forced"}
@@ -313,12 +321,14 @@ def main():
                     entry = {"up": [float(v) for v in up],
                              "confidence": round(ratio, 4), "source": source}
                     pose_cache[pose.file_identity(f)] = entry
+                    # renders on disk predate a fresh VLM override — don't reuse them
+                    pose_changed = source == "vlm"
 
             token = pose.embed_cache_token(entry, args.up_axis)
             cache_file = cache_dir / f"{cache_key(f, args, token)}.npy" if cache_dir else None
             # --save-renders only forces a re-render for files whose renders are missing
-            renders_saved = rdir is None or all(
-                (rdir / f"{f.stem}_view{i}.png").exists() for i in range(args.views))
+            renders_saved = not pose_changed and (rdir is None or all(
+                (rdir / f"{f.stem}_view{i}.png").exists() for i in range(args.views)))
             if cache_file and cache_file.exists() and renders_saved:
                 img_embeds = torch.from_numpy(np.load(cache_file)).to(device, dtype=text_embeds.dtype)
                 hits += 1

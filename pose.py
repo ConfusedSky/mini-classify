@@ -144,14 +144,21 @@ def ollama_available():
 
 def _ask_ollama(png_bytes, n_tiles, model):
     import requests
-    resp = requests.post(f"{OLLAMA_URL}/api/chat", timeout=120, json={
+    payload = {
         "model": model,
         "stream": False,
+        # thinking models put every token in the thinking field and return an
+        # empty content (measured: 3859 tokens / 281 s vs 7 tokens / 25 s)
+        "think": False,
         "format": {"type": "object", "properties": {"tile": {"type": "integer"}},
                    "required": ["tile"]},
         "messages": [{"role": "user", "content": UP_PROMPT,
                       "images": [base64.b64encode(png_bytes).decode()]}],
-    })
+    }
+    resp = requests.post(f"{OLLAMA_URL}/api/chat", timeout=300, json=payload)
+    if resp.status_code == 400 and "think" in resp.text:
+        del payload["think"]  # older servers/models reject the field entirely
+        resp = requests.post(f"{OLLAMA_URL}/api/chat", timeout=300, json=payload)
     resp.raise_for_status()
     return parse_tile_answer(resp.json()["message"]["content"], n_tiles)
 
