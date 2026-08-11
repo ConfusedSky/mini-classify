@@ -57,9 +57,57 @@ Not the lack of color — gray renders classify fine (the witch scored top-1
 
 - **Cache image embeddings, not classifications.** Categories live entirely
   on the text side of the dot product, so per-file embeddings (keyed by
-  path + mtime + render params + model) make category iteration nearly free:
-  ~1000 models ≈ 45–60 min cold, then ~30 s per categories.txt experiment.
+  path + mtime + render params + model) make category iteration nearly free.
 - Cached fp32 vs fp16 live model → dtype mismatch at matmul; cast on load.
+- **Profile before assuming the GPU work is the bottleneck.** On warm runs
+  the time went: 129 s directory walk (USB drive over FUSE — slow on *every*
+  run, page cache doesn't help), 9 s model load, <1 s actual scoring.
+  Fixes: `os.walk` with excluded dirs pruned via `dirnames[:]` before
+  descending (never enters `Supported/` trees), then cache the file list
+  itself (JSON keyed by root+skip-tags, explicit `--rescan` to refresh,
+  vanished files dropped automatically, age printed each run).
+- **Flags that force work must compose with caches.** `--save-renders`
+  originally meant "always re-render" and silently turned every run into a
+  cold run (`0 from embedding cache` — user-visible symptom: "the cache
+  isn't helping"). Fixed semantics: use cache when that file's render PNGs
+  already exist, re-render only files whose renders are missing.
+- Failed files (corrupt STL → RENDER_ERROR) are not cached, so they retry
+  every run. One known: `A Light In the Shadow/.../32mm_FloatingRock2.stl`
+  ("no triangles", ASSIMP can't parse it).
+- `export HF_HUB_OFFLINE=1` skips the HF Hub version check per run.
+- Warm-run anatomy after all fixes: ~10 s total ≈ model load + walk cache
+  read + milliseconds of matmul (was ~3 min).
+
+## Tool family (final architecture)
+
+Three scripts sharing the caches, one concern each:
+
+- `classify_stls.py` — the committed batch pipeline: walk → render → embed →
+  cache → CSV. The only script that *writes* caches.
+- `test_categories.py` — interactive REPL: loads cached matrix + SigLIP once,
+  then Enter = reclassify with categories.txt (distribution table + diff vs
+  previous iteration), typed text = instant ad-hoc query over the collection.
+  Keeps the model warm so category iteration is milliseconds, not 10 s.
+- `cluster_models.py` — k-means over the cached matrix, no text model at all
+  (~3 s). Prints most-central members per cluster, writes clusters.csv, and
+  builds a contact-sheet PNG per cluster from saved renders for one-glance
+  naming.
+
+Intended loop: cold classify pass → cluster to see what the collection
+actually contains → write categories.txt from that structure → tune in the
+REPL → final classify run for the canonical CSV.
+
+Clustering validation (Loot Studios, k=8): clean semantic groups emerged
+unsupervised — robots, sci-fi humanoids, brutes, monsters — and "terrain"
+split into fortifications / scatter terrain / weapon accessories, i.e. the
+collection itself suggests taxonomy refinements.
+
+## Repo hygiene
+
+- Git repo in `mini-classify/`; gitignore all derived outputs (embed-cache/,
+  *.csv, *renders*/, test meshes). uv venvs self-ignore (`.venv/.gitignore`).
+- The embedding cache is "derived" but represents the expensive cold pass
+  (~1 h for 1000 models) — worth backing up separately once built.
 
 ## Environment / tooling
 
