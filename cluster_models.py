@@ -18,7 +18,7 @@ from PIL import Image
 from sklearn.cluster import KMeans
 
 import pose
-from classify_stls import load_file_list
+from classify_stls import add_cache_args, apply_run_params, load_file_list
 from test_categories import load_embedding_matrix
 
 
@@ -55,19 +55,17 @@ def contact_sheet(members, renders_dir, out_path, thumb=160, cols=6, max_tiles=3
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("input", help="STL directory (same as passed to classify_stls.py)")
+    # cache-identity params default to the last classify_stls.py run
+    add_cache_args(parser, "STL directory (defaults to the last classify_stls.py run)")
     parser.add_argument("--k", type=int, default=10, help="number of clusters")
     parser.add_argument("--out", default="clusters.csv")
     parser.add_argument("--renders-dir", help="renders saved by classify_stls.py --save-renders; "
                                               "enables per-cluster contact sheets")
     parser.add_argument("--sheets-dir", default="cluster-sheets")
-    # cache-identity params: must match the classify_stls.py run that built the cache
-    parser.add_argument("--views", type=int, default=4)
-    parser.add_argument("--render-size", type=int, default=512)
-    parser.add_argument("--model", default="google/siglip2-so400m-patch14-384")
-    parser.add_argument("--up-axis", choices=["auto", "z", "y"], default="auto")
-    parser.add_argument("--cache-dir", default="embed-cache")
-    args = parser.parse_args()
+    args = apply_run_params(parser)
+    if not args.input:
+        raise SystemExit("no input given, and no directory recorded by classify_stls.py — "
+                         "pass the STL directory explicitly")
 
     files = load_file_list(Path(args.input), args.cache_dir)
     matrix, files, missing = load_embedding_matrix(files, args)

@@ -7,6 +7,12 @@ Usage:
 Renders each mesh from several viewpoints (Open3D offscreen), embeds the views
 with SigLIP, averages them, and ranks against text embeddings of the categories.
 
+Viewpoints are a turntable of --views azimuths at each --elevations pitch, so
+--views 4 --elevations 20,-10 gives 8 renders per mesh. Every run records its
+parameters in <cache-dir>/run-params.json; cluster_models.py and
+test_categories.py default from that file, so cache-identity flags (and the
+input directory) only have to be typed once, here.
+
 Meshes are stood upright first: the up axis is detected from flat print-base
 evidence and reported with a confidence ratio, and ambiguous meshes can be
 arbitrated by a local VLM (--pose-vlm). The front-facing view index is recorded
@@ -77,9 +83,23 @@ def load_mesh(mesh_path):
     return mesh
 
 
-def render_views(renderer, mesh, n_views, elevation_deg=20):
-    """Render n azimuth views. The mesh must already be rotated into Z-up
-    world space (the light rig and camera 'up' assume it)."""
+DEFAULT_ELEVATIONS = [20.0]
+UP_TILE_ELEVATION = 20.0  # pose contact sheet: fixed, independent of --elevations
+
+
+def view_angles(n_views, elevations):
+    """(azimuth, elevation) radian pairs: a full turntable ring per elevation.
+
+    Elevation-major, so views 0..n_views-1 are the first ring — a run with one
+    elevation lays out exactly as it did before elevations existed, and
+    view0.png keeps meaning the same camera."""
+    return [(2 * np.pi * i / n_views, np.deg2rad(e))
+            for e in elevations for i in range(n_views)]
+
+
+def render_views(renderer, mesh, angles):
+    """Render one image per (azimuth, elevation) pair. The mesh must already be
+    rotated into Z-up world space (the light rig and camera 'up' assume it)."""
     mat = rendering.MaterialRecord()
     mat.shader = "defaultLit"
     mat.base_color = [0.7, 0.7, 0.7, 1.0]
@@ -90,11 +110,9 @@ def render_views(renderer, mesh, n_views, elevation_deg=20):
     bounds = mesh.get_axis_aligned_bounding_box()
     center = bounds.get_center()
     radius = np.linalg.norm(bounds.get_extent()) * 1.4
-    elev = np.deg2rad(elevation_deg)
 
     images = []
-    for i in range(n_views):
-        az = 2 * np.pi * i / n_views
+    for az, elev in angles:
         eye = center + radius * np.array(
             [np.cos(az) * np.cos(elev), np.sin(az) * np.cos(elev), np.sin(elev)]
         )
@@ -115,7 +133,7 @@ def render_up_candidate_tiles(renderer, mesh):
     for up in pose.UP_CANDIDATES:
         m = o3d.geometry.TriangleMesh(mesh)
         m.rotate(rotation_to_z_up(up), center=(0, 0, 0))
-        tiles.append(render_views(renderer, m, 1)[0])
+        tiles.append(render_views(renderer, m, view_angles(1, [UP_TILE_ELEVATION]))[0])
     return tiles
 
 
@@ -223,27 +241,112 @@ def load_file_list(inp, cache_dir, rescan=False):
 
 def cache_key(f, args, up_token):
     stat = f.stat()
+    # A single 20° ring appends nothing, so keys written before --elevations
+    # existed stay byte-identical and those (expensive) caches survive.
+    elev = "" if args.elevations == DEFAULT_ELEVATIONS else \
+        "|e:" + ",".join(f"{e:g}" for e in args.elevations)
     # "pv" = per-view cache format: (n_views, dim) instead of one pooled vector.
     # up_token is "auto"/"z"/"y" for deterministic poses (legacy-compatible)
     # and "vlm:<x,y,z>" when a VLM override changed the render.
-    raw = f"{f.resolve()}|{stat.st_mtime_ns}|{stat.st_size}|{args.views}|{args.render_size}|{up_token}|{args.model}|pv"
+    raw = f"{f.resolve()}|{stat.st_mtime_ns}|{stat.st_size}|{args.views}|{args.render_size}|{up_token}|{args.model}|pv{elev}"
     return hashlib.sha1(raw.encode()).hexdigest()
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("input", help="STL file or directory of STL files")
-    parser.add_argument("--categories", default="categories.txt")
-    parser.add_argument("--out", default="results.csv")
-    parser.add_argument("--views", type=int, default=4)
+def total_views(args):
+    return args.views * len(args.elevations)
+
+
+def parse_elevations(text):
+    """Comma-separated camera elevations in degrees: '20' or '20,-10,55'."""
+    if isinstance(text, list):  # already parsed (came from the run manifest)
+        return text
+    try:
+        elevs = [float(v) for v in text.split(",") if v.strip()]
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a list of numbers: {text!r}")
+    if not elevs:
+        raise argparse.ArgumentTypeError("need at least one elevation")
+    if any(abs(e) > 89 for e in elevs):
+        # at ±90 the camera would look straight down its own 'up' vector
+        raise argparse.ArgumentTypeError("elevations must be within ±89 degrees")
+    return elevs
+
+
+def add_cache_args(parser, input_help):
+    """Args that identify an embedding cache. Every tool reading the cache must
+    agree on these, which is what the run manifest automates — declared in one
+    place so a new one can't be added to the classifier and forgotten in the
+    tools that read what it wrote."""
+    parser.add_argument("input", nargs="?", help=input_help)
+    parser.add_argument("--views", type=int, default=4,
+                        help="azimuths per elevation ring (default 4)")
+    parser.add_argument("--elevations", type=parse_elevations, default=DEFAULT_ELEVATIONS,
+                        help="comma-separated camera elevations in degrees; each gets a "
+                             "full ring of --views azimuths, so total views is the "
+                             "product (default 20)")
     parser.add_argument("--render-size", type=int, default=512)
     parser.add_argument("--model", default="google/siglip2-so400m-patch14-384")
-    parser.add_argument("--save-renders", help="directory to save render images for debugging")
     parser.add_argument("--up-axis", choices=["auto", "z", "y"], default="auto",
                         help="up axis of source meshes; auto detects the flat print base (default)")
     parser.add_argument("--cache-dir", default="embed-cache",
                         help="directory of cached per-file image embeddings; reruns with new "
                              "categories skip rendering/embedding entirely (set '' to disable)")
+
+
+RUN_PARAMS_FILE = "run-params.json"
+# What a classify run records for the tools that read its cache. Keys are
+# argparse dests; anything not declared by a given tool's parser is ignored.
+RUN_PARAMS_KEYS = ("input", "views", "elevations", "render_size", "model",
+                   "up_axis", "pool", "categories", "renders_dir")
+
+
+def load_run_params(cache_dir):
+    if not cache_dir:
+        return {}
+    p = Path(cache_dir) / RUN_PARAMS_FILE
+    return json.loads(p.read_text()) if p.exists() else {}
+
+
+def save_run_params(args):
+    """Record this run's parameters next to the cache it just wrote. Kept with
+    the cache rather than in a committed config so the description can't drift
+    from what the embeddings actually are."""
+    if not args.cache_dir:
+        return
+    params = {k: getattr(args, k, None) for k in RUN_PARAMS_KEYS}
+    # a single-file run describes no collection — leave the recorded root alone
+    params["input"] = str(Path(args.input).resolve()) if Path(args.input).is_dir() else None
+    params = load_run_params(args.cache_dir) | {
+        k: v for k, v in params.items() if v is not None}
+    p = Path(args.cache_dir) / RUN_PARAMS_FILE
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(params, indent=2))
+
+
+def apply_run_params(parser):
+    """parse_args(), with defaults filled in from the last classify run.
+    Explicit command-line values still win — set_defaults only moves the
+    fallback."""
+    known, _ = parser.parse_known_args()
+    params = load_run_params(getattr(known, "cache_dir", None))
+    dests = {a.dest for a in parser._actions}
+    applied = {k: v for k, v in params.items() if k in dests}
+    parser.set_defaults(**applied)
+    args = parser.parse_args()
+    if applied:
+        print(f"defaults from {Path(known.cache_dir) / RUN_PARAMS_FILE}: "
+              + ", ".join(sorted(applied)) + " (command line overrides)")
+    return args
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    add_cache_args(parser, "STL file or directory of STL files "
+                           "(defaults to the last run's directory)")
+    parser.add_argument("--categories", default="categories.txt")
+    parser.add_argument("--out", default="results.csv")
+    parser.add_argument("--save-renders", dest="renders_dir",
+                        help="directory to save render images for debugging")
     parser.add_argument("--rescan", action="store_true",
                         help="re-walk the input directory instead of using the cached file list")
     parser.add_argument("--pool", choices=["mean", "max", "softmax"], default="mean",
@@ -258,12 +361,18 @@ def main():
     parser.add_argument("--up-conf", type=float, default=0.6,
                         help="up-detection ambiguity threshold: runner-up/best flat-base "
                              "score ratio above this escalates to the pose VLM")
-    args = parser.parse_args()
+    args = apply_run_params(parser)
+    if not args.input:
+        sys.exit("no input given, and no directory recorded in "
+                 f"{Path(args.cache_dir or '.') / RUN_PARAMS_FILE}")
 
     inp = Path(args.input)
     files = load_file_list(inp, args.cache_dir, args.rescan) if inp.is_dir() else [inp]
     if not files:
         sys.exit(f"no STL files found under {inp}")
+    n_views = total_views(args)
+    print(f"{n_views} views per model: {args.views} azimuths at "
+          f"{', '.join(f'{e:g}' for e in args.elevations)} degrees")
     categories = [l.strip() for l in open(args.categories) if l.strip()]
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -281,7 +390,8 @@ def main():
         cache_dir.mkdir(parents=True, exist_ok=True)
     hits = 0
 
-    rdir = Path(args.save_renders) if args.save_renders else None
+    rdir = Path(args.renders_dir) if args.renders_dir else None
+    angles = view_angles(args.views, args.elevations)
 
     pose_cache = pose.load_pose_cache(args.cache_dir)
     vlm_backend = args.pose_vlm
@@ -328,7 +438,7 @@ def main():
             cache_file = cache_dir / f"{cache_key(f, args, token)}.npy" if cache_dir else None
             # --save-renders only forces a re-render for files whose renders are missing
             renders_saved = not pose_changed and (rdir is None or all(
-                (rdir / f"{f.stem}_view{i}.png").exists() for i in range(args.views)))
+                (rdir / f"{f.stem}_view{i}.png").exists() for i in range(n_views)))
             if cache_file and cache_file.exists() and renders_saved:
                 img_embeds = torch.from_numpy(np.load(cache_file)).to(device, dtype=text_embeds.dtype)
                 hits += 1
@@ -336,13 +446,13 @@ def main():
                 if rdir and renders_saved:
                     # embed straight from previously saved renders — no re-rendering
                     images = [Image.open(rdir / f"{f.stem}_view{i}.png").convert("RGB")
-                              for i in range(args.views)]
+                              for i in range(n_views)]
                 else:
                     try:
                         if mesh is None:
                             mesh = load_mesh(f)
                         mesh.rotate(rotation_to_z_up(np.array(entry["up"])), center=(0, 0, 0))
-                        images = render_views(get_renderer(), mesh, args.views)
+                        images = render_views(get_renderer(), mesh, angles)
                     except Exception as e:
                         rows.append({"file": str(f), "top1": f"RENDER_ERROR: {e}"})
                         continue
@@ -369,9 +479,11 @@ def main():
                 row[f"score{rank + 1}"] = round(sims[idx].item(), 4)
             rows.append(row)
     finally:
-        # interrupted cold passes keep their (expensive) pose resolutions
+        # interrupted cold passes keep their (expensive) pose resolutions, and
+        # still describe the cache they partly filled
         if args.up_axis == "auto":
             pose.save_pose_cache(args.cache_dir, pose_cache)
+        save_run_params(args)
 
     fields = ["file", "top1", "score1", "top2", "score2", "top3", "score3",
               "up", "pose_conf", "pose_source", "front_view"]

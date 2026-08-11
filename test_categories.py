@@ -20,7 +20,8 @@ import numpy as np
 import torch
 
 import pose
-from classify_stls import as_tensor, cache_key, embed_texts, load_file_list, pool_sims
+from classify_stls import (add_cache_args, apply_run_params, as_tensor, cache_key,
+                           embed_texts, load_file_list, pool_sims, total_views)
 
 
 def link(f, text):
@@ -99,21 +100,19 @@ def show_query(sims_1d, names, top=10, min_score=None):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("input", help="STL directory (same as passed to classify_stls.py)")
+    # cache-identity params default to the last classify_stls.py run
+    add_cache_args(parser, "STL directory (defaults to the last classify_stls.py run)")
     parser.add_argument("--categories", default="categories.txt")
-    # cache-identity params: must match the classify_stls.py run that built the cache
-    parser.add_argument("--views", type=int, default=4)
-    parser.add_argument("--render-size", type=int, default=512)
-    parser.add_argument("--model", default="google/siglip2-so400m-patch14-384")
-    parser.add_argument("--up-axis", choices=["auto", "z", "y"], default="auto")
-    parser.add_argument("--cache-dir", default="embed-cache")
     parser.add_argument("--pool", choices=["mean", "max", "softmax"], default="mean")
     parser.add_argument("--min-score", type=float, default=0.1,
                         help="queries list every model scoring at least this instead of a "
                              "top-10 (default 0.1; pass -1 or use :min off for top-10 mode)")
     parser.add_argument("--renders-dir", default="my_renders",
                         help="saved renders; display names link to the render image when it exists")
-    args = parser.parse_args()
+    args = apply_run_params(parser)
+    if not args.input:
+        sys.exit("no input given, and no directory recorded by classify_stls.py — "
+                 "pass the STL directory explicitly")
 
     root = Path(args.input)
     files = load_file_list(root, args.cache_dir)
@@ -130,7 +129,7 @@ def main():
         rel = str(f.relative_to(root)) if f.is_relative_to(root) else str(f)
         front = poses.get(pose.file_identity(f), {}).get("front_view", 0)
         candidates = [renders_dir / f"{f.stem}_view{i}.png"
-                      for i in [front] + [v for v in range(args.views) if v != front]]
+                      for i in [front] + [v for v in range(total_views(args)) if v != front]]
         target = next((p.resolve() for p in candidates if p.exists()), f)
         no_front += not candidates[0].exists()
         names.append(link(target, rel.replace("/No Supports", "").removesuffix(".stl")))

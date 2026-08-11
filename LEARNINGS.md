@@ -175,6 +175,62 @@ Verification results (2026-08-11, all end-to-end on real renders):
   the default `gemma3` tag unpulled, `ask_vlm_up` returns None (heuristic
   kept), never raises.
 
+## Elevation rings + the run manifest (2026-08-11)
+
+Higher `--render-size` (512 → 2048) visibly improved classification and the
+speed cost was acceptable, which made a second view axis worth paying for too.
+
+- **"Turntable" was already the azimuth.** The original loop orbited
+  `az = 2πi/n` at a hardcoded 20° pitch, so the axis actually pinned was
+  *elevation*. Worth naming precisely: "add another rotation" is ambiguous
+  between the two, and the fix is in the parameter nobody had exposed.
+- `--elevations 20,-10,55` renders a full `--views` ring per elevation
+  (product, not sum). Ordering is **elevation-major** so views
+  `0..n_views-1` remain the first ring — `view0.png` keeps meaning the same
+  camera as every previous run, which is what lets saved renders and
+  `front_view` indices stay meaningful across the change.
+- Elevations are clamped to ±89°: at ±90 the camera's `up` vector `[0,0,1]`
+  is parallel to its view direction and `setup_camera` degenerates.
+- The pose contact sheet stays pinned at one 20° tile. Up-detection input
+  shouldn't change shape as a side effect of a classify-side render flag.
+- **Append-only cache keys, again.** Same trick as the pose token (above): a
+  single default 20° ring appends *nothing* to the key string, so every key
+  written before elevations existed stays byte-identical. Measured: 24/24
+  real files still hit the warm 2048px cache (the 25th is the known
+  FloatingRock2 RENDER_ERROR, never cached). Two uses in two sessions —
+  treat "extend the key without disturbing the default path" as the default
+  approach for cache-format changes here, not a one-off.
+- `front_view` is an argmax over *all* views, so with multiple rings the hero
+  shot can land on a non-primary elevation. Acceptable (more angles to find a
+  face in) but it means heroes can shift on already-processed files.
+
+**Config belongs next to the cache, not in the repo.** The three scripts each
+re-declared `--views/--render-size/--model/--up-axis` under a comment reading
+"must match the classify_stls.py run that built the cache" — a comment that
+names a drift hazard is a design smell, not documentation. Options considered:
+a committed `.env`, or a manifest written by the run itself.
+
+- **A committed config can drift from the cache it describes** (edit the file,
+  forget to re-run classify, downstream silently reads the wrong tiles). A
+  manifest written *by* the run cannot: whatever built the cache is what
+  describes it. Chose `<cache-dir>/run-params.json`, gitignored along with the
+  cache — it's derived state holding an absolute path to an external drive,
+  meaningless on another machine.
+- Mechanism: `parser.set_defaults(**manifest)` before `parse_args()`, after a
+  `parse_known_args()` pass to learn `--cache-dir`. Explicit flags still win
+  because set_defaults only moves the fallback. Print which keys came from the
+  file — silent hidden state is worse than the retyping it replaces.
+- **Record the input directory too.** It's the same class of parameter (the
+  walk cache is keyed on it) and it's the one argument you can't tab-complete:
+  `/run/media/masa/Files\ and\ S/STL/Loot\ Studios`. Both downstream tools now
+  run with zero arguments. Guard: a single-file classify run leaves the
+  recorded collection root alone rather than clobbering it with a file path.
+- Declaring the shared args once (`add_cache_args`) matters more than the
+  defaulting: a new cache-identity flag can no longer be added to the writer
+  and forgotten in the readers.
+- Bonus catch: `cluster_models.py` never had a `--renders-dir` default, so
+  contact sheets were opt-in. It inherits the classifier's from the manifest.
+
 ## Open-set queries: detecting "not in the collection"
 
 - Cosine scores are only comparable *within* a query — some phrasings run
