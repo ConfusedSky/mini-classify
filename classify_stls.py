@@ -50,15 +50,25 @@ PROMPT_TEMPLATES = [
 ]
 
 
+SUN_INTENSITY = 90000.0
+# Ambient fill. The sun is the only light Filament gives us here — add_directional_
+# /point_/spot_light all return True and then render as a <0.1/255 no-op — so with
+# indirect light off, every surface facing away from the key falls to pure black
+# and swallows detail (an 11% of object pixels under 25/255 on a hat brim shading a
+# face). The built-in environment map is world-fixed and does not orbit with the
+# camera, so it is deliberately kept far below the key: at 10k the crushed-black
+# fraction is 0, while the brightness it adds still swings ~30/255 across azimuths.
+FILL_INTENSITY = 10000.0
+
+
 def make_renderer(size):
     # Meshes are rotated into Z-up world space before rendering, so this rig
-    # (key light from above + fills) is correct for any --up-axis choice. The
-    # built-in indirect/environment light has a fixed Y-up orientation and
-    # shades a Z-up world from the side, so it is disabled.
+    # (key light from above + ambient fill) is correct for any --up-axis choice.
     renderer = rendering.OffscreenRenderer(size, size)
     scene = renderer.scene.scene
     renderer.scene.set_background([1.0, 1.0, 1.0, 1.0])
-    scene.enable_indirect_light(False)
+    scene.enable_indirect_light(True)
+    scene.set_indirect_light_intensity(FILL_INTENSITY)
     scene.enable_sun_light(True)  # direction is set per view in render_views
     return renderer
 
@@ -126,7 +136,7 @@ def render_views(renderer, mesh, angles):
         # space so shading is consistent with "up" from every orbit angle
         sun_dir = (center - eye) / np.linalg.norm(center - eye) + [0, 0, -0.6]
         renderer.scene.scene.set_sun_light(sun_dir / np.linalg.norm(sun_dir),
-                                           [1.0, 1.0, 1.0], 90000)
+                                           [1.0, 1.0, 1.0], SUN_INTENSITY)
         img = np.asarray(renderer.render_to_image())
         images.append(Image.fromarray(img))
     return images
@@ -367,6 +377,8 @@ def main():
     parser.add_argument("--up-conf", type=float, default=0.6,
                         help="up-detection ambiguity threshold: runner-up/best flat-base "
                              "score ratio above this escalates to the pose VLM")
+    parser.add_argument("--skip-embed", action="store_true",
+                        help="skip embedding the generated images")
     args = apply_run_params(parser)
     if not args.input:
         sys.exit("no input given, and no directory recorded in "
@@ -466,24 +478,26 @@ def main():
                         rdir.mkdir(parents=True, exist_ok=True)
                         for i, im in enumerate(images):
                             im.save(rdir / f"{f.stem}_view{i}.png")
-                img_embeds = embed_images(model, processor, images, device)
-                if cache_file:
-                    np.save(cache_file, img_embeds.float().cpu().numpy())
+                if not args.skip_embed:
+                    img_embeds = embed_images(model, processor, images, device)
+                    if cache_file:
+                        np.save(cache_file, img_embeds.float().cpu().numpy())
 
-            view_np = img_embeds.float().cpu().numpy()
-            if "front_view" not in entry:
-                entry["front_view"] = pose.front_view_index(view_np, front_T, back_T)
-            view_sims = (img_embeds @ text_embeds.T).float().cpu().numpy()  # (n_views, n_cats)
-            sims = torch.from_numpy(pool_sims(view_sims, args.pool))
-            order = sims.argsort(descending=True)
-            row = {"file": str(f), "up": pose.up_str(entry["up"]),
-                   "pose_conf": entry["confidence"], "pose_source": entry["source"],
-                   "front_view": entry["front_view"]}
-            for rank in range(min(3, len(categories))):
-                idx = order[rank]
-                row[f"top{rank + 1}"] = categories[idx]
-                row[f"score{rank + 1}"] = round(sims[idx].item(), 4)
-            rows.append(row)
+            if not args.skip_embed:
+                view_np = img_embeds.float().cpu().numpy()
+                if "front_view" not in entry:
+                    entry["front_view"] = pose.front_view_index(view_np, front_T, back_T)
+                view_sims = (img_embeds @ text_embeds.T).float().cpu().numpy()  # (n_views, n_cats)
+                sims = torch.from_numpy(pool_sims(view_sims, args.pool))
+                order = sims.argsort(descending=True)
+                row = {"file": str(f), "up": pose.up_str(entry["up"]),
+                       "pose_conf": entry["confidence"], "pose_source": entry["source"],
+                       "front_view": entry["front_view"]}
+                for rank in range(min(3, len(categories))):
+                    idx = order[rank]
+                    row[f"top{rank + 1}"] = categories[idx]
+                    row[f"score{rank + 1}"] = round(sims[idx].item(), 4)
+                rows.append(row)
     finally:
         # interrupted cold passes keep their (expensive) pose resolutions, and
         # still describe the cache they partly filled

@@ -43,13 +43,31 @@ Not the lack of color — gray renders classify fine (the witch scored top-1
   directions by "how much down-facing flat surface sits in the bottom 2%
   slab". Verified on witch/gravedigger/bunny/building. Fails gracefully on
   symmetric objects (barrel: ±Y identical).
-- **Open3D's indirect/environment light has a fixed Y-up orientation** and no
-  rotation API — in a Z-up scene it lights from the side. Disable it
-  (`scene.enable_indirect_light(False)`) and use explicit lights.
 - **Fixed world-space lights leave orbit views black** (back view =
   silhouette). Use a camera-following headlight: per view,
   `sun_dir = normalize(center - eye) + [0, 0, -0.6]`, renormalized — every
   azimuth lit, shadows still fall consistently with "up".
+- **The sun is the only light Open3D actually gives you here.**
+  `add_directional_light` / `add_point_light` / `add_spot_light` all return
+  `True` and then contribute nothing — measured <0.1/255 mean change on a lit
+  sphere, and a full "3-point rig" rendered pixel-identical to sun-only. Don't
+  design a lighting fix around them; verify a light did something before
+  building on it.
+- **A single light with no ambient means detail dies in shadow, not just
+  darkens.** With `enable_indirect_light(False)` anything facing away from the
+  key falls to *pure* black: ~11% of object pixels under 25/255, and on
+  `32_Unsupported_Arkham_BodyMask` a hat brim turned the whole masked face into
+  a featureless hole. Nothing downstream can recover it — SigLIP and the pose
+  VLM both see a silhouette.
+- **Indirect light is the fill, kept far below the key.** It is world-fixed
+  with no rotation API (in a Z-up scene it lights from the side), which is why
+  it was originally disabled — but that argument only rules it out as a *key*.
+  At `set_indirect_light_intensity(10000)` against the 90k sun, crushed blacks
+  go to exactly 0.000 on every view tested while the bias it adds stays a
+  brightness swing (13→29/255 across azimuths), not a shading direction.
+  A multi-pass camera-relative sun composite avoids the bias entirely but only
+  reached 0.010 crushed at 3× the render cost, and flattened form. Escalate
+  intensity only until the blacks clear: 20k+ visibly washes out cloth detail.
 - STL has no color; paint a neutral gray. Multi-view (4 azimuths) averaged
   embeddings smooth over a single bad view.
 
