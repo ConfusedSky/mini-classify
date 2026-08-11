@@ -19,6 +19,7 @@ from urllib.parse import quote
 import numpy as np
 import torch
 
+import pose
 from classify_stls import as_tensor, cache_key, embed_texts, load_file_list, pool_sims
 
 
@@ -31,9 +32,11 @@ def link(f, text):
 
 def load_embedding_matrix(files, args):
     cache_dir = Path(args.cache_dir)
+    poses = pose.load_pose_cache(args.cache_dir)
     vecs, kept, missing = [], [], 0
     for f in files:
-        p = cache_dir / f"{cache_key(f, args)}.npy"
+        token = pose.embed_cache_token(poses.get(pose.file_identity(f)), args.up_axis)
+        p = cache_dir / f"{cache_key(f, args, token)}.npy"
         if p.exists():
             vecs.append(np.load(p))
             kept.append(f)
