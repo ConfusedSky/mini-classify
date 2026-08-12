@@ -41,11 +41,45 @@ def test_cylinder_is_ambiguous():
 
 def test_pose_cache_roundtrip(tmp_path):
     cache = {"some|identity": {"up": [0.0, 0.0, 1.0], "front_view": 2,
-                               "confidence": 0.15, "source": "heuristic"}}
+                               "confidence": 0.15, "source": "heuristic",
+                               "v": pose.POSE_CACHE_VERSION}}
     pose.save_pose_cache(tmp_path, cache)
     assert pose.load_pose_cache(tmp_path) == cache
     assert pose.load_pose_cache(tmp_path / "missing") == {}
     assert pose.load_pose_cache(None) == {}  # cache disabled
+
+
+def test_pose_cache_drops_stale_versions(tmp_path):
+    # a pose decided under an older ensemble or gate is not this version's pose
+    cache = {"old": {"up": [0.0, 0.0, 1.0], "source": "vlm"},                    # no v
+             "older": {"up": [0.0, 1.0, 0.0], "source": "vlm", "v": 1},
+             "current": {"up": [0.0, 0.0, 1.0], "source": "vlm",
+                         "v": pose.POSE_CACHE_VERSION}}
+    pose.save_pose_cache(tmp_path, cache)
+    assert set(pose.load_pose_cache(tmp_path)) == {"current"}
+
+
+def test_combine_up_reports_the_winning_margin():
+    geo = np.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    agree = np.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    idx, margin = pose.combine_up(geo, agree)
+    assert idx == 0 and margin == pytest.approx(2.0)      # both vote, unanimously
+
+    split = np.array([0.0, 1.0, 0.0, 0.0, 0.0, 0.0])      # SigLIP says the opposite
+    idx, margin = pose.combine_up(geo, split)
+    assert margin == pytest.approx(0.0)                   # tied: maximally unsure
+    assert pose.needs_arbiter_margin(margin)
+
+    assert pose.combine_up_scores(geo, agree) == 0        # legacy wrapper unchanged
+
+
+def test_margin_gate_escalates_only_the_unsure():
+    assert pose.needs_arbiter_margin(0.1)
+    assert not pose.needs_arbiter_margin(1.3)
+    # the point of the change: geometry with no base at all can still be
+    # confident enough that the ensemble does not need arbitrating
+    assert not pose.needs_arbiter_margin(0.9, threshold=0.45)
+    assert pose.needs_arbiter_margin(0.9, threshold=1.0)
 
 
 def test_file_identity_changes_with_mtime_and_size(tmp_path):

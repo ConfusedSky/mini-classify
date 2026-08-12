@@ -20,6 +20,16 @@ UP_CANDIDATES = [np.array(u, dtype=float) for u in
 ABS_SCORE_FLOOR = 0.02  # best flat-base score below this = "no print base found"
 SAMPLE_SEED = 0
 
+# Escalate to the VLM when the *ensemble* is unsure, not when geometry is.
+# 0.45 was picked on the `orig` set and read on the holdout (21/21 there, 43/44
+# pooled, firing on ~20% of models against the old gate's ~55%). See LEARNINGS.
+MARGIN_THRESHOLD = 0.45
+
+# Bumped when a change makes previously cached poses wrong. Entries written by
+# an older version are dropped on load and re-resolved: v2 = the four-view
+# ensemble and the margin gate, which move both the answer and when it escalates.
+POSE_CACHE_VERSION = 2
+
 
 def up_axis_scores(mesh, n_samples=4000):
     """Flat print-base evidence per candidate up: the fraction of sampled
@@ -60,7 +70,19 @@ def detect_up_axis(mesh, n_samples=4000):
 
 
 def needs_arbiter(ratio, best_score, threshold=0.6):
+    """Geometry's own doubt. Superseded by needs_arbiter_margin for the
+    production gate — kept as the fallback when SigLIP is unavailable
+    (--skip-embed), where there is no ensemble margin to ask about."""
     return ratio > threshold or best_score < ABS_SCORE_FLOOR
+
+
+def needs_arbiter_margin(margin, threshold=MARGIN_THRESHOLD):
+    """The *ensemble's* doubt: how far the winning candidate leads the runner-up
+    in the combined score. Geometry having no print base says nothing about
+    whether the combination is unsure — that is precisely the population SigLIP
+    was added to carry, and gating on it escalated models the ensemble already
+    had right (17 of 18, measured)."""
+    return margin < threshold
 
 
 def file_identity(f):
@@ -70,10 +92,23 @@ def file_identity(f):
 
 
 def load_pose_cache(cache_dir):
+    """Cached poses, minus any written by an older POSE_CACHE_VERSION.
+
+    Stale entries are dropped rather than migrated: a pose decided under a
+    different ensemble or a different escalation gate is not the pose this
+    version would produce, and silently trusting it would mean the collection
+    disagrees with every measurement made against it."""
     if not cache_dir:
         return {}
     p = Path(cache_dir) / "pose-cache.json"
-    return json.loads(p.read_text()) if p.exists() else {}
+    if not p.exists():
+        return {}
+    raw = json.loads(p.read_text())
+    fresh = {k: v for k, v in raw.items() if v.get("v") == POSE_CACHE_VERSION}
+    if len(fresh) < len(raw):
+        print(f"pose cache: {len(raw) - len(fresh)} of {len(raw)} entries predate "
+              f"v{POSE_CACHE_VERSION} and will be re-resolved")
+    return fresh
 
 
 def save_pose_cache(cache_dir, cache):
@@ -153,7 +188,18 @@ def combine_up_scores(geo_scores, siglip_scores):
     rank_up_scores reports. Geometry therefore votes with a ~1.0 margin when it
     has real base evidence and with a ~0.0 margin when it is guessing, handing
     those models to SigLIP without either method being thresholded."""
-    return int(np.argmax(_unit(geo_scores) + _unit(siglip_scores)))
+    return combine_up(geo_scores, siglip_scores)[0]
+
+
+def combine_up(geo_scores, siglip_scores):
+    """(index, margin) — the ensemble's pick and how far it leads the runner-up.
+
+    The margin is the gate's input, and it predicts error far better than
+    geometry's confidence does: measured over 44 labelled models its median is
+    1.31 where the ensemble is right and 0.22 where it is wrong."""
+    combined = _unit(geo_scores) + _unit(siglip_scores)
+    top = np.sort(combined)[::-1]
+    return int(np.argmax(combined)), float(top[0] - top[1])
 
 
 OLLAMA_URL = "http://localhost:11434"

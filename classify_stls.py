@@ -96,6 +96,7 @@ def load_mesh(mesh_path):
 
 DEFAULT_ELEVATIONS = [20.0]
 UP_TILE_ELEVATION = 20.0  # pose contact sheet: fixed, independent of --elevations
+UP_TILE_AZIMUTHS = 4      # views per up candidate for the ensemble; the sheet still gets one
 
 
 def view_angles(n_views, elevations):
@@ -143,14 +144,26 @@ def render_views(renderer, mesh, angles):
     return images
 
 
-def render_up_candidate_tiles(renderer, mesh):
-    """One render per candidate up (fixed azimuth) for the VLM contact sheet."""
-    tiles = []
+def render_up_candidate_grid(renderer, mesh, n_az=UP_TILE_AZIMUTHS):
+    """[6][n_az] renders — each candidate up, seen from n_az azimuths.
+
+    Extra azimuths are nearly free: the cost here is the geometry upload
+    (~3.3 s on 1.8M triangles), which happens once per candidate regardless, so
+    four views cost the same six uploads as one. Averaging the upright score
+    over them is worth +2 on the holdout — but only once the arbiter stops
+    overriding the ensemble on half the collection, or the gain is discarded
+    before it counts. See LEARNINGS."""
+    grid = []
     for up in pose.UP_CANDIDATES:
         m = o3d.geometry.TriangleMesh(mesh)
         m.rotate(rotation_to_z_up(up), center=(0, 0, 0))
-        tiles.append(render_views(renderer, m, view_angles(1, [UP_TILE_ELEVATION]))[0])
-    return tiles
+        grid.append(render_views(renderer, m, view_angles(n_az, [UP_TILE_ELEVATION])))
+    return grid
+
+
+def render_up_candidate_tiles(renderer, mesh):
+    """One render per candidate up (fixed azimuth) — the VLM contact sheet."""
+    return [row[0] for row in render_up_candidate_grid(renderer, mesh, 1)]
 
 
 def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None, sheet_path=None):
@@ -172,24 +185,30 @@ def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None, sheet_
     every model overwrites, so it only ever shows the last file processed."""
     geo_scores = pose.up_axis_scores(mesh)
     geo_idx, ratio, best = pose.rank_up_scores(geo_scores)
-    up, source = pose.UP_CANDIDATES[geo_idx], "heuristic"
+    up, source, margin = pose.UP_CANDIDATES[geo_idx], "heuristic", None
 
-    tiles = None
+    sheet_tiles = None
     if score_upright is not None:
-        tiles = render_up_candidate_tiles(get_renderer(), mesh)
-        idx = pose.combine_up_scores(geo_scores, score_upright(tiles))
+        grid = render_up_candidate_grid(get_renderer(), mesh)
+        sheet_tiles = [row[0] for row in grid]           # the VLM still sees six
+        flat = [im for row in grid for im in row]
+        sig = np.asarray(score_upright(flat)).reshape(len(grid), -1).mean(axis=1)
+        idx, margin = pose.combine_up(geo_scores, sig)
         if idx != geo_idx:
             up, source = pose.UP_CANDIDATES[idx], "ensemble"
 
-    # confidence is still geometry's: it is what says "no base to measure"
-    if vlm_backend and pose.needs_arbiter(ratio, best, args.up_conf):
-        if tiles is None:
-            tiles = render_up_candidate_tiles(get_renderer(), mesh)
-        idx = pose.ask_vlm_up(tiles, vlm_backend, args.cache_dir or ".",
+    # Escalate on the ensemble's own doubt. Without SigLIP there is no ensemble
+    # and no margin, so fall back to geometry's confidence.
+    escalate = (pose.needs_arbiter_margin(margin, args.up_margin) if margin is not None
+                else pose.needs_arbiter(ratio, best, args.up_conf))
+    if vlm_backend and escalate:
+        if sheet_tiles is None:
+            sheet_tiles = render_up_candidate_tiles(get_renderer(), mesh)
+        idx = pose.ask_vlm_up(sheet_tiles, vlm_backend, args.cache_dir or ".",
                               args.pose_vlm_model, save_to=sheet_path)
         if idx is not None and not np.allclose(pose.UP_CANDIDATES[idx], up):
-            return pose.UP_CANDIDATES[idx], ratio, "vlm"
-    return up, ratio, source
+            return pose.UP_CANDIDATES[idx], ratio, "vlm", margin
+    return up, ratio, source, margin
 
 
 @torch.no_grad()
@@ -401,8 +420,13 @@ def main():
                              "vision model, claude CLI, or off (auto = ollama if reachable)")
     parser.add_argument("--pose-vlm-model", default="gemma4:26b",
                         help="ollama model name used by --pose-vlm")
+    parser.add_argument("--up-margin", type=float, default=pose.MARGIN_THRESHOLD,
+                        help="escalate to the pose VLM when the ensemble's winning "
+                             "candidate leads the runner-up by less than this (0-2). "
+                             "Lower = fewer VLM calls")
     parser.add_argument("--up-conf", type=float, default=0.6,
-                        help="up-detection ambiguity threshold: runner-up/best flat-base "
+                        help="fallback ambiguity threshold used only with --skip-embed, "
+                             "where there is no ensemble margin: runner-up/best flat-base "
                              "score ratio above this escalates to the pose VLM")
     parser.add_argument("--no-up-ensemble", dest="up_ensemble", action="store_false",
                         help="decide the up axis from flat-base geometry alone, without "
@@ -484,11 +508,13 @@ def main():
                     except Exception as e:
                         rows.append({"file": str(f), "top1": f"RENDER_ERROR: {e}"})
                         continue
-                    up, ratio, source = resolve_up(
+                    up, ratio, source, margin = resolve_up(
                         mesh, args, get_renderer, vlm_backend, score_upright,
                         sheet_path=rdir / f"{f.stem}_pose.png" if rdir else None)
                     entry = {"up": [float(v) for v in up],
-                             "confidence": round(ratio, 4), "source": source}
+                             "confidence": round(ratio, 4), "source": source,
+                             "margin": None if margin is None else round(margin, 4),
+                             "v": pose.POSE_CACHE_VERSION}
                     pose_cache[pose.file_identity(f)] = entry
                     # renders on disk predate a fresh VLM override — don't reuse them
                     pose_changed = source == "vlm"
