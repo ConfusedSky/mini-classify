@@ -21,6 +21,10 @@ PROJECT = "mini-classify"
 LOCATION = "global"
 HOST = "aiplatform.googleapis.com"
 MODELS = ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-pro"]
+# Already measured and stored in results-2026-08-12.json, so a new run reprints
+# them for comparison without paying for them again.
+PUBLISHED = ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-pro",
+             "gemma", "haiku", "sonnet"]
 # {"tile": n} is forced by the response schema rather than asked for in prose,
 # the same contract the ollama backend uses.
 SCHEMA = {"type": "object", "properties": {"tile": {"type": "integer"}},
@@ -35,6 +39,13 @@ COLLECTION, ARBITER_CALLS = 602, 354
 # subscription rather than per token; API list price is the comparable basis.
 PRICES_AS_OF = "2026-08-12"
 PRICES = {
+    "gemini-3.6-flash":       {"in": 1.50, "out": 7.50},
+    "gemini-3.1-pro-preview": {"in": 2.00, "out": 12.00},   # <=200k-token prompts
+    # Image *input* on 3-pro-image bills $0.0011/image rather than per token. At
+    # the 560 image tokens a sheet costs, that is $0.00112 either way, so the
+    # per-token line below is right to within a rounding error. Image *output*
+    # ($0.134/image) never applies — the arbiter asks for {"tile": n}.
+    "gemini-3-pro-image":     {"in": 2.00, "out": 12.00},
     "gemini-3.5-flash": {"in": 1.50, "out": 9.00},
     "gemini-2.5-flash": {"in": 0.30, "out": 2.50},
     "gemini-2.5-pro":   {"in": 1.25, "out": 10.00},   # <=200k-token prompts
@@ -65,7 +76,12 @@ def ask(model, sheet, tok, n_tiles=6, usage=None):
         "generationConfig": {"temperature": 0, "responseMimeType": "application/json",
                              "responseSchema": SCHEMA},
     }).encode()
-    for attempt in range(3):
+    # 429 needs a real backoff, not a polite one: image-capable models carry a
+    # far lower RPM quota than the flash/pro tiers, and a too-short retry turns
+    # a quota limit into a *silent* low answer count — which reads as the model
+    # being unable to answer rather than never being asked. (Measured: 3 tries
+    # at 2s/4s left gemini-3-pro-image answering 5 of 44.)
+    for attempt in range(6):
         try:
             req = urllib.request.Request(url, body, {"Authorization": f"Bearer {tok}",
                                                      "Content-Type": "application/json"})
@@ -84,7 +100,7 @@ def ask(model, sheet, tok, n_tiles=6, usage=None):
                 return v
         except urllib.error.HTTPError as e:
             if e.code in (429, 500, 503):        # transient — back off and retry
-                time.sleep(2 * (attempt + 1))
+                time.sleep(min(60, 4 * 2 ** attempt))
             elif e.code != 400:
                 print(f"  {model} HTTP {e.code}: {e.read()[:200]}")
                 return None
@@ -99,14 +115,17 @@ def main():
                     help="contact-sheet tile size(s); the knob that mattered")
     ap.add_argument("--models", default=",".join(MODELS))
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--out", default="gemini_vlm.json",
+                    help="prediction dump under eval/out; name it per run so a "
+                         "new model sweep cannot overwrite a published one")
     ap.add_argument("--report-only", action="store_true",
-                    help="re-print the tables from out/gemini_vlm.json without calling the API")
+                    help="re-print the tables from the --out file without calling the API")
     args = ap.parse_args()
     thumbs = [int(t) for t in args.thumb.split(",")]
     models = args.models.split(",")
 
     if args.report_only:
-        saved = json.load(open(OUT / "gemini_vlm.json"))
+        saved = json.load(open(OUT / args.out))
         report(saved["predictions"], thumbs, models)
         cost_report(saved["usage"])
         return
@@ -136,15 +155,15 @@ def main():
             print(f"{m:20} @{t:<5} {time.time()-t0:5.0f}s  ({n_ok}/{len(items)} answered)")
 
     json.dump({"predictions": items, "usage": usage},
-              open(OUT / "gemini_vlm.json", "w"), indent=1, default=str)
+              open(OUT / args.out, "w"), indent=1, default=str)
     report(items, thumbs, models)
     cost_report(usage)
 
 
 def report(items, thumbs, models):
     keys = [f"{m}_sheet{t}" for t in thumbs for m in models]
-    ref = [f"{m}_sheet{t}" for t in thumbs
-           for m in ["gemma", "haiku", "sonnet"]]
+    ref = [f"{m}_sheet{t}" for t in thumbs for m in PUBLISHED
+           if f"{m}_sheet{t}" not in keys]
     base = load_baselines()
     for it in items:
         for k in ref:
