@@ -7,10 +7,6 @@ frozen — see LEARNINGS before quoting a number off the `orig` set).
 
 ## Ready to do — measured, decided, not yet written
 
-- **`compress_level=1` on saved renders.** PNG encoding is ~22 s/model of a
-  ~44 s/model run; `compress_level=1` is 6.1× faster, losslessly identical,
-  22% more disk. About 3 hours off a 600-model run for one keyword argument.
-  Nothing blocks this.
 - **Raise the contact sheet to `thumb=512`.** Every VLM tested improves;
   sonnet goes from net −4 to net +3 as an arbiter and the full pipeline from
   38/44 to 41/44. The current 256 default has been starving the tier for the
@@ -105,8 +101,9 @@ frozen — see LEARNINGS before quoting a number off the `orig` set).
 
 ## Performance work not done
 
-- **Thread the PNG writes.** Even at `compress_level=1` it is ~4 s of pure CPU
-  per model with 15 cores idle. PIL releases the GIL during encode.
+- **Thread the render writes.** Largely obsolete: the default is `jpg` now, at
+  0.13 s/model against PNG's 23 s. Still ~4 s of single-threaded CPU per model
+  if someone runs `--render-format png`, and PIL releases the GIL during encode.
 - **Prefetch mesh loads.** ~2.5 s/model, IO-bound, single-threaded; Open3D's
   reader is C++ and releases the GIL, so a small thread pool suffices.
 - **Split the VLM pass from the render pass.** Demonstrated during this
@@ -116,12 +113,15 @@ frozen — see LEARNINGS before quoting a number off the `orig` set).
 
 ## Structural questions
 
-- **Should saved renders keep feeding SigLIP?** `classify_stls.py:505`
-  re-embeds from disk when render files exist but the embedding cache misses.
-  That puts the PNG encoder on the classifier's input path and is why lossy
-  formats are unsafe (JPEG q92 moves per-view embeddings up to 0.028 cosine,
-  the same order as the gap between competing categories). Decoupling costs a
-  re-render on those cache misses but makes renders a true debug artifact.
+- **Renders are not reproducible across pose-cache states.** A cold pose cache
+  renders the six up-candidate tiles through the same `OffscreenRenderer` first,
+  and the view renders that follow differ from a warm-cache run by up to 0.0098
+  per embedding component — a fifth of the ~0.03 gap between competing
+  categories. Measured on all three test STLs, identical on the old code, so it
+  is long-standing rather than new. Every embedding in the live cache was
+  therefore computed in whichever state that file happened to hit. Cheapest
+  honest fix is to warm the renderer the same way on both paths; widening the
+  cache key would only make the irreproducibility explicit, not remove it.
 - **Widen the labelled set.** 44 models, ~45% exclusion rate, and the
   decisive comparisons come down to 6 disagreements. Most conclusions in
   LEARNINGS are one or two models from flipping. Everything else here is

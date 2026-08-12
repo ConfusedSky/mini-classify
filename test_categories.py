@@ -29,7 +29,7 @@ import torch
 import pose
 from classify_stls import (add_cache_args, apply_run_params, as_tensor, cache_key,
                            embed_raw, embed_texts, load_file_list, pool_sims,
-                           total_views)
+                           render_index, render_subdir, total_views)
 
 
 def link(f, text):
@@ -129,7 +129,9 @@ def main():
     root = Path(args.input)
     files = load_file_list(root, args.cache_dir)
     matrix, files, missing = load_embedding_matrix(files, args)
-    renders_dir = Path(args.renders_dir)
+    # renders live under the config that produced them; add_cache_args and the
+    # run manifest already agree with the classifier on what that config is
+    renders = render_index(Path(args.renders_dir) / render_subdir(args))
     poses = pose.load_pose_cache(args.cache_dir)
 
     # display name: path relative to the input root, minus filler dirs.
@@ -140,16 +142,16 @@ def main():
     for f in files:
         rel = str(f.relative_to(root)) if f.is_relative_to(root) else str(f)
         front = poses.get(pose.file_identity(f), {}).get("front_view", 0)
-        candidates = [renders_dir / f"{f.stem}_view{i}.png"
-                      for i in [front] + [v for v in range(total_views(args)) if v != front]]
-        target = next((p.resolve() for p in candidates if p.exists()), f)
-        no_front += not candidates[0].exists()
+        order = [front] + [v for v in range(total_views(args)) if v != front]
+        found = next((renders[k] for v in order if (k := f"{f.stem}_view{v}") in renders), None)
+        target = found.resolve() if found else f
+        no_front += f"{f.stem}_view{front}" not in renders
         names.append(link(target, rel.replace("/No Supports", "").removesuffix(".stl")))
     print(f"{len(files)} models with cached embeddings"
           + (f" ({missing} not in cache — run classify_stls.py to add them)" if missing else ""))
     if no_front:
         print(f"front render missing for {no_front} of {len(files)} models — links use "
-              f"another view or the STL; run classify_stls.py --save-renders {renders_dir}")
+              f"another view or the STL; run classify_stls.py --save-renders {args.renders_dir}")
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     from transformers import AutoModel, AutoProcessor

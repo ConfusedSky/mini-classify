@@ -137,8 +137,10 @@ Not the lack of color — gray renders classify fine (the witch scored top-1
 - **Flags that force work must compose with caches.** `--save-renders`
   originally meant "always re-render" and silently turned every run into a
   cold run (`0 from embedding cache` — user-visible symptom: "the cache
-  isn't helping"). Fixed semantics: use cache when that file's render PNGs
-  already exist, re-render only files whose renders are missing.
+  isn't helping"). Fixed semantics: use cache when that file's renders
+  already exist, re-render only files whose renders are missing. That is
+  still the rule, but the renders no longer feed embeddings — see
+  "Saved renders are debug output".
 - Failed files (corrupt STL → RENDER_ERROR) are not cached, so they retry
   every run. One known: `A Light In the Shadow/.../32mm_FloatingRock2.stl`
   ("no triangles", ASSIMP can't parse it).
@@ -232,9 +234,12 @@ Verification results (2026-08-11, all end-to-end on real renders):
   — ollama CPU-offloads what doesn't fit. Warming ollama *first* leaves
   SigLIP nothing to load into → hard CUDA OOM.
 - **A fresh VLM override must invalidate saved renders.** `--save-renders`
-  reuses on-disk PNGs on an embedding-cache miss, but those were rendered
+  reused on-disk PNGs on an embedding-cache miss, but those were rendered
   under the old pose — silent wrong-pose embeddings. Guarded: a newly
-  resolved `source=vlm` pose forces the re-render.
+  resolved override forces the re-render. Since renders became debug output
+  the correctness half is gone (the override re-keys the embedding by
+  itself), but the guard stays so the files on disk show the pose that was
+  actually used; it now also covers `source=ensemble`.
 - Claude CLI backend works in `-p` mode as written (no file-read permission
   issue; 22 s). On the torus it picked "lying flat" where gemma picked
   "standing on edge" — both defensible for a symmetric shape; arbiter answers
@@ -359,14 +364,16 @@ Measured on real 2048 px renders, 16 images:
 | WEBP q90 | 1.02 s | 100 KB |
 
 **6.1× faster for 22% more disk, and losslessly identical.** ~19.5 s/model,
-about 3 hours off a 600-model run, for one keyword argument.
+about 3 hours off a 600-model run, for one keyword argument. Shipped: `png` in
+`RENDER_FORMATS` carries `compress_level=1`. The default is now `jpg`, which the
+next section explains — the lossless constraint that ruled it out is gone.
 
-### Saved renders are an *input*, not a debug artifact
+### Saved renders are debug output (2026-08-12)
 
-The trap that makes the lossy rows above the wrong answer:
-`classify_stls.py:505` re-embeds straight from the saved PNGs whenever the
-render files exist but the embedding cache misses. So the encoder sits on the
-classifier's input path. Measured per-view cosine against the in-memory render:
+They used to be an *input*. `classify_stls.py` re-embedded straight from the
+saved PNGs whenever the render files existed but the embedding cache missed, so
+the encoder sat on the classifier's input path. Measured per-view cosine against
+the in-memory render:
 
 | encoding | mean cos | worst view |
 |---|---|---|
@@ -376,13 +383,46 @@ classifier's input path. Measured per-view cosine against the in-memory render:
 | grayscale PNG | 0.99409 | 0.98658 |
 | **render at 512 px instead of 2048** | 0.97587 | 0.95081 |
 
-A worst-case 0.972 reads as "nearly identical" and is not: competing
-categories separate by ~0.02–0.03 cosine, so a 0.028 perturbation is the same
-order as the signal. **Only lossless compression is safe here.** If lossy
-renders are ever wanted, the fix is to stop re-embedding from disk — not to
-pick a quality level.
+A worst-case 0.972 reads as "nearly identical" and is not: competing categories
+separate by ~0.02–0.03 cosine, so a 0.028 perturbation is the same order as the
+signal. The conclusion at the time was "only lossless compression is safe here,
+and if lossy renders are ever wanted the fix is to stop re-embedding from disk."
 
-Two things that fell out of that measurement:
+**Format was the smallest of three corruptions that path allowed.** A render
+filename carries only stem and view index, but `cache_key` covers render size,
+views and elevations — nothing tied the pixels to the run that wanted them:
+
+```
+run A:  --render-size 2048   -> renders at 2048, .npy under key(2048)
+run B:  --render-size 512    -> key(512) misses, the files still "exist", so it
+                                EMBEDDED run A's 2048px pixels under key(512).
+run C:  --render-size 512    -> key(512) hits. Nothing renders. The csv and the
+        (again)                 contact sheets describe different pixels.
+```
+
+Run B is a 0.976 cosine error by the table above — *larger* than the JPEG loss
+the rule was written to prevent — and it was permanent, because the wrong
+vectors were saved under the right key. Changing `--elevations` did the same
+thing with identical filenames.
+
+So the fix was the one already identified: embeddings now come from the `.npy`
+cache or a fresh in-memory render, never from disk. Two consequences:
+
+- **Lossy is safe now, and jpg is the default.** 23.3 s → 0.13 s per model and
+  27 GB → ~2 GB for the collection. The measurement table above stops being a
+  constraint and becomes a note about what these files are for.
+- **Renders live under the config that produced them**
+  (`my_renders/2048px-8v-e20,-20/`). Run C stops existing: a config change is a
+  new directory, so it always misses and always renders fresh. Price: switching
+  config with `--save-renders` on now costs a full render pass (~55 min for 600
+  models) instead of being free. Drop the flag for quick experiments.
+
+Regression test that proves the decoupling: fill every saved render with solid
+magenta, delete the `.npy`s, rerun. Before, all 3 test embeddings changed; now
+they reproduce a render-free run bit-for-bit. Run it against the old code first
+— an assertion like this is worthless until you have watched it fail.
+
+Two things that fell out of the original measurement:
 
 - **The renders are not neutral gray.** `max|R−G| = 4/255` on every view: the
   material is gray but the indirect-light fill is a coloured environment map,
@@ -391,6 +431,36 @@ Two things that fell out of that measurement:
   at 2048 and letting the processor downsample to 384 is supersampling, and it
   differs measurably from rendering at 512 natively. `render_size` being in
   the cache key is correct, not incidental.
+
+### Renders depend on whether the up-tiles rendered first (2026-08-12)
+
+Found while writing the magenta regression test, and it nearly made me believe I
+had broken something. Same mesh, same parameters, same process — but a run with a
+**cold** pose cache does not produce the same pixels as one with a **warm** pose
+cache:
+
+| test STL | max abs component delta |
+|---|---|
+| blocky_building | 0.005829 |
+| bunny | 0.006027 |
+| torus | 0.009766 |
+
+The difference is `resolve_up`: on a cold pose cache it renders the six
+up-candidate tiles through the same `OffscreenRenderer` before the view renders,
+and something in that state carries over (`clear_geometry`/`add_geometry` and the
+indirect-light rig are the suspects). Each state is perfectly reproducible on its
+own; the two disagree with each other.
+
+**This is pre-existing** — the deltas are byte-identical on the old code, which
+is the only reason to trust the decoupling work. It also means `render_size` is
+not the only thing outside the cache key that moves embeddings: pose-cache state
+does too, at ~0.006, which is a fifth of the ~0.03 gap between competing
+categories. Not acted on. If it is ever worth fixing, warm the renderer
+identically in both paths rather than making the cache key bigger.
+
+The general lesson: when a verification fails, check whether the *baseline* is
+the odd one out before assuming the change is. Comparing cold-pose against
+warm-pose was my error, not the code's.
 
 ### Up-tile rendering is geometry-bound, not pixel-bound
 
@@ -622,6 +692,11 @@ The clean fix is to render up-candidate tiles at a **fixed** size regardless of
 `--render-size`, so pose resolution is render-size independent (better than
 widening the cache key, and the tiles are geometry-upload-bound anyway so
 there is no speed cost either way).
+
+Still open. The saved-renders half of this family *was* fixed — renders now sit
+in a per-config directory (`2048px-8v-e20,-20/`), so they can no longer describe
+a run they did not come from. `pose-cache.json` remains keyed on file identity
+alone, so it still crosses render sizes.
 
 ## Open-set queries: detecting "not in the collection"
 

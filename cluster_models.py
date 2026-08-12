@@ -19,24 +19,27 @@ from PIL import Image
 from sklearn.cluster import KMeans
 
 import pose
-from classify_stls import add_cache_args, apply_run_params, load_file_list
+from classify_stls import (add_cache_args, apply_run_params, load_file_list,
+                           render_index, render_subdir)
 from test_categories import load_embedding_matrix
 
 
-def contact_sheet(members, renders_dir, out_base, thumb=160, cols=6, per_sheet=36,
+def contact_sheet(members, renders, out_base, thumb=160, cols=6, per_sheet=36,
                   poses=None):
     """Lay every member out on as many sheets as it takes.
 
     One sheet lands on `out_base.png`; several become `out_base-1.png`,
-    `out_base-2.png`, ... Returns the paths written.
+    `out_base-2.png`, ... Returns the paths written. `renders` is a
+    classify_stls.render_index() mapping, so saved renders resolve whatever
+    format they were written in.
     """
     tiles, no_front, no_render = [], 0, 0
     for f in members:
         front = (poses or {}).get(pose.file_identity(f), {}).get("front_view", 0)
-        img_path = renders_dir / f"{f.stem}_view{front}.png"
-        if not img_path.exists():
+        img_path = renders.get(f"{f.stem}_view{front}")
+        if img_path is None:
             no_front += 1
-            alts = sorted(renders_dir.glob(f"{f.stem}_view*.png"))
+            alts = sorted(p for k, p in renders.items() if k.startswith(f"{f.stem}_view"))
             img_path = alts[0] if alts else None
         if img_path is None:
             no_render += 1
@@ -93,8 +96,11 @@ def main():
     dist = np.linalg.norm(matrix - km.cluster_centers_[km.labels_], axis=1)
 
     sheets_dir = Path(args.sheets_dir)
-    renders_dir = Path(args.renders_dir) if args.renders_dir else None
-    if renders_dir:
+    # renders live under the config that produced them, which the run manifest
+    # already supplies through add_cache_args
+    renders = render_index(Path(args.renders_dir) / render_subdir(args)) \
+        if args.renders_dir else None
+    if renders is not None:
         sheets_dir.mkdir(parents=True, exist_ok=True)
 
     rows = []
@@ -105,8 +111,8 @@ def main():
         names = [files[i].stem for i in members]
         print(f"\ncluster {c} ({len(members)} models): " + ", ".join(names[:6])
               + (" ..." if len(names) > 6 else ""))
-        if renders_dir:
-            sheets = contact_sheet([files[i] for i in members], renders_dir,
+        if renders is not None:
+            sheets = contact_sheet([files[i] for i in members], renders,
                                    sheets_dir / f"cluster_{c:02d}",
                                    per_sheet=args.per_sheet, poses=poses)
             if len(sheets) > 1:
