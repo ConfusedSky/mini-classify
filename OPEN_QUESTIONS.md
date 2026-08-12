@@ -15,6 +15,12 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   gemini-3.5-flash scores 43/44 standalone (21/21 on the holdout), beating the
   ensemble outright; net +4 as an arbiter tier, pipeline 42/44.
   `eval/gemini_vlm.py`.
+- **Do newer Gemini models beat the arbiter default?** — measured, no.
+  `gemini-3.6-flash` ties the incumbent as an arbiter (net +4, pipeline 42/44)
+  and `gemini-3.1-pro-preview` is worse (net +3) at 2.3× the price; standalone,
+  both land one model below gemini-3.5-flash's 43/44. All four rescue the same
+  four models. `gemini-3-pro-image` answers correctly but is rate-limited to
+  uselessness. Default unchanged. `eval/gemini_vlm.py --out gemini_vlm-new3.json`.
 - **Would a 512 px SigLIP help?** — `siglip2-so400m-patch16-512` is worth +1 of
   44 (p=0.5) but is *resolution-invariant* where `patch14-384` flips three
   models on render size alone. Memory is a wash: both 4.3 GB on disk, 2.19 GB
@@ -135,6 +141,30 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   is for: gemini-3.5-flash is nearly flat across 256/512, so a sweep matters
   mainly for the weaker arbiters, where the gain was large (sonnet +10). Cost
   is nil at inference — one resize of already-rendered tiles.
+- **Is the arbiter tier out of headroom, or is the gate the limit?** Three
+  Gemini generations across two tiers rescue an *identical* four models
+  (`Bedienkonsole`, `Mortimer_BodyNoMask`, `WisDevourer_Body`,
+  `Container_complete`) and differ only in which terrain they break. That looks
+  like a saturated rescue set rather than a model-quality ceiling — a better VLM
+  is not the lever. The testable version: under the margin gate (which escalates
+  ~20% instead of 55%) does the *set* of escalated models change enough that a
+  different arbiter starts to matter? Every arbiter number in this file was
+  measured under the geometry gate.
+- **Should `--pose-vlm-model` default to `gemini-3.6-flash` for throughput?**
+  Same net +4 and same pipeline 42/44 as the incumbent, one model lower
+  standalone (42/44 vs 43/44), but 8.3 s per call against 24.1 s — ~12 min of
+  arbiter wall-clock per full run instead of ~35, for $0.58 more. Trading one
+  model of 44 for 3× the throughput is a judgement call nobody has made; the
+  one model is inside the noise this file keeps warning about, and the 23
+  minutes is not. Blocked on the same thing as everything else: at n=44 the
+  accuracy difference is one model, so more labels would decide it.
+- **Is `Floor` the new `tile9`?** The two newest models both fail `Floor`
+  (truth `-Z`) at both sheet sizes while gemini-3.5-flash gets it, and
+  3.1-pro-preview is the first method here to solve `tile9`, which every other
+  method fails. Every remaining error at this tier is terrain, and the models
+  now fail on *different* terrain. Worth pointing `eval/gold_upright.py` at
+  `Floor` and `tile9` together: if a flat slab's "up" is genuinely ambiguous
+  from six silhouettes, this is a label/task problem and no arbiter fixes it.
 - **Is `Bedienkonsole` reachable without a VLM?** A console with a large flat
   rear panel, upright `+Z`. Geometry, the ensemble, and every SigLIP probe put
   it on its back; every Gemini model rescues it, as gemma and sonnet sometimes
@@ -155,6 +185,14 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   if someone runs `--render-format png`, and PIL releases the GIL during encode.
 - **Prefetch mesh loads.** ~2.5 s/model, IO-bound, single-threaded; Open3D's
   reader is C++ and releases the GIL, so a small thread pool suffices.
+- **Overlap the VLM arbiter with everything else — the largest win available.**
+  gemini-3.5-flash averages 24 s per call (p95 45 s) against 2.5–28 s of local
+  work for the whole model, and the gate fires on ~20% of the collection. For
+  597 files that is ~120 calls ≈ **48 minutes of pure HTTP wait**, against
+  roughly 30 minutes of local work — the run is majority idle. The arbiter's
+  answer only decides the *pose*, so escalating models can be set aside and
+  revisited when their call returns while the other 80% flow straight through.
+  8 concurrent calls turns 48 minutes into ~6.
 - **Split the VLM pass from the render pass** in `classify_stls.py`. Measured
   again this session from the other side: gemma4:26b sits at 6818 MiB resident
   on a 7834 MiB card, so it and SigLIP (2.2 GB) genuinely cannot coexist. Every
