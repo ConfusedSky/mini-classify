@@ -525,6 +525,81 @@ the same tier is net positive. The lesson worth keeping is not "the VLM is
 weak" — it is that a tier was nearly deleted on the strength of a number that
 turned out to be measuring the input pipeline rather than the model.
 
+### Gemini 3.5 Flash reads these sheets almost perfectly — and the 512 px effect is model-specific
+
+Same 44 models, same `UP_PROMPT`, same sheets, three Gemini models added via
+Vertex (`eval/gemini_vlm.py`, `--report-only` re-prints the tables):
+
+| pooled n=44 | @256 | @512 |
+|---|---|---|
+| gemini-3.5-flash | 41/44 | **43/44** |
+| gemini-2.5-pro | 37/44 | 39/44 |
+| gemini-2.5-flash | 32/44 | 34/44 |
+| gemma4:26b | 34/44 | 37/44 |
+| sonnet | 27/44 | 37/44 |
+| haiku | 20/44 | 26/44 |
+
+**43/44 standalone, including 21/21 on the frozen holdout** — the first method
+here to beat the ensemble (38/44) outright rather than supplement it. Its one
+miss is `tile9`, the terrain piece every other method also fails. As the
+arbiter tier it rescues 4 and breaks 0 (**net +4**, pipeline **42/44**) at both
+sheet sizes; head-to-head against the ensemble across all 44 it wins 6, loses 1.
+
+**The sheet-size finding above does not generalise the way it reads.** Going
+256 → 512 moved sonnet +10, but every Gemini model only +2, and 3.5-flash
+returns an *identical* answer on 42 of 44 models across the two sizes. So
+`thumb=256` was not starving the input in general — it was starving *that
+model*. Sheet resolution and model capability trade against each other, and a
+resolution result measured on one model is not a property of the pipeline.
+Restated: **any VLM comparison must state its sheet size, and any sheet-size
+comparison must state its model.**
+
+The answer-distribution check still earns its keep. Truth is 29/1/14/0/0/0
+across `+Z,-Z,+Y,-Y,+X,-X`; 3.5-flash @512 answers 29/1/13/1/0/0 — no
+positional prior at all. gemini-2.5-flash picks `+X` five to six times where
+truth is zero, the same tell that exposed haiku, and it is correspondingly the
+weakest of the three.
+
+### What the arbiter tier costs
+
+Measured per-call usage (not estimated — thinking tokens bill as output and
+dominate here), scaled to the 354 arbiter calls a 602-model run fires:
+
+| tier | in | think | out | mean s | $/1k calls | $/run | net |
+|---|---|---|---|---|---|---|---|
+| gemini-2.5-flash @512 | 1853 | 717 | 6 | 7.0 | 2.36 | **0.84** | +1 |
+| gemini-3.5-flash @512 | 1168 | 638 | 7 | 24.1 | 7.56 | 2.68 | **+4** |
+| gemini-3.5-flash @256 | 1168 | 734 | 7 | 17.0 | 8.42 | 2.98 | +4 |
+| gemini-2.5-pro @512 | 1853 | 668 | 6 | 9.2 | 9.06 | 3.21 | +3 |
+| gemini-2.5-pro @256 | 1853 | 795 | 6 | 10.2 | 10.33 | 3.66 | +4 |
+
+Three things fall out of this that the accuracy table alone does not show:
+
+- **A whole-collection arbiter pass costs single-digit dollars.** The tier was
+  argued about for its accuracy, never priced; at $2.68 a run the question of
+  whether it earns its keep is not an economic one.
+- **The better sheet is also the cheaper one.** 3.5-flash spends ~100 fewer
+  thinking tokens per call at 512 than at 256 — a legible image costs less to
+  reason about, so 512 wins on accuracy and price simultaneously. Sheet size is
+  not an accuracy/cost tradeoff.
+- **Image tokenisation differs more than price does.** 3.5-flash bills 1168
+  input tokens for the same sheet that costs 2.5-flash and 2.5-pro 1853. Per-token
+  price is the visible number; tokens-per-image is the one that moved the total.
+
+Latency is the real cost of 3.5-flash: 24 s mean and 45 s p95 against 7 s /
+18 s for 2.5-flash. At 4 workers that is ~35 min of the run, versus ~10.
+gemma4:26b remains free per token, but holds 17 GB on an 8 GB card and evicts
+SigLIP between calls — its cost is the 10.1 s reload, not the tokens.
+
+**The gemma/haiku/sonnet rows carry no measured cost.** They were run before
+usage capture existed, and through the `claude` CLI, which may bill against a
+subscription rather than per token. For scale only, Anthropic's ~`w×h/750`
+image-token approximation puts a 1536×1024 sheet near 2100 input tokens, so a
+354-call sonnet pass lands around $2–3 and haiku near $1 at list price — the
+same order as Gemini, which is why capability and latency, not price, should
+pick this tier. Rerun through the API with usage capture before quoting a
+number.
+
 ### `source` records what *moved* the answer, not what ran
 
 `source: "heuristic"` does **not** mean the ensemble was skipped — it runs on

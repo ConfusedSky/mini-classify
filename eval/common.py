@@ -54,3 +54,75 @@ def score(rows, key):
     """(correct, total) over rows that have a non-None prediction for key."""
     have = [r for r in rows if r.get(key) is not None]
     return sum(r[key] == r["gold"] for r in have), len(have)
+
+
+RESULTS_FILE = REPO / "eval" / "results-2026-08-12.json"
+
+
+def load_baselines():
+    """The 2026-08-12 per-model predictions behind the LEARNINGS tables, keyed
+    by stem: geometry, ensemble_2048, needs_arbiter, and each VLM at both sheet
+    sizes. Axis *names*, not indices. Reused so a new model can be compared
+    against the published numbers without re-running the SigLIP pass."""
+    return {p["stem"]: p for p in json.loads(RESULTS_FILE.read_text())["predictions"]}
+
+
+def sheet_font(thumb):
+    """Tile numerals scaled to the tile size.
+
+    PIL's default face is a ~11 px bitmap — legible on a 768x512 sheet and
+    proportionally invisible on a 1536x1024 one, and a model cannot answer
+    {"tile": n} about numerals it cannot read. A naive thumb=512 therefore
+    measures *worse* than 256; that is the trap OPEN_QUESTIONS records.
+    """
+    from PIL import ImageFont
+    size = max(11, thumb * 44 // 512)
+    try:
+        return ImageFont.load_default(size=size)     # Pillow >= 10.1
+    except TypeError:
+        return ImageFont.load_default()              # bitmap, fixed ~11 px
+
+
+def contact_sheet(tiles, thumb, cols=3):
+    """pose.make_contact_sheet with the numerals scaled — see sheet_font."""
+    from PIL import Image, ImageDraw
+    rows = (len(tiles) + cols - 1) // cols
+    sheet = Image.new("RGB", (cols * thumb, rows * thumb), "white")
+    draw = ImageDraw.Draw(sheet)
+    font = sheet_font(thumb)
+    for i, im in enumerate(tiles):
+        im = im.copy()
+        im.thumbnail((thumb, thumb))
+        x, y = (i % cols) * thumb, (i // cols) * thumb
+        sheet.paste(im, (x, y))
+        draw.text((x + thumb // 36, y + thumb // 64), str(i + 1), fill="red", font=font)
+    return sheet
+
+
+def build_sheets(thumbs, labels=None, render_px=2048):
+    """Up-candidate contact sheets per labelled model, in OUT/sheets<thumb>.
+
+    thumbs is one size or a list; returns {thumb: {stem: path}}. The 6 tiles
+    are rendered once and shared across sizes — rendering is the expensive
+    part, the sheet is a resize. Existing sheets are reused, so every harness
+    can call this cheaply. Only the *sheet* size matters to a VLM; render_px
+    (the tile render resolution) was swept over 384..2048 and made no
+    difference — see LEARNINGS, those two knobs are easy to conflate.
+    """
+    import classify_stls as C
+    thumbs = [thumbs] if isinstance(thumbs, int) else list(thumbs)
+    labels = labels if labels is not None else load_labels()
+    paths = {}
+    for t in thumbs:
+        (OUT / f"sheets{t}").mkdir(parents=True, exist_ok=True)
+        paths[t] = {l["stem"]: OUT / f"sheets{t}" / f"{l['stem']}.png" for l in labels}
+    todo = [l for l in labels if any(not paths[t][l["stem"]].exists() for t in thumbs)]
+    if todo:
+        print(f"rendering {len(todo)} models -> sheets at {thumbs}")
+        renderer = C.make_renderer(render_px)
+        for n, l in enumerate(todo, 1):
+            tiles = C.render_up_candidate_tiles(renderer, C.load_mesh(l["path"]))
+            for t in thumbs:
+                contact_sheet(tiles, t).save(paths[t][l["stem"]])
+            print(f"  [{n}/{len(todo)}] {l['stem']}", flush=True)
+    return paths

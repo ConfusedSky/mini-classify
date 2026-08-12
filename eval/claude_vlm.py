@@ -4,9 +4,9 @@ import json, subprocess, sys, time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-import pose
+from common import OUT, AX, IDX, load_labels, mark, score  # puts REPO on sys.path
 
-from common import OUT, AX, IDX, load_labels, mark, score
+import pose
 
 I = IDX
 SC = OUT
