@@ -73,6 +73,41 @@ def test_combine_up_reports_the_winning_margin():
     assert pose.combine_up_scores(geo, agree) == 0        # legacy wrapper unchanged
 
 
+def test_contact_sheet_numerals_scale_with_the_tile():
+    # the trap: a 512px sheet with PIL's ~11px bitmap face measures worse than
+    # 256, because the model cannot read the numbers it is asked to answer with
+    assert pose.sheet_font(512).size == 44
+    assert pose.sheet_font(256).size == 22
+    assert pose.sheet_font(64).size == 11        # never smaller than the bitmap
+
+
+def test_contact_sheet_defaults_to_512():
+    tiles = [Image.new("RGB", (400, 400), "white") for _ in range(6)]
+    assert pose.make_contact_sheet(tiles).size == (3 * 512, 2 * 512)
+    assert pose.make_contact_sheet(tiles, thumb=256).size == (3 * 256, 2 * 256)
+
+
+def test_gemini_backend_is_dispatched_and_degrades(monkeypatch, tmp_path):
+    tiles = [Image.new("RGB", (64, 64), "white") for _ in range(6)]
+    seen = {}
+
+    def fake(png, n_tiles, model, project=None):
+        seen.update(model=model, project=project, n_tiles=n_tiles)
+        return 3
+
+    monkeypatch.setattr(pose, "_ask_gemini", fake)
+    assert pose.ask_vlm_up(tiles, "gemini", tmp_path, "gemini-3.5-flash",
+                           project="proj-x") == 3
+    assert seen == {"model": "gemini-3.5-flash", "project": "proj-x", "n_tiles": 6}
+
+    # an arbiter that fails must never fail the run — the heuristic guess stands
+    def boom(*a, **k):
+        raise RuntimeError("HTTP 403")
+
+    monkeypatch.setattr(pose, "_ask_gemini", boom)
+    assert pose.ask_vlm_up(tiles, "gemini", tmp_path, "gemini-3.5-flash") is None
+
+
 def test_geometry_vote_is_scaled_by_its_base_evidence():
     real_base = np.array([0.4, 0.0, 0.0, 0.0, 0.0, 0.0])      # well over the floor
     no_base = np.array([0.0075, 0.0032, 0.0, 0.0, 0.0, 0.0])  # under it, but unequal

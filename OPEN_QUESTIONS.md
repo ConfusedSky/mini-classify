@@ -25,6 +25,17 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   arbiter from going net negative (haiku@256: 30/44 → 39/44). Still to be
   *written* — see below. `eval/arbiter_gate.py`.
 
+- **Raise the contact sheet to `thumb=512`** — done, with the scaled numerals
+  it depends on, now in `pose.make_contact_sheet` rather than only in the eval
+  harness. sonnet gains 10 of 44 across that step and gemma 3; gemini-3.5-flash
+  barely notices, so the size still belongs in any report of a VLM number.
+- **Wire a Gemini backend into the arbiter** — done. `--pose-vlm gemini`,
+  default `gemini-3.5-flash`, ADC auth, project from `--gemini-project` /
+  `$GOOGLE_CLOUD_PROJECT` / `gcloud config`. Not reachable from `auto`, which
+  still means "ollama if reachable" — a backend that bills per call should
+  never be selected implicitly. With the 512 px sheet the default ollama path
+  is net positive again (gemma 41/44 against the ensemble's 40/44), so the
+  "run with `--pose-vlm off`" advice no longer applies.
 - **Should saved renders keep feeding SigLIP?** — no, and they no longer do.
   Embeddings now come from the `.npy` cache or a fresh in-memory render; saved
   renders are debug output living under the config that produced them. That
@@ -37,16 +48,6 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   ~27 GB → ~2 GB for the collection. `png` keeps `compress_level=1`.
 
 ## Ready to do — measured, decided, not yet written
-
-- **Production's arbiter is the wrong one, and the right one is not wired in.**
-  `--pose-vlm` offers `ollama` and `claude`; `pose.ask_vlm_up` has no Gemini
-  backend, so gemini-3.5-flash — the only arbiter that beats the v3 ensemble
-  (43/44 against 40/44) — cannot be selected. The default is gemma4:26b at
-  `thumb=256`, which measures **39/44, one below running no arbiter at all**.
-  Two ways to stop losing a model: wire in a Gemini backend beside
-  `_ask_ollama`/`_ask_claude`, or raise the sheet to 512 where gemma reaches
-  41/44. Until one of those lands, `--pose-vlm off` is the honest default —
-  the tier as configured is a net cost.
 
 - **Gate the arbiter on the ensemble's margin** (`top1 − top2` of
   `_unit(geo) + _unit(siglip)`) instead of `needs_arbiter(ratio, best)`.
@@ -63,31 +64,13 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   gate the two stack to 43/44 on 9 calls and 21/21 on the holdout. A tier that
   overrides another hides that tier's progress — measure component changes
   against the component, gate changes against the pipeline.
-- **Raise the contact sheet to `thumb=512`** — with the caveat that the size
-  matters far less than first measured. sonnet gains 10 of 44 going 256 → 512;
-  every Gemini model gains 2, and gemini-3.5-flash returns an identical answer
-  on 42 of 44 models across both sizes. 512 is the better default, but it is
-  not the pipeline-wide starvation the first measurement implied — it was
-  starving *that model*. Acting on it still means re-resolving cached
-  `source: "vlm"` poses.
-
-  **The numerals must scale with the tile, or this makes things worse.**
-  Implemented in `eval/common.contact_sheet`; `pose.make_contact_sheet` still
-  uses PIL's fixed ~11 px bitmap face, which is illegible on a 1536×1024 sheet
-  — a naive `thumb=512` in production would measure *worse* than 256. Port the
-  scaling when adopting:
-
-  ```python
-  size = max(11, thumb * 44 // 512)      # 44px at 512, 22px at 256, 88px at 1024
-  try:
-      FONT = ImageFont.load_default(size=size)          # Pillow >= 10.1
-  except TypeError:
-      FONT = ImageFont.load_default()                   # bitmap, fixed ~11px
-  draw.text((x + thumb // 36, y + thumb // 64), str(i + 1), fill="red", font=FONT)
-  ```
-
 - **Render up-candidate tiles at a fixed 384 px**, independent of
-  `--render-size`. Now measured rather than assumed: neither tower gains
+  `--render-size` — but note it now collides with the 512 px sheet. `thumb=512`
+  only upsamples the *cell*: `Image.thumbnail` never enlarges, so 384 px tiles
+  sit padded inside 512 px cells and the arbiter sees a 384 px sheet with more
+  whitespace. Either render the pose tiles at ≥512, or drop the sheet back to
+  the tile size and accept the weaker arbiter. Measured for the ensemble only,
+  where 384 is free. Now measured rather than assumed: neither tower gains
   anything from a source above 384 px, and 384 is `patch14-384`'s *best*
   column (39/44 against 38 at 2048). Embedding from it is ~3× faster (0.23 s vs
   0.66 s per model) before render savings. This also closes the dependency of

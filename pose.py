@@ -7,12 +7,14 @@ model."""
 import base64
 import io
 import json
+import os
+import time
 import subprocess
 from pathlib import Path
 
 import numpy as np
 import open3d as o3d
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 UP_CANDIDATES = [np.array(u, dtype=float) for u in
                  [(0, 0, 1), (0, 0, -1), (0, 1, 0), (0, -1, 0), (1, 0, 0), (-1, 0, 0)]]
@@ -35,8 +37,9 @@ GEO_FLOOR_POWER = 2
 
 # Bumped when a change makes previously cached poses wrong. Entries written by
 # an older version are dropped on load and re-resolved: v2 = the four-view
-# ensemble and the margin gate; v3 = geometry attenuated by its base evidence.
-POSE_CACHE_VERSION = 3
+# ensemble and the margin gate; v3 = geometry attenuated by its base evidence;
+# v4 = the arbiter's contact sheet doubled to 512 px with scaled numerals.
+POSE_CACHE_VERSION = 4
 
 
 def up_axis_scores(mesh, n_samples=4000):
@@ -236,17 +239,41 @@ UP_PROMPT = (
 )
 
 
-def make_contact_sheet(tiles, thumb=256, cols=3):
-    """Grid of tiles labeled 1..n (red corner numbers) for the VLM prompt."""
+SHEET_THUMB = 512
+
+
+def sheet_font(thumb):
+    """Tile numerals scaled to the tile.
+
+    PIL's default face is a ~11 px bitmap: legible on a 768x512 sheet and
+    proportionally invisible on a 1536x1024 one. A model cannot answer
+    {"tile": n} about numerals it cannot read, so raising thumb without this
+    measures *worse* than not raising it at all — the trap that nearly got the
+    512 px result discarded."""
+    size = max(11, thumb * 44 // 512)          # 44px at 512, 22px at 256
+    try:
+        return ImageFont.load_default(size=size)   # Pillow >= 10.1
+    except TypeError:
+        return ImageFont.load_default()            # bitmap, fixed ~11px
+
+
+def make_contact_sheet(tiles, thumb=SHEET_THUMB, cols=3):
+    """Grid of tiles labeled 1..n (red corner numbers) for the VLM prompt.
+
+    512 rather than 256: sonnet gains 10 of 44 across that step and gemma 3,
+    for one resize of already-rendered tiles. It is not a uniform win —
+    gemini-3.5-flash returns the same answer on 42 of 44 models either way —
+    so the size belongs in any report of a VLM number. See LEARNINGS."""
     rows = (len(tiles) + cols - 1) // cols
     sheet = Image.new("RGB", (cols * thumb, rows * thumb), "white")
     draw = ImageDraw.Draw(sheet)
+    font = sheet_font(thumb)
     for i, im in enumerate(tiles):
         im = im.copy()
         im.thumbnail((thumb, thumb))
         x, y = (i % cols) * thumb, (i // cols) * thumb
         sheet.paste(im, (x, y))
-        draw.text((x + 8, y + 4), str(i + 1), fill="red")
+        draw.text((x + thumb // 36, y + thumb // 64), str(i + 1), fill="red", font=font)
     return sheet
 
 
@@ -301,7 +328,77 @@ def _ask_claude(sheet_path, n_tiles):
     return parse_tile_answer(json.loads(out.stdout).get("result", ""), n_tiles)
 
 
-def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None):
+GEMINI_HOST = "aiplatform.googleapis.com"
+GEMINI_LOCATION = "global"
+GEMINI_MODEL = "gemini-3.5-flash"
+# {"tile": n} is forced by the response schema rather than asked for in prose,
+# the same contract the ollama backend uses.
+_GEMINI_SCHEMA = {"type": "object", "properties": {"tile": {"type": "integer"}},
+                  "required": ["tile"]}
+_token_cache = {}
+
+
+def gcloud_project():
+    """The GCP project for the Gemini backend, from the environment or gcloud."""
+    for var in ("GOOGLE_CLOUD_PROJECT", "GCLOUD_PROJECT"):
+        if os.environ.get(var):
+            return os.environ[var]
+    out = subprocess.run(["gcloud", "config", "get-value", "project"],
+                         capture_output=True, text=True, timeout=30)
+    project = out.stdout.strip()
+    if out.returncode != 0 or not project or project == "(unset)":
+        raise RuntimeError("no GCP project — set GOOGLE_CLOUD_PROJECT or run "
+                           "`gcloud config set project <id>`")
+    return project
+
+
+def gcloud_token(ttl=1800):
+    """Cached ADC access token. Minting one costs ~0.5 s, which is real against
+    a ~1 s arbiter call, and the token outlives a whole collection run."""
+    now = time.monotonic()
+    if _token_cache.get("expires", 0) > now:
+        return _token_cache["token"]
+    out = subprocess.run(["gcloud", "auth", "application-default", "print-access-token"],
+                         capture_output=True, text=True, timeout=60)
+    if out.returncode != 0:
+        raise RuntimeError("gcloud ADC unavailable — run "
+                           f"`gcloud auth application-default login` ({out.stderr.strip()})")
+    _token_cache.update(token=out.stdout.strip(), expires=now + ttl)
+    return _token_cache["token"]
+
+
+def _ask_gemini(png_bytes, n_tiles, model, project=None):
+    """Vertex AI arbiter. Raw HTTPS rather than an SDK: one POST, no dependency,
+    and the same call the eval harness measured at 43/44 standalone."""
+    import urllib.error
+    import urllib.request
+
+    project = project or gcloud_project()
+    url = (f"https://{GEMINI_HOST}/v1/projects/{project}/locations/{GEMINI_LOCATION}"
+           f"/publishers/google/models/{model}:generateContent")
+    body = json.dumps({
+        "contents": [{"role": "user", "parts": [
+            {"inlineData": {"mimeType": "image/png",
+                            "data": base64.b64encode(png_bytes).decode()}},
+            {"text": UP_PROMPT}]}],
+        "generationConfig": {"temperature": 0, "responseMimeType": "application/json",
+                             "responseSchema": _GEMINI_SCHEMA},
+    }).encode()
+    req = urllib.request.Request(url, body, {"Authorization": f"Bearer {gcloud_token()}",
+                                             "Content-Type": "application/json"})
+    try:
+        d = json.loads(urllib.request.urlopen(req, timeout=300).read())
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"HTTP {e.code}: {e.read()[:200].decode(errors='replace')}") from e
+    parts = d["candidates"][0]["content"]["parts"]
+    return parse_tile_answer("".join(p.get("text", "") for p in parts), n_tiles)
+
+
+DEFAULT_VLM_MODELS = {"ollama": "gemma4:26b", "gemini": GEMINI_MODEL, "claude": None}
+
+
+def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None,
+               project=None):
     """Ask the VLM which candidate orientation is upright. One retry on a
     bad/failed answer, then None — the caller keeps the heuristic guess.
     The pipeline never hard-fails because of the VLM.
@@ -327,6 +424,10 @@ def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None
                 buf = io.BytesIO()
                 sheet.save(buf, format="PNG")
                 idx = _ask_ollama(buf.getvalue(), len(tiles), vlm_model)
+            elif backend == "gemini":
+                buf = io.BytesIO()
+                sheet.save(buf, format="PNG")
+                idx = _ask_gemini(buf.getvalue(), len(tiles), vlm_model, project)
             else:  # claude
                 sheet_path = Path(scratch_dir) / "pose-sheet.png"
                 sheet.save(sheet_path)

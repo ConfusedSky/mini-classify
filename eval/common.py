@@ -67,70 +67,11 @@ def load_baselines():
     return {p["stem"]: p for p in json.loads(RESULTS_FILE.read_text())["predictions"]}
 
 
-def sheet_font(thumb):
-    """Tile numerals scaled to the tile size.
-
-    PIL's default face is a ~11 px bitmap — legible on a 768x512 sheet and
-    proportionally invisible on a 1536x1024 one, and a model cannot answer
-    {"tile": n} about numerals it cannot read. A naive thumb=512 therefore
-    measures *worse* than 256; that is the trap OPEN_QUESTIONS records.
-    """
-    from PIL import ImageFont
-    size = max(11, thumb * 44 // 512)
-    try:
-        return ImageFont.load_default(size=size)     # Pillow >= 10.1
-    except TypeError:
-        return ImageFont.load_default()              # bitmap, fixed ~11 px
-
-
 def contact_sheet(tiles, thumb, cols=3):
-    """pose.make_contact_sheet with the numerals scaled — see sheet_font."""
-    from PIL import Image, ImageDraw
-    rows = (len(tiles) + cols - 1) // cols
-    sheet = Image.new("RGB", (cols * thumb, rows * thumb), "white")
-    draw = ImageDraw.Draw(sheet)
-    font = sheet_font(thumb)
-    for i, im in enumerate(tiles):
-        im = im.copy()
-        im.thumbnail((thumb, thumb))
-        x, y = (i % cols) * thumb, (i // cols) * thumb
-        sheet.paste(im, (x, y))
-        draw.text((x + thumb // 36, y + thumb // 64), str(i + 1), fill="red", font=font)
-    return sheet
-
-
-def ask_claude(model, sheet, n_tiles=6):
-    """Arbiter answer from a Claude model through the CLI. One retry, then None
-    — the pipeline never hard-fails on the VLM, so neither does a harness."""
-    import subprocess
+    """The production sheet. pose.make_contact_sheet owns the layout and the
+    scaled numerals now — this stays only so harnesses keep one import."""
     import pose
-    prompt = f"Read the image at {sheet}. {pose.UP_PROMPT}"
-    for _ in range(2):
-        try:
-            out = subprocess.run(["claude", "-p", prompt, "--model", model,
-                                  "--output-format", "json", "--max-turns", "3"],
-                                 capture_output=True, text=True, timeout=300)
-            if out.returncode != 0:
-                continue
-            v = pose.parse_tile_answer(json.loads(out.stdout).get("result", ""), n_tiles)
-            if v is not None:
-                return v
-        except Exception:
-            pass
-    return None
-
-
-def ask_gemma(sheet, model="gemma4:26b", n_tiles=6):
-    """Arbiter answer from the local ollama VLM. Same contract as ask_claude."""
-    import pose
-    for _ in range(2):
-        try:
-            v = pose._ask_ollama(sheet.read_bytes(), n_tiles, model)
-            if v is not None:
-                return v
-        except Exception as e:
-            print(f"  ollama error: {e}")
-    return None
+    return pose.make_contact_sheet(tiles, thumb, cols)
 
 
 def build_tiles(labels=None, render_px=2048):

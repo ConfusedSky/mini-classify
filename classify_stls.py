@@ -256,7 +256,9 @@ def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None, sheet_
         if sheet_tiles is None:
             sheet_tiles = render_up_candidate_tiles(get_renderer(), mesh)
         idx = pose.ask_vlm_up(sheet_tiles, vlm_backend, args.cache_dir or ".",
-                              args.pose_vlm_model, save_to=sheet_path)
+                              args.pose_vlm_model or pose.DEFAULT_VLM_MODELS.get(vlm_backend),
+                              save_to=sheet_path,
+                              project=getattr(args, "gemini_project", None))
         if idx is not None and not np.allclose(pose.UP_CANDIDATES[idx], up):
             return pose.UP_CANDIDATES[idx], ratio, "vlm", margin
     return up, ratio, source, margin
@@ -470,12 +472,20 @@ def main():
     parser.add_argument("--pool", choices=["mean", "max", "softmax"], default="mean",
                         help="how per-view scores combine: mean = whole-object consensus, "
                              "max = single-view features decide, softmax = in between")
-    parser.add_argument("--pose-vlm", choices=["auto", "ollama", "claude", "off"],
+    parser.add_argument("--pose-vlm", choices=["auto", "ollama", "claude", "gemini", "off"],
                         default="auto",
-                        help="arbiter for low-confidence up detection: local ollama "
-                             "vision model, claude CLI, or off (auto = ollama if reachable)")
-    parser.add_argument("--pose-vlm-model", default="gemma4:26b",
-                        help="ollama model name used by --pose-vlm")
+                        help="arbiter for uncertain up detection: local ollama vision "
+                             "model, claude CLI, gemini on Vertex AI, or off. auto = "
+                             "ollama if reachable — gemini is never chosen implicitly "
+                             "because it bills per call. gemini-3.5-flash is the only "
+                             "arbiter measured to beat the ensemble (43/44 against "
+                             "40/44); see LEARNINGS before picking one")
+    parser.add_argument("--pose-vlm-model", default=None,
+                        help="model for --pose-vlm; defaults per backend "
+                             f"({', '.join(f'{k}={v}' for k, v in pose.DEFAULT_VLM_MODELS.items() if v)})")
+    parser.add_argument("--gemini-project", default=None,
+                        help="GCP project for --pose-vlm gemini (default: "
+                             "$GOOGLE_CLOUD_PROJECT or `gcloud config get-value project`)")
     parser.add_argument("--up-margin", type=float, default=pose.MARGIN_THRESHOLD,
                         help="escalate to the pose VLM when the ensemble's winning "
                              "candidate leads the runner-up by less than this (0-2). "
@@ -531,6 +541,17 @@ def main():
             print("pose VLM: ollama not reachable — ambiguous poses keep the heuristic guess")
     elif vlm_backend == "off":
         vlm_backend = None
+    vlm_model = args.pose_vlm_model or pose.DEFAULT_VLM_MODELS.get(vlm_backend)
+    if vlm_backend == "gemini":
+        # Fail here rather than on the first ambiguous model, thousands of
+        # renders into a run: resolving the project and minting a token are the
+        # two things that go wrong, and both are cheap to check up front.
+        try:
+            args.gemini_project = args.gemini_project or pose.gcloud_project()
+            pose.gcloud_token()
+            print(f"pose VLM: {vlm_model} on Vertex AI, project {args.gemini_project}")
+        except Exception as e:
+            raise SystemExit(f"--pose-vlm gemini: {e}")
 
     front_T = embed_raw(model, processor, pose.FRONT_PROMPTS, device).float().cpu().numpy()
     back_T = embed_raw(model, processor, pose.BACK_PROMPTS, device).float().cpu().numpy()
