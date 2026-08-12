@@ -818,12 +818,29 @@ already had 17 of the 18 right**. Geometry having no base says nothing about
 whether the *combination* is unsure, because that is exactly the case SigLIP
 was added to carry. The old gate was measuring the wrong tier's doubt.
 
-**It also makes a weak arbiter safe.** haiku@256 as the arbiter scores 30/44
-under the geometry gate — eight *below* the ensemble alone — and 39/44 under
-`margin < 0.10`. Escalating only genuinely-unsure models means a bad arbiter
-has few chances to overrule a good answer, so the tier stops being able to go
-net negative. That removes the failure mode the whole "is the VLM tier worth
-keeping" argument was about.
+**It makes a weak arbiter much less harmful — but not harmless.** haiku@256
+scores 30/44 under the geometry gate, eight *below* the ensemble alone, and
+38/44 under the margin gate. Escalating only genuinely-unsure models leaves a
+bad arbiter far fewer chances to overrule a good answer. It does not make the
+tier safe: −2 is still negative.
+
+**And improving the ensemble raises the bar every arbiter has to clear.**
+Against the v3 ensemble (40/44 alone), at threshold 0.45:
+
+| arbiter | pipeline | vs ensemble alone |
+|---|---|---|
+| gemini-3.5-flash @256 or @512 | **43/44** | **+3** |
+| gemma4:26b @512 | 41/44 | +1 |
+| sonnet @512 | 41/44 | +1 |
+| gemini-2.5-flash, gemini-2.5-pro | 40/44 | 0 |
+| **gemma4:26b @256 — the production default** | **39/44** | **−1** |
+| haiku @256, sonnet @256 | 38/44 | −2 |
+
+**Only one arbiter now earns its place.** Every measurement recommending this
+tier was taken with gemini-3.5-flash; run the same gate with what
+`classify_stls.py` actually defaults to — gemma4:26b on a 256 px sheet — and
+the tier costs a model. A tier that helped a 39/44 ensemble can hurt a 40/44
+one without changing at all.
 
 Selected honestly: pick the threshold on `orig` (0.40 → 23/23) and read
 `holdout` — 19/21, against the geometry gate's 20/21 there. So on fresh data

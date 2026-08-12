@@ -38,6 +38,16 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
 
 ## Ready to do — measured, decided, not yet written
 
+- **Production's arbiter is the wrong one, and the right one is not wired in.**
+  `--pose-vlm` offers `ollama` and `claude`; `pose.ask_vlm_up` has no Gemini
+  backend, so gemini-3.5-flash — the only arbiter that beats the v3 ensemble
+  (43/44 against 40/44) — cannot be selected. The default is gemma4:26b at
+  `thumb=256`, which measures **39/44, one below running no arbiter at all**.
+  Two ways to stop losing a model: wire in a Gemini backend beside
+  `_ask_ollama`/`_ask_claude`, or raise the sheet to 512 where gemma reaches
+  41/44. Until one of those lands, `--pose-vlm off` is the honest default —
+  the tier as configured is a net cost.
+
 - **Gate the arbiter on the ensemble's margin** (`top1 − top2` of
   `_unit(geo) + _unit(siglip)`) instead of `needs_arbiter(ratio, best)`.
   Threshold 0.4 picked on `orig`; holdout 19/21 against the geometry gate's
