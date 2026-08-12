@@ -597,6 +597,53 @@ positional prior at all. gemini-2.5-flash picks `+X` five to six times where
 truth is zero, the same tell that exposed haiku, and it is correspondingly the
 weakest of the three.
 
+### The `hard` set through every method at once
+
+`eval/gauntlet.py` runs one label set through geometry, both backbones, and
+every arbiter at both sheet sizes. On the five hand-picked `hard` models
+(truth `+Z +Y +Z +Z +Y`):
+
+```
+                              m1    m2    m3    m4    m5   correct
+geometry                     +X*   +X*    +Z    +Z   +X*   2/5
+ensemble p14-384              +Z    +Y    +Z    +Z   -Z*   4/5
+ensemble p16-512              +Z    +Y    +Z    +Z   -Z*   4/5
+gemini-3.5-flash @256        +X*    +Y    +Z    +Z    +Y   4/5
+gemini-2.5-flash @256        -X*    +Y    +Z    +Z    +Y   4/5
+gemini-2.5-pro   @512         +Z    +Y   -X*    +Z   -Y*   3/5
+sonnet           @512         +Z   -Z*   -X*    +Z    +Y   3/5
+haiku            @512        +X*    +Y   -X*    +Z   -Z*   2/5
+gemma4:26b       @512         +Z   -Y*   -Z*    +Z   -Z*   2/5
+m1 32mm_PitFiend  m2 32mm_Orguss_OnePiece  m3 BondedSouls_bodies_32mm_unsupported
+m4 PitFiend_Bust  m5 32mm_Orguss_Head
+```
+
+**`PitFiend_Bust` came back 17/17 — every method, every sheet size.** It is the
+only one of the five with real base evidence (best 0.0678 against 0.0025–0.0095
+for the rest), and `needs_arbiter` does not fire on it, so no arbiter is ever
+offered the chance to override geometry. The regression guard it was added as
+holds.
+
+**`32mm_Orguss_Head` is 3/17 and is the real failure.** Every local tier
+*inverts* it — geometry `+X`, both ensembles `-Z`, truth `+Y`. Only
+3.5-flash@256, 2.5-flash@256 and sonnet@512 get it, and none of the three
+repeat at the other sheet size.
+
+**The ensemble and the best VLM are exactly complementary and still net zero.**
+The ensemble misses only m5; gemini-3.5-flash@256 misses only m1, so the union
+covers all five. But `needs_arbiter` fires on all four base-less models, so
+running that VLM as the arbiter rescues m5 and breaks m1 — net 0, pipeline 4/5
+either way. Same net-zero shape the 256 px tier showed on the original set,
+reached from the opposite direction.
+
+**Sheet size does nothing here** — 16/30 at 256, 16/30 at 512 — and the answers
+are unstable: 11 of 30 model/size pairs flip (sonnet 4 of 5, 2.5-flash 3 of 5;
+3.5-flash 1, haiku 0). Against 3.5-flash flipping on 2 of 44 in the ordinary
+set, that is the signature of a set where most methods are guessing. Which is
+what makes it a good instrument and a terrible thing to compute an accuracy
+from: **n=5, chosen for failure, no percentage here is comparable to an n=44
+number.**
+
 ### `patch16-512` buys resolution *invariance*, not accuracy
 
 `siglip2-so400m-patch16-512` against the production `so400m-patch14-384`,
@@ -645,10 +692,24 @@ is identity and 2048→384 is a clean antialiased downsample, while 512→384 is
 awkward non-integer resample. The middle of a resampling range can be worse
 than either end.
 
-Costs, unchanged and still real: `cache_key` includes `args.model`, so adopting
-a new tower invalidates every cached embedding and forces a full re-render and
-re-embed of all 602 models, for ~25% slower embedding (0.82 s vs 0.66 s per
-model at 2048) and 4.3 GB more weights.
+The cost is time, not memory. `cache_key` includes `args.model`, so adopting a
+new tower invalidates every cached embedding and forces a full re-render and
+re-embed of all 602 models, and embedding runs ~24% slower (0.82 s vs 0.66 s
+per model at 2048). **Memory is a wash** (`eval/backbone_memory.py`, fp16, idle
+RTX 4060 8 GB):
+
+| | params | tokens | weights | peak @1 | @6 | @16 |
+|---|---|---|---|---|---|---|
+| patch14-384 | 1136M | 729 | 2189 MiB | 2217 | 2320 | 2521 |
+| patch16-512 | 1137M | 1024 | 2190 MiB | 2222 | 2365 | 2652 |
+
+Both checkpoints are 4.3 GB on disk and 2.19 GB resident; they differ by 1 MiB
+of weights (0.5M params — the patch and position embeddings). **1.40× the image
+tokens costs 1.02–1.05× the memory**, because 2.2 GB of weights dwarfs ~150 MiB
+of activations at these batch sizes. The token count is paid in *time*, not
+VRAM — which is the whole 24%. An earlier version of this section said
+"4.3 GB more weights"; that was a guess and it was wrong. Neither tower is the
+constraint on this card. gemma4:26b at 6818 MiB resident is.
 
 **The cheaper half of the win needs no backbone change.** Neither tower gains
 anything above a 384px source, and embedding is ~3× faster from it (0.23 s vs

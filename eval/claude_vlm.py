@@ -4,7 +4,7 @@ import json, subprocess, sys, time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from common import OUT, AX, IDX, load_labels, mark, score  # puts REPO on sys.path
+from common import OUT, AX, IDX, ask_claude, load_labels, mark, score  # puts REPO on sys.path
 
 import pose
 
@@ -35,25 +35,10 @@ print(f"{len(items)} labelled models ({sum(i['set']=='orig' for i in items)} ori
       f"+ {sum(i['set']=='holdout' for i in items)} holdout)\n")
 
 
-def ask(model, sheet):
-    prompt = f"Read the image at {sheet}. {pose.UP_PROMPT}"
-    for _ in range(2):
-        try:
-            out = subprocess.run(["claude", "-p", prompt, "--model", model,
-                                  "--output-format", "json", "--max-turns", "3"],
-                                 capture_output=True, text=True, timeout=300)
-            if out.returncode != 0: continue
-            v = pose.parse_tile_answer(json.loads(out.stdout).get("result", ""), 6)
-            if v is not None: return v
-        except Exception:
-            pass
-    return None
-
-
 for model in MODELS:
     t0 = time.time()
     with ThreadPoolExecutor(max_workers=4) as ex:
-        res = list(ex.map(lambda it: ask(model, it["sheet"]), items))
+        res = list(ex.map(lambda it: ask_claude(model, it["sheet"]), items))
     for it, v in zip(items, res): it[model] = v
     n_ok = sum(v is not None for v in res)
     print(f"{model:8} done in {time.time()-t0:.0f}s  ({n_ok}/{len(items)} answered)")
