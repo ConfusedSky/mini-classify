@@ -47,10 +47,11 @@ which is gitignored. Set `EVAL_OUT` to keep runs apart.
 - **`orig` labels are tuned, `holdout` labels are not.** The probes and the
   combination scheme were selected against `orig`. Quote pooled or holdout
   numbers; the ensemble scored 91% on `orig` and 81% on the holdout.
-- **`hard` labels are neither — they were picked because they fail.** Three
-  models (`32mm_PitFiend`, `32mm_Orguss_OnePiece`, `BondedSouls_bodies_32mm_unsupported`)
-  added by hand, so `pooled` is no longer a random sample and no longer means
-  what it means in LEARNINGS, where every `n=44` predates them.
-  `load_labels()` returns all 47; pass `"orig"` / `"holdout"` to reproduce a
-  recorded number. All three have near-zero geometry scores — no print base —
-  so they measure the arbiter, not the geometry.
+- **`hard` labels are neither — they were picked for being failure-prone.**
+  Five models added by hand, so `pooled` is no longer a random sample and no
+  longer means what it means in LEARNINGS, where every `n=44` predates them.
+  `load_labels()` returns all 49; pass `"orig"` / `"holdout"` to reproduce a
+  recorded number. Four have near-zero geometry scores — no print base — so
+  they measure the arbiter, not the geometry. `PitFiend_Bust` is the exception
+  (0.0678, a literal plinth) and is kept as a regression guard against an
+  arbiter that overrides strong base evidence.

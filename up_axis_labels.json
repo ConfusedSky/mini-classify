@@ -10,7 +10,8 @@
  ],
  "sets": {
   "orig": "first 40-model random sample; probes and the min-max scheme were tuned against these, so numbers on this set are optimistic",
-  "holdout": "fresh sample from files the first never touched; method frozen"
+  "holdout": "fresh sample from files the first never touched; method frozen",
+  "hard": "models added by hand, chosen for being failure-prone rather than by random draw. Deliberately selected, so accuracy on this set is not comparable to orig/holdout and must not be pooled into a headline number without saying so."
  },
  "labels": [
   {
@@ -276,6 +277,36 @@
    "set": "holdout",
    "up": "+Z",
    "path": "Battletech/arc-1a-archer-for-battletech/arc-1a-doors-none4.stl"
+  },
+  {
+   "stem": "32mm_PitFiend",
+   "set": "hard",
+   "up": "+Z",
+   "path": "Loot Studios/A Light In the Shadow/Pit Fiend/32mm/No Supports/32mm_PitFiend.stl"
+  },
+  {
+   "stem": "32mm_Orguss_OnePiece",
+   "set": "hard",
+   "up": "+Y",
+   "path": "Loot Studios/Orconspiracy/Enemies/Orguss the Tall - Green Dragon/32mm/No Supports/One Piece/32mm_Orguss_OnePiece.stl"
+  },
+  {
+   "stem": "BondedSouls_bodies_32mm_unsupported",
+   "set": "hard",
+   "up": "+Z",
+   "path": "DM Stash/Singles/Bonded Souls/Unsupported/32mm/BondedSouls_bodies_32mm_unsupported.stl"
+  },
+  {
+   "stem": "PitFiend_Bust",
+   "set": "hard",
+   "up": "+Z",
+   "path": "Loot Studios/A Light In the Shadow/Pit Fiend/Bust/No Supports/PitFiend_Bust.stl"
+  },
+  {
+   "stem": "32mm_Orguss_Head",
+   "set": "hard",
+   "up": "+Y",
+   "path": "Loot Studios/Orconspiracy/Enemies/Orguss the Tall - Green Dragon/32mm/No Supports/32mm_Orguss_Head.stl"
   }
  ],
  "collection_root": "/run/media/masa/Files and S/STL",

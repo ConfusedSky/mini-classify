@@ -426,20 +426,43 @@ draws the same models. Three sets, and the distinction is the whole point:
   any score on this set is optimistic. Never quote it as accuracy.
 - `holdout` (21) — drawn from the 562 files `orig` never touched, method
   frozen before scoring.
-- `hard` (3) — added later because the pipeline gets them wrong, not by random
-  draw. **Every `n=44` in this file predates them and excludes them.** Their
-  selection is the bias: scoring them alongside a random sample drags any
+- `hard` (5) — added later by hand, picked for being failure-prone rather than
+  by random draw. **Every `n=44` in this file predates them and excludes them.**
+  Their selection is the bias: scoring them alongside a random sample drags any
   pooled number down for a reason that has nothing to do with the method, so
   quote them separately or not at all. `load_labels()` with no argument now
-  returns 47 — pass `"orig"` / `"holdout"` to reproduce a number recorded here.
+  returns 49 — pass `"orig"` / `"holdout"` to reproduce a number recorded here.
 
-  What they have in common is a **flat geometry vector**: the winning score is
-  0.0095, 0.006 and 0.003 against the ~0.02 floor that means "a real print base
-  was found". None of the three has a base plane, so geometry has nothing to
-  lock onto and the arbiter decides. On `BondedSouls_bodies` that is actively
-  harmful — geometry ranks the correct `+Z` first and the VLM overrides it to
-  `-Z` at 0.263 confidence. A case where the arbiter *removes* a correct answer
-  is worth more than another model geometry was going to get right anyway.
+  Against `results.csv` of 2026-08-12, these five split three ways — and the
+  split, not the accuracy, is the reason to keep them:
+
+  | model | gold | geometry | pipeline | |
+  |---|---|---|---|---|
+  | `32mm_PitFiend` | +Z | +X ✗ | +Z ✓ | arbiter rescues |
+  | `32mm_Orguss_OnePiece` | +Y | +X ✗ | +Y ✓ | arbiter rescues |
+  | `BondedSouls_bodies` | +Z | +Z ✓ | −Z ✗ | **arbiter breaks** |
+  | `PitFiend_Bust` | +Z | +Z ✓ | +Z ✓ | geometry alone |
+  | `32mm_Orguss_Head` | +Y | +X ✗ | −Z ✗ | both wrong |
+
+  Geometry is right exactly where there is base evidence and nowhere else. The
+  three it misses have a **flat score vector** — best 0.0075, 0.006, 0.003
+  against the ~0.02 `ABS_SCORE_FLOOR` — so the arbiter is deciding unaided, and
+  it gets two of those three. `32mm_Orguss_Head` is the one nothing solves:
+  geometry reads the flat neck socket as a print base and picks `+X`.
+
+  The `BondedSouls_bodies` row is the valuable one. Geometry ranks the true `+Z`
+  first at 0.0095 and the VLM overrides it to `-Z` — **a case where the arbiter
+  removes a correct answer**, which no aggregate accuracy number will surface.
+  `PitFiend_Bust` is its control: geometry nails it at **0.0678**, three times
+  the floor and 45× its own runner-up, because a bust has a literal plinth. It
+  is a **regression guard** — if a future arbiter starts overriding evidence
+  that strong, that row catches it.
+
+  So only two of the five fail in this run. They were added as *reported*
+  failure-prone, and note that `32mm_PitFiend` is named above as a model whose
+  pick moved between identical runs under the unseeded sampler — "fails often"
+  and "fails in the recorded run" are not the same claim. Don't read `hard` as
+  "five models that fail".
 
 19 of the holdout's 40 and 17 of the original's 40 were **excluded, not
 mislabelled**: loose hands, wings, swords, pipes, pins, a moustache, a flat

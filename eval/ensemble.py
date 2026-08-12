@@ -17,7 +17,11 @@ FLOOR = 0.02  # pose.ABS_SCORE_FLOOR — "a real print base was found"
 GOLD = {l["stem"]: l["gold"] for l in load_labels()}  # from up_axis_labels.json
 res = json.load(open(D / "results.json"))
 rows = [(i, r) for i, r in enumerate(res) if i in GOLD]
-assert len(rows) == len(GOLD), f"expected {len(GOLD)} labelled rows, got {len(rows)}"
+missing = sorted(set(GOLD) - {i for i, _ in rows})
+assert not missing, (
+    f"expected {len(GOLD)} labelled rows, got {len(rows)}; {D/'results.json'} has no "
+    f"entry for {missing}. A label was added after this dump was written — re-run "
+    f"siglip_up.py to score it, or the comparison silently drops it.")
 
 mm = lambda v: (v - v.min()) / (v.max() - v.min()) if v.max() > v.min() else np.zeros_like(v)
 zs = lambda v: (v - v.mean()) / v.std() if v.std() > 0 else np.zeros_like(v)
