@@ -13,3 +13,7 @@ cluster-sheets/
 
 # eval scratch (renders, sheets, prediction dumps) — regenerable
 eval/out/
+
+# git worktrees created for parallel branches — a full second checkout of
+# this repo, never content to track
+.claude/worktrees/
