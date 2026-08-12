@@ -9,7 +9,8 @@ Same 44 hand-labelled models, same UP_PROMPT, same sheets. Auth is gcloud ADC
 (`gcloud auth application-default login`); no SDK dependency — one HTTPS POST
 per model per sheet, so this contends with nothing on the GPU.
 """
-import argparse, base64, json, subprocess, time, urllib.error, urllib.request
+import argparse, base64, itertools, json, subprocess, threading, time
+import urllib.error, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -145,14 +146,33 @@ def main():
     usage = {}
     for t in thumbs:
         for m in models:
-            t0, u = time.time(), []
+            t0, u, done, lock = time.time(), [], itertools.count(1), threading.Lock()
+
+            def one(it, m=m, t=t):
+                """Report per call, not per (model, sheet) pass.
+
+                A pass is 44 calls; printing only its summary makes a
+                rate-limited model, a slow one and a hung one look identical for
+                as long as it runs. Measured the hard way: a gemini-3-pro-image
+                pass was killed at 25 minutes with no way to tell how far it had
+                got. Flushed, because a redirected stdout is block-buffered and
+                the summary alone stayed invisible for 30 minutes.
+                """
+                v = ask(m, sheets[t][it["stem"]], tok, usage=u)
+                with lock:
+                    print(f"  [{next(done):>3}/{len(items)}] {it['stem'][:38]:38} "
+                          f"{'--' if v is None else AX[v]:>3}"
+                          f"  {time.time()-t0:5.0f}s", flush=True)
+                return v
+
             with ThreadPoolExecutor(max_workers=args.workers) as ex:
-                res = list(ex.map(lambda it: ask(m, sheets[t][it["stem"]], tok, usage=u), items))
+                res = list(ex.map(one, items))
             for it, v in zip(items, res):
                 it[f"{m}_sheet{t}"] = None if v is None else AX[v]
             usage[f"{m}_sheet{t}"] = u
             n_ok = sum(v is not None for v in res)
-            print(f"{m:20} @{t:<5} {time.time()-t0:5.0f}s  ({n_ok}/{len(items)} answered)")
+            print(f"{m:20} @{t:<5} {time.time()-t0:5.0f}s  ({n_ok}/{len(items)} answered)",
+                  flush=True)
 
     json.dump({"predictions": items, "usage": usage},
               open(OUT / args.out, "w"), indent=1, default=str)
