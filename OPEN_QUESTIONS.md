@@ -2,8 +2,28 @@
 
 Threads left unpulled as of 2026-08-12. `LEARNINGS.md` records what was
 settled; this records what was not. Ground truth for anything pose-related is
-`up_axis_labels.json` (44 hand-labelled models, `orig` tuned / `holdout`
-frozen — see LEARNINGS before quoting a number off the `orig` set).
+`up_axis_labels.json` — 49 hand-labelled models in three sets: `orig` (23,
+tuned on), `holdout` (21, frozen), `hard` (5, hand-picked failures, not a
+sample of anything). Read LEARNINGS before quoting a number off `orig`, and
+never pool `hard` into an accuracy.
+
+## Settled since the last revision
+
+Moved out of this file; the measurements are in `LEARNINGS.md`.
+
+- **Gemini as a third arbiter** — done via Vertex ADC, no API key needed.
+  gemini-3.5-flash scores 43/44 standalone (21/21 on the holdout), beating the
+  ensemble outright; net +4 as an arbiter tier, pipeline 42/44.
+  `eval/gemini_vlm.py`.
+- **Would a 512 px SigLIP help?** — `siglip2-so400m-patch16-512` is worth +1 of
+  44 (p=0.5) but is *resolution-invariant* where `patch14-384` flips three
+  models on render size alone. Memory is a wash: both 4.3 GB on disk, 2.19 GB
+  resident, differing by 1 MiB of weights; the +40% image tokens cost ~1.02×
+  memory and ~24% time. `eval/backbone_sweep.py`, `eval/backbone_memory.py`.
+- **Gate the VLM on the ensemble's margin** — measured. `margin < 0.4` matches
+  the geometry gate's accuracy on 9 calls instead of 24, and stops a weak
+  arbiter from going net negative (haiku@256: 30/44 → 39/44). Still to be
+  *written* — see below. `eval/arbiter_gate.py`.
 
 ## Ready to do — measured, decided, not yet written
 
@@ -11,26 +31,30 @@ frozen — see LEARNINGS before quoting a number off the `orig` set).
   ~44 s/model run; `compress_level=1` is 6.1× faster, losslessly identical,
   22% more disk. About 3 hours off a 600-model run for one keyword argument.
   Nothing blocks this.
-- **Raise the contact sheet to `thumb=512`.** Every VLM tested improves;
-  sonnet goes from net −4 to net +3 as an arbiter and the full pipeline from
-  38/44 to 41/44. The current 256 default has been starving the tier for the
-  whole project, so every `source: "vlm"` pose already in the cache was decided
-  on a sheet too small to read — acting on this means re-resolving them.
+- **Gate the arbiter on the ensemble's margin** (`top1 − top2` of
+  `_unit(geo) + _unit(siglip)`) instead of `needs_arbiter(ratio, best)`.
+  Threshold 0.4 picked on `orig`; holdout 19/21 against the geometry gate's
+  20/21, pooled tie at 42/44, on ~20% of the collection instead of ~55%. That
+  is 354 arbiter calls down to ~120 per run. It also removes the tier's ability
+  to be net-negative with a weak arbiter, which is what the "is this tier worth
+  keeping" argument was always about. Needs a pose-cache migration: every
+  cached `source: "vlm"` pose was decided under the old gate.
+- **Raise the contact sheet to `thumb=512`** — with the caveat that the size
+  matters far less than first measured. sonnet gains 10 of 44 going 256 → 512;
+  every Gemini model gains 2, and gemini-3.5-flash returns an identical answer
+  on 42 of 44 models across both sizes. 512 is the better default, but it is
+  not the pipeline-wide starvation the first measurement implied — it was
+  starving *that model*. Acting on it still means re-resolving cached
+  `source: "vlm"` poses.
 
   **The numerals must scale with the tile, or this makes things worse.**
-  `make_contact_sheet` labels each tile with PIL's default ~11 px bitmap font.
-  That is legible on a 768×512 sheet and proportionally invisible on a
-  1536×1024 one, and the model cannot answer `{"tile": n}` about numbers it
-  cannot read — so a naive `thumb=512` would likely measure *worse* than 256
-  and be written off. The 512 px measurements were taken with a scaled
-  TrueType face:
+  Implemented in `eval/common.contact_sheet`; `pose.make_contact_sheet` still
+  uses PIL's fixed ~11 px bitmap face, which is illegible on a 1536×1024 sheet
+  — a naive `thumb=512` in production would measure *worse* than 256. Port the
+  scaling when adopting:
 
   ```python
-  from PIL import ImageFont
-  # numeral height proportional to the tile: 44px at thumb=512, 88px at 1024.
-  # (At thumb=256 this gives 22px, i.e. twice the current bitmap default --
-  # so adopting it also slightly improves the existing 256px sheets.)
-  size = max(11, thumb * 44 // 512)
+  size = max(11, thumb * 44 // 512)      # 44px at 512, 22px at 256, 88px at 1024
   try:
       FONT = ImageFont.load_default(size=size)          # Pillow >= 10.1
   except TypeError:
@@ -38,28 +62,19 @@ frozen — see LEARNINGS before quoting a number off the `orig` set).
   draw.text((x + thumb // 36, y + thumb // 64), str(i + 1), fill="red", font=FONT)
   ```
 
-  `load_default(size=)` avoids hunting for a font file and is available on the
-  installed Pillow (12.3.0); the 512 px measurements themselves were taken with
-  `truetype(".../LiberationSans-Bold.ttf", 44)`, which is equivalent but not
-  portable. Either way, fall back rather than raise, and eyeball one sheet
-  before trusting a re-measurement.
-
-  Open sub-question: is 512 the peak, or does 768/1024 keep helping? Only 256
-  vs 512 was measured, and the gain was large enough (sonnet +10 of 44) that
-  the curve has probably not flattened. Cost is nil at inference — it is one
-  resize of already-rendered tiles — so this is worth sweeping properly.
-  `eval/tile_and_vlm.py` is the harness; note it currently sweeps *render*
-  resolution of the tiles, which did **not** matter (384/512/1024/2048 all
-  within noise), while *sheet* resolution did. Those are two different knobs
-  and it was easy to conflate them.
-- **Render up-candidate tiles at a fixed size**, independent of
-  `--render-size`, so pose resolution stops depending on an output setting.
-  `Damaged Roofing (4).stl` resolves `+Y` at 2048 px tiles and `-Y` at 384 px,
-  and the pose cache (`path + mtime + size`) cannot tell the difference. Needs
-  a one-time re-resolution and probably a tile-size term in the pose cache key.
+- **Render up-candidate tiles at a fixed 384 px**, independent of
+  `--render-size`. Now measured rather than assumed: neither tower gains
+  anything from a source above 384 px, and 384 is `patch14-384`'s *best*
+  column (39/44 against 38 at 2048). Embedding from it is ~3× faster (0.23 s vs
+  0.66 s per model) before render savings. This also closes the dependency of
+  pose on an unrelated output setting — `patch14-384` currently flips
+  `Propane_Tank`, `Floor` and `32mm_Gate_L` on render size, and the pose cache
+  (`path + mtime + size`) cannot tell the difference. Either fix the tile size
+  or adopt `patch16-512`, which is invariant across 384–2048; the fixed size is
+  much the cheaper of the two.
 - **Rename `source: "heuristic"` to `"confirmed"`.** It currently means "the
   ensemble ran and agreed", and reads as "the ensemble was skipped" — it
-  actively misled during this session. Needs a pose-cache migration.
+  actively misled during a previous session. Needs a pose-cache migration.
 - **Upload the mesh once in `render_up_candidate_tiles`.** It builds six
   rotated copies and re-uploads each; the cost is geometry upload, not pixels
   (3.74 s at 2048 px vs 3.33 s at 384 px on 1.8M triangles). Move the camera
@@ -72,36 +87,41 @@ frozen — see LEARNINGS before quoting a number off the `orig` set).
   Sign test p≈0.375. It survived the holdout as "probably helps, unproven".
   Resolving it needs more labels, not more analysis — the bottleneck is that
   labelling is manual and ~45% of any random sample has no defined upright.
+- **Confidently wrong models are a class no gate can catch.**
+  `32mm_Orguss_Head` (ensemble `-Z`, truth `+Y`, margin 0.41) and
+  `Concrete Chunk (2)` (margin 1.04) are wrong *and* confident, so no usable
+  margin threshold escalates them. Every local tier inverts Orguss_Head, and
+  the three VLMs that get it each fail it at the other sheet size. Is this a
+  label-ambiguity problem, a render problem, or a genuine capability ceiling?
+  `eval/gold_upright.py` renders the label's own claim, which is where to start.
 - **Can a "reason" field diagnose the VLM's failures?** Ask for
   `{"tile": n, "reason": "..."}` instead of the tile alone, and read the
-  reasons on models where it is stably wrong (`tile9`, `Bunker_MiniV2_Roof_`,
+  reasons on models where a model is stably wrong (`tile9`, `Bunker_MiniV2_Roof_`,
   `Floor`, `Concrete Chunk (6)`). Distinguishes hypotheses that accuracy alone
-  cannot: is it misreading the numerals, misjudging which way is down,
-  applying a positional prior, or is the *task* genuinely ambiguous for
-  terrain? haiku picks `+X` ten times out of 44 when the truth is never `+X`,
-  which looks like a positional prior — a reason field would say so directly.
-  Cheap: one prompt change, re-run over the 44. Note it may also *improve*
-  accuracy by forcing deliberation, which would confound it as pure
-  diagnostics — worth measuring both with and without.
-- **Gemini as a third arbiter**, once an API key is available. Same 44 models,
-  same 512 px sheets, same prompt; compare against gemma4:26b 37/44,
-  sonnet 37/44, haiku 26/44. Worth including the reason field from the start.
-  The `_ask_claude`/`_ask_ollama` split in `pose.py` is the seam to extend.
-- **Gate the VLM on the ensemble's margin, not geometry's confidence.** The
-  trigger is currently `ratio > 0.6 or best < 0.02` — purely geometric — but
-  the VLM then overrides the *ensemble*. Every model the VLM broke was one the
-  ensemble already had right. Gating on ensemble uncertainty should keep the
-  rescues and drop the damage; untested.
-- **Is `Bedienkonsole` reachable at all?** A console with a large flat rear
-  panel, upright `+Z`. Geometry, the ensemble, and every SigLIP probe put it
-  on its back. Only the VLM has ever got it. It is the single model no
-  geometric or embedding method in this project has solved.
-- **Would a 512 px SigLIP help?** Renders are made at 2048 and downsampled to
-  384 for `siglip2-so400m-patch14-384`. Rendering at 512 vs 2048 shifts
-  embeddings by 0.976 cosine, so resolution demonstrably matters.
-  `siglip2-so400m-patch16-512` is the same capacity at 1024 patches (+40%
-  compute on a stage that is only 2% of runtime). Changing `--model`
-  invalidates the embedding cache, so it is a full re-embed to test.
+  cannot: is it misreading the numerals, misjudging which way is down, applying
+  a positional prior, or is the *task* genuinely ambiguous for terrain? haiku
+  picks `+X` ten times of 44 when the truth is never `+X`, and
+  gemini-2.5-flash five to six times — a reason field would say so directly.
+  Cheap: one prompt change, re-run over the 44. It may also *improve* accuracy
+  by forcing deliberation, which would confound it as pure diagnostics — worth
+  measuring both with and without.
+- **Is 512 px the peak sheet size, or does 768/1024 keep helping?** Only 256 vs
+  512 measured. Now known to be model-dependent, which changes who the question
+  is for: gemini-3.5-flash is nearly flat across 256/512, so a sweep matters
+  mainly for the weaker arbiters, where the gain was large (sonnet +10). Cost
+  is nil at inference — one resize of already-rendered tiles.
+- **Is `Bedienkonsole` reachable without a VLM?** A console with a large flat
+  rear panel, upright `+Z`. Geometry, the ensemble, and every SigLIP probe put
+  it on its back; every Gemini model rescues it, as gemma and sonnet sometimes
+  do. It remains the single model no geometric or embedding method in this
+  project has solved.
+- **Does a better backbone help *category* classification?** The whole backbone
+  comparison above is up-axis only, where the tiles are near-silhouettes with
+  no detail to resolve. Categories are fine-grained text probes over detailed
+  renders — the place extra resolution would plausibly pay. Untested and
+  currently untestable: `up_axis_labels.json` is the only ground truth in the
+  repo. Hand-labelling a category set is the prerequisite, not another backbone
+  run.
 
 ## Performance work not done
 
@@ -109,10 +129,12 @@ frozen — see LEARNINGS before quoting a number off the `orig` set).
   per model with 15 cores idle. PIL releases the GIL during encode.
 - **Prefetch mesh loads.** ~2.5 s/model, IO-bound, single-threaded; Open3D's
   reader is C++ and releases the GIL, so a small thread pool suffices.
-- **Split the VLM pass from the render pass.** Demonstrated during this
-  session: 40 VLM calls took 112 s (2.8 s each) with SigLIP unloaded, against
-  a measured 10.1 s *model reload* per call when both compete for the 8 GB
-  card. One window of the 7-hour run ran at 187 s/model.
+- **Split the VLM pass from the render pass** in `classify_stls.py`. Measured
+  again this session from the other side: gemma4:26b sits at 6818 MiB resident
+  on a 7834 MiB card, so it and SigLIP (2.2 GB) genuinely cannot coexist. Every
+  harness in `eval/` now phases render → SigLIP → VLM by construction
+  (`common.build_tiles` caches the pixels so the towers never overlap); the
+  production path still interleaves them.
 
 ## Structural questions
 
@@ -122,7 +144,9 @@ frozen — see LEARNINGS before quoting a number off the `orig` set).
   formats are unsafe (JPEG q92 moves per-view embeddings up to 0.028 cosine,
   the same order as the gap between competing categories). Decoupling costs a
   re-render on those cache misses but makes renders a true debug artifact.
-- **Widen the labelled set.** 44 models, ~45% exclusion rate, and the
+- **Widen the labelled set.** 44 sampled models, ~45% exclusion rate, and the
   decisive comparisons come down to 6 disagreements. Most conclusions in
-  LEARNINGS are one or two models from flipping. Everything else here is
-  downstream of this.
+  LEARNINGS are one or two models from flipping. The `hard` set added since
+  sharpens specific failures but cannot substitute — it is chosen, not sampled,
+  so it can only ever answer "which method survives this", never "how often".
+  Everything else here is downstream of this.
