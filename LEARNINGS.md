@@ -597,6 +597,66 @@ positional prior at all. gemini-2.5-flash picks `+X` five to six times where
 truth is zero, the same tell that exposed haiku, and it is correspondingly the
 weakest of the three.
 
+### Front-first makes up *worse*: order the pipeline by which signal is recoverable
+
+Today the pipeline finds up, then names the front among the azimuths it already
+rendered. The reverse — find the front, let it constrain up — is cheap to test
+because front and up are not independent: a (front, up) pair with front ⊥ up
+fixes the orientation, there are exactly 6 × 4 = 24 of them, and for a fixed up
+the four perpendicular fronts are just four azimuths after `rotation_to_z_up`.
+So all 24 orientations cost the same six geometry uploads as today's six tiles
+(`eval/front_first.py`).
+
+| ensembled with geometry | orig | holdout | orig+hold |
+|---|---|---|---|
+| up-only, 1 view (today) | 22/23 | 17/21 | 39/44 |
+| up-only, 4 views mean | 21/23 | 19/21 | **40/44** |
+| up-only, 4 views max | 21/23 | 18/21 | 39/44 |
+| front first → up | 14/23 | 16/21 | **30/44** |
+| joint (up + front) | 19/23 | 18/21 | 37/44 |
+
+**Front-first costs 9 of 44.** The mechanism is visible in one number: the front
+it picks is perpendicular to the true up on only **38 of 49** models. When it
+picks wrong, the true up is not merely disfavoured, it is *geometrically
+excluded* — a front axis rules out the two ups parallel to it, so a fifth of
+the time the correct answer is unreachable before the up probes run at all.
+
+Why front is the weaker signal is not a tuning problem. `FRONT_PROMPTS` /
+`BACK_PROMPTS` are anatomical — "face and chest visible", "back of the head
+visible" — which is precisely the phrasing LEARNINGS already records as scoring
+0/12 on terrain, and roughly half this collection is terrain and scatter with no
+front at all. Up is defined for a barrel; front is not.
+
+The general lesson is about ordering, not about front: **put the recoverable
+signal first.** A wrong up is recoverable — geometry disagrees, the ensemble
+weighs both, the arbiter can overrule. A wrong front is recoverable from
+nothing, and in this arrangement it silently deletes the right answer from the
+candidate set. Sequencing a pipeline by "what feels logically prior" is not the
+same as sequencing it by which stage's errors can be undone.
+
+This also means **hero-pose selection inherits the weak link.** Choosing a ¾
+view needs the front, and the front is ~78% consistent at best, so roughly one
+in five hero renders would be framed on a face that cannot be the front. Worth
+building only with a confidence gate and a fallback to a fixed azimuth.
+
+**The control is the interesting row.** "Front first" changes two things at
+once — it adds front probes *and* quadruples the views — so `up-only, 4 views
+mean` separates them: averaging the upright score over four azimuths is +1
+pooled, +2 on the holdout (17/21 → 19/21), and +2 as SigLIP alone (33 → 35).
+But it turns on **three disagreements, 2 right and 1 wrong** — p=0.5, which is
+nothing. It is the cheapest untested lead here (same six uploads, four times
+the pixels through SigLIP at 384 px), and it needs the wider label set before it
+means anything.
+
+**One concrete failure it exposed.** `32mm_Orguss_Head` — wrong under every
+method in the gauntlet — *is* solved by four-view SigLIP alone, and geometry
+then overrides it back to wrong. Geometry has no base there at all (best score
+0.0075, far under `ABS_SCORE_FLOOR`) yet votes with a ~0.57 margin, because
+min-max maps its *ratio* (0.43) to the margin and the ratio has no idea the
+absolute evidence is absent. The documented claim that "geometry votes with a
+~0.0 margin when it is guessing" holds when the six candidate scores are near
+equal, and fails when they are all near zero but unequal. See OPEN_QUESTIONS.
+
 ### Gating the arbiter on the ensemble's margin: same accuracy, a third of the calls
 
 `needs_arbiter(ratio, best)` asks *geometry* how confident it is, and fires

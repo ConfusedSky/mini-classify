@@ -87,6 +87,23 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   Sign test p≈0.375. It survived the holdout as "probably helps, unproven".
   Resolving it needs more labels, not more analysis — the bottleneck is that
   labelling is manual and ~45% of any random sample has no defined upright.
+- **The ensemble ignores `ABS_SCORE_FLOOR`, and min-max hides it.** Min-max
+  maps geometry's *ratio* to its vote margin, which is the documented feature —
+  but a model with no print base at all can still have an unequal score vector
+  and therefore a confident-looking margin. `32mm_Orguss_Head` scores 0.0075
+  (far under the 0.02 floor, i.e. no base) with ratio 0.43, so geometry votes
+  with a ~0.57 margin and overrides a four-view SigLIP answer that was right.
+  "Geometry votes with ~0.0 margin when guessing" holds when the six scores are
+  near-equal and fails when they are all near-zero but unequal. Candidate fix:
+  scale the geometry vote by `min(1, best / ABS_SCORE_FLOOR)` so absent
+  evidence cannot outvote present evidence. Untested — and `eval/ensemble.py`
+  already found that thresholding geometry against the floor *hurt* (20/23),
+  so this needs to be a soft attenuation, not the hard switch that was tried.
+- **Is `up-only, 4 views` real?** Averaging the upright score over four
+  azimuths instead of one is +2 on the holdout (17/21 → 19/21) and +1 pooled,
+  at no extra geometry upload — but it turns on three disagreements, 2–1, which
+  is p=0.5. The cheapest untested lead in this file, and blocked on the same
+  thing everything else is: more labels.
 - **Confidently wrong models are a class no gate can catch.**
   `32mm_Orguss_Head` (ensemble `-Z`, truth `+Y`, margin 0.41) and
   `Concrete Chunk (2)` (margin 1.04) are wrong *and* confident, so no usable
