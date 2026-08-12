@@ -109,55 +109,76 @@ def view_angles(n_views, elevations):
             for e in elevations for i in range(n_views)]
 
 
-def render_views(renderer, mesh, angles):
-    """Render one image per (azimuth, elevation) pair. The mesh must already be
-    rotated into Z-up world space (the light rig and camera 'up' assume it)."""
+def orbit_camera(center, radius, az, elev):
+    """(eye, camera-up, sun direction) for one turntable position, Z-up world."""
+    eye = center + radius * np.array(
+        [np.cos(az) * np.cos(elev), np.sin(az) * np.cos(elev), np.sin(elev)]
+    )
+    # Camera 'up' is world +Z carried along the orbit, not +Z itself: the two
+    # frame the image identically, but past |elev| 87.44 (|up . view| > 0.999)
+    # Filament calls +Z degenerate and swaps in a fixed fallback up, which
+    # freezes the image orientation so azimuth stops changing the render.
+    up = np.array([-np.cos(az) * np.sin(elev), -np.sin(az) * np.sin(elev), np.cos(elev)])
+    # headlight: key light shines from the camera, tilted downward in world
+    # space so shading is consistent with "up" from every orbit angle
+    sun = (center - eye) / np.linalg.norm(center - eye) + np.array([0, 0, -0.6])
+    return eye, up, sun / np.linalg.norm(sun)
+
+
+def _shoot(renderer, cams):
+    """Render one image per (center, eye, up, sun) with the geometry as loaded."""
+    images = []
+    for center, eye, up, sun in cams:
+        renderer.setup_camera(45.0, center, eye, up)
+        renderer.scene.scene.set_sun_light(sun, [1.0, 1.0, 1.0], SUN_INTENSITY)
+        images.append(Image.fromarray(np.asarray(renderer.render_to_image())))
+    return images
+
+
+def _upload(renderer, mesh):
+    """Put the mesh on the GPU and return its framing. This is the expensive
+    half of rendering — 15 s on a 4M-triangle mesh against ~0.15 s per view —
+    so callers should upload once and move the camera."""
     mat = rendering.MaterialRecord()
     mat.shader = "defaultLit"
     mat.base_color = [0.7, 0.7, 0.7, 1.0]
-
     renderer.scene.clear_geometry()
     renderer.scene.add_geometry("mesh", mesh, mat)
-
     bounds = mesh.get_axis_aligned_bounding_box()
-    center = bounds.get_center()
-    radius = np.linalg.norm(bounds.get_extent()) * 1.4
+    return bounds.get_center(), np.linalg.norm(bounds.get_extent()) * 1.4
 
-    images = []
-    for az, elev in angles:
-        eye = center + radius * np.array(
-            [np.cos(az) * np.cos(elev), np.sin(az) * np.cos(elev), np.sin(elev)]
-        )
-        # Camera 'up' is world +Z carried along the orbit, not +Z itself: the two
-        # frame the image identically, but past |elev| 87.44 (|up . view| > 0.999)
-        # Filament calls +Z degenerate and swaps in a fixed fallback up, which
-        # freezes the image orientation so azimuth stops changing the render.
-        up = [-np.cos(az) * np.sin(elev), -np.sin(az) * np.sin(elev), np.cos(elev)]
-        renderer.setup_camera(45.0, center, eye, up)
-        # headlight: key light shines from the camera, tilted downward in world
-        # space so shading is consistent with "up" from every orbit angle
-        sun_dir = (center - eye) / np.linalg.norm(center - eye) + [0, 0, -0.6]
-        renderer.scene.scene.set_sun_light(sun_dir / np.linalg.norm(sun_dir),
-                                           [1.0, 1.0, 1.0], SUN_INTENSITY)
-        img = np.asarray(renderer.render_to_image())
-        images.append(Image.fromarray(img))
-    return images
+
+def render_views(renderer, mesh, angles):
+    """Render one image per (azimuth, elevation) pair. The mesh must already be
+    rotated into Z-up world space (the light rig and camera 'up' assume it)."""
+    center, radius = _upload(renderer, mesh)
+    cams = [(center, *orbit_camera(center, radius, az, elev)) for az, elev in angles]
+    return _shoot(renderer, cams)
 
 
 def render_up_candidate_grid(renderer, mesh, n_az=UP_TILE_AZIMUTHS):
     """[6][n_az] renders — each candidate up, seen from n_az azimuths.
 
-    Extra azimuths are nearly free: the cost here is the geometry upload
-    (~3.3 s on 1.8M triangles), which happens once per candidate regardless, so
-    four views cost the same six uploads as one. Averaging the upright score
-    over them is worth +2 on the holdout — but only once the arbiter stops
-    overriding the ensemble on half the collection, or the gain is discarded
-    before it counts. See LEARNINGS."""
+    One upload, not six. Rotating the mesh per candidate and re-uploading costs
+    the expensive half of rendering six times over (15 s each on a 4M-triangle
+    mesh); moving the camera instead costs nothing. The two are exactly
+    equivalent here because all six candidate rotations are signed axis
+    permutations: the rotated mesh's bounding box is the rotated box, so its
+    centre is R@c and its extent is a permutation of e — leaving the framing
+    radius ||e|| identical. Compute each camera in the rotated frame as before,
+    then carry it back with R.T. Verified pixel-identical against the
+    rotate-the-mesh version."""
+    center, radius = _upload(renderer, mesh)
+    angles = view_angles(n_az, [UP_TILE_ELEVATION])
     grid = []
     for up in pose.UP_CANDIDATES:
-        m = o3d.geometry.TriangleMesh(mesh)
-        m.rotate(rotation_to_z_up(up), center=(0, 0, 0))
-        grid.append(render_views(renderer, m, view_angles(n_az, [UP_TILE_ELEVATION])))
+        R = rotation_to_z_up(up)
+        c_rot = R @ center                      # exact: axis permutation
+        cams = []
+        for az, elev in angles:
+            eye, cam_up, sun = orbit_camera(c_rot, radius, az, elev)
+            cams.append((R.T @ c_rot, R.T @ eye, R.T @ cam_up, R.T @ sun))
+        grid.append(_shoot(renderer, cams))
     return grid
 
 
