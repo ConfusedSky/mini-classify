@@ -8,6 +8,13 @@ Loads all cached embeddings once, keeps SigLIP warm, then loops:
   any text       one-off query: top matches across the collection
   q / quit       exit
 
+Queries are embedded through the same "a 3D render of a {} miniature" templates
+the classifier uses, which is what makes a bare noun behave. Raw mode
+(--raw-queries, or :raw in the loop) embeds the text verbatim instead, for
+phrasings the templates mangle — "holding two swords" reads as "a 3D render of
+a holding two swords miniature" otherwise. Classification always stays
+templated, so <enter> means the same thing as a classify_stls.py run.
+
 Requires classify_stls.py to have been run first (it builds the caches);
 files without cached embeddings are skipped with a warning.
 """
@@ -21,7 +28,8 @@ import torch
 
 import pose
 from classify_stls import (add_cache_args, apply_run_params, as_tensor, cache_key,
-                           embed_texts, load_file_list, pool_sims, total_views)
+                           embed_raw, embed_texts, load_file_list, pool_sims,
+                           total_views)
 
 
 def link(f, text):
@@ -107,6 +115,10 @@ def main():
     parser.add_argument("--min-score", type=float, default=0.1,
                         help="queries list every model scoring at least this instead of a "
                              "top-10 (default 0.1; pass -1 or use :min off for top-10 mode)")
+    parser.add_argument("--raw-queries", action="store_true",
+                        help="embed query text verbatim instead of through the "
+                             "'a 3D render of a {} miniature' templates (:raw toggles it); "
+                             "classification with categories.txt stays templated either way")
     parser.add_argument("--renders-dir", default="my_renders",
                         help="saved renders; display names link to the render image when it exists")
     args = apply_run_params(parser)
@@ -145,24 +157,26 @@ def main():
     model = AutoModel.from_pretrained(args.model, torch_dtype=torch.float16).to(device).eval()
     processor = AutoProcessor.from_pretrained(args.model)
 
-    def text_matrix(texts):
-        emb = embed_texts(model, processor, texts, device)
-        return emb.float().cpu().numpy().T  # (dim, n_texts)
+    def text_matrix(texts, raw):
+        emb = (embed_raw if raw else embed_texts)(model, processor, texts, device)
+        return emb.float().cpu().numpy().T  # (dim, n_texts), unit rows either way
 
     pool = args.pool
     min_score = args.min_score if args.min_score >= 0 else None
+    raw = args.raw_queries
 
-    def score(texts):  # (n_files, n_texts), pooled over views
-        view_sims = matrix @ text_matrix(texts)  # (n_files, n_views, n_texts)
+    def score(texts, raw=False):  # (n_files, n_texts), pooled over views
+        view_sims = matrix @ text_matrix(texts, raw)  # (n_files, n_views, n_texts)
         return pool_sims(view_sims, pool)
 
     prev = None
     print(f"\nenter = classify with categories.txt | text = query | :find <text> = "
           f"locate files | :pool mean|max|softmax (now {pool}) | "
-          f":min <score>/off = threshold instead of top-10 | q = quit")
+          f":min <score>/off = threshold instead of top-10 | "
+          f":raw on|off = verbatim query text (now {'on' if raw else 'off'}) | q = quit")
     while True:
         try:
-            line = input(f"\ncategory-test[{pool}]> ").strip()
+            line = input(f"\ncategory-test[{pool}{'/raw' if raw else ''}]> ").strip()
         except (EOFError, KeyboardInterrupt):
             break
         if line.lower() in ("q", "quit", "exit"):
@@ -184,6 +198,13 @@ def main():
             for f in matches[:20]:
                 print(f"  {link(f, str(f))}")
             print(f"  ({len(matches)} matches)" if matches else "  no matches")
+        elif line.startswith(":raw"):
+            val = line[4:].strip().lower()
+            if val in ("on", "off", ""):
+                raw = not raw if val == "" else val == "on"
+                print(f"queries embed {'verbatim' if raw else 'through the miniature templates'}")
+            else:
+                print("usage: :raw on|off  (bare :raw toggles)")
         elif line.startswith(":pool"):
             choice = line.split()[-1]
             if choice in ("mean", "max", "softmax"):
@@ -192,7 +213,7 @@ def main():
             else:
                 print("usage: :pool mean|max|softmax")
         elif line:
-            show_query(score([line]).ravel(), names, min_score=min_score)
+            show_query(score([line], raw).ravel(), names, min_score=min_score)
         else:
             categories = [l.strip() for l in open(args.categories) if l.strip()]
             prev = show_classification(score(categories), categories, names, prev)
