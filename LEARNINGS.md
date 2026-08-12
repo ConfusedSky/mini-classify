@@ -648,7 +648,10 @@ Vertex (`eval/gemini_vlm.py`, `--report-only` re-prints the tables):
 
 **43/44 standalone, including 21/21 on the frozen holdout** — the first method
 here to beat the ensemble (38/44) outright rather than supplement it. Its one
-miss is `tile9`, the terrain piece every other method also fails. As the
+miss is `tile9`. ~~the terrain piece every other method also fails~~ — **not
+true, corrected below**: geometry, the ensemble and gemini-2.5-pro all get
+`tile9`, and `needs_arbiter` is false on it, so that miss never reaches the
+pipeline. As the
 arbiter tier it rescues 4 and breaks 0 (**net +4**, pipeline **42/44**) at both
 sheet sizes; head-to-head against the ensemble across all 44 it wins 6, loses 1.
 
@@ -703,10 +706,19 @@ gemini-3.1-pro    @256    ok      X            X                 ok
 gemini-3.1-pro    @512    ok      X            X                 X
 ```
 
-`tile9` is recorded above as "the terrain piece every other method also
-fails" — **3.1-pro-preview gets it at both sheet sizes**, the first method in
-this project to do so. It pays for it with `Floor` and `Concrete Chunk (6)`,
-which the incumbent gets. Every model in this table now fails only on terrain,
+**`tile9` is a flash-line blind spot, not a hard model** — and this run is what
+exposed that the claim above ("the terrain piece every other method also
+fails") was wrong. Geometry, the ensemble and gemini-2.5-pro all answer `+Y`
+correctly; only the flash line misses it, and 3.5-flash and 3.6-flash both
+answer `-Y` at both sheet sizes. 3.1-pro-preview joins the models that get it
+and pays for it with `Floor` and `Concrete Chunk (6)`, which the incumbent gets.
+
+It also costs the incumbent nothing: `needs_arbiter` is **false** on `tile9`,
+so the arbiter never fires there and 3.5-flash's one standalone miss cannot
+reach the pipeline. A standalone accuracy table and a pipeline accuracy table
+disagree about which errors matter, and this is the cheapest illustration of it
+in the file — the incumbent's *only* miss is on a model it is never asked
+about. Every model in this table now fails only on terrain,
 and each fails on *different* terrain. Aggregate accuracy at n=44 cannot
 separate these; it took the per-model table to see that a swap, not an
 improvement, is what a newer model bought.

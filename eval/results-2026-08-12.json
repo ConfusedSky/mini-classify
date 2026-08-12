@@ -1,6 +1,6 @@
 {
  "measured": "2026-08-12",
- "models": "gemma4:26b via ollama; claude haiku/sonnet via CLI; gemini 3.5-flash / 2.5-flash / 2.5-pro via Vertex AI",
+ "models": "gemma4:26b via ollama; claude haiku/sonnet via CLI; gemini 3.5-flash / 2.5-flash / 2.5-pro / 3.6-flash / 3.1-pro-preview via Vertex AI. gemini-3-pro-image was tested and is absent by design: it answers correctly but its quota (HTTP 429) let only 5-6 of 44 calls through, and a column scored on the calls that survive a rate limiter is not a sample. Its usage row below carries calls_measured for the same reason.",
  "sheet_px": "contact-sheet thumb size per candidate tile; pose.make_contact_sheet defaults to 256",
  "caveat": "orig-set scores are optimistic (probes and the min-max scheme were tuned on it). See LEARNINGS.md and OPEN_QUESTIONS.md.",
  "predictions": [
@@ -33,7 +33,11 @@
    "gemini-2.5-pro_sheet256": "+Y",
    "gemini-3.5-flash_sheet512": "-Y",
    "gemini-2.5-flash_sheet512": "+X",
-   "gemini-2.5-pro_sheet512": "+Y"
+   "gemini-2.5-pro_sheet512": "+Y",
+   "gemini-3.1-pro-preview_sheet256": "+Y",
+   "gemini-3.1-pro-preview_sheet512": "+Y",
+   "gemini-3.6-flash_sheet256": "-Y",
+   "gemini-3.6-flash_sheet512": "-Y"
   },
   {
    "stem": "OutPost_wall_edge",
@@ -64,7 +68,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "Bunker_MiniV2_Roof_",
@@ -95,7 +103,11 @@
    "gemini-2.5-pro_sheet256": "-X",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "-X"
+   "gemini-2.5-pro_sheet512": "-X",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "32_Unsupported_Wajoski_Wolf2",
@@ -126,7 +138,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "Death_knight_body_32mm_unsupported",
@@ -157,7 +173,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "32mm_Torch",
@@ -188,7 +208,11 @@
    "gemini-2.5-pro_sheet256": "+Y",
    "gemini-3.5-flash_sheet512": "+Y",
    "gemini-2.5-flash_sheet512": "+Y",
-   "gemini-2.5-pro_sheet512": "+Y"
+   "gemini-2.5-pro_sheet512": "+Y",
+   "gemini-3.1-pro-preview_sheet256": "+Y",
+   "gemini-3.1-pro-preview_sheet512": "+Y",
+   "gemini-3.6-flash_sheet256": "+Y",
+   "gemini-3.6-flash_sheet512": "+Y"
   },
   {
    "stem": "Pressurized_Container_2",
@@ -219,7 +243,11 @@
    "gemini-2.5-pro_sheet256": "+Y",
    "gemini-3.5-flash_sheet512": "+Y",
    "gemini-2.5-flash_sheet512": "+Y",
-   "gemini-2.5-pro_sheet512": "+Y"
+   "gemini-2.5-pro_sheet512": "+Y",
+   "gemini-3.1-pro-preview_sheet256": "+Y",
+   "gemini-3.1-pro-preview_sheet512": "+Y",
+   "gemini-3.6-flash_sheet256": "+Y",
+   "gemini-3.6-flash_sheet512": "+Y"
   },
   {
    "stem": "75_Unsupported_Wajoski_Wolf2",
@@ -250,7 +278,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "32mm_FemaleOrcWarrior",
@@ -281,7 +313,11 @@
    "gemini-2.5-pro_sheet256": "+Y",
    "gemini-3.5-flash_sheet512": "+Y",
    "gemini-2.5-flash_sheet512": "+Y",
-   "gemini-2.5-pro_sheet512": "+Y"
+   "gemini-2.5-pro_sheet512": "+Y",
+   "gemini-3.1-pro-preview_sheet256": "+Y",
+   "gemini-3.1-pro-preview_sheet512": "+Y",
+   "gemini-3.6-flash_sheet256": "+Y",
+   "gemini-3.6-flash_sheet512": "+Y"
   },
   {
    "stem": "Propane_Tank",
@@ -312,7 +348,11 @@
    "gemini-2.5-pro_sheet256": "+Y",
    "gemini-3.5-flash_sheet512": "+Y",
    "gemini-2.5-flash_sheet512": "+Y",
-   "gemini-2.5-pro_sheet512": "+Y"
+   "gemini-2.5-pro_sheet512": "+Y",
+   "gemini-3.1-pro-preview_sheet256": "+Y",
+   "gemini-3.1-pro-preview_sheet512": "+Y",
+   "gemini-3.6-flash_sheet256": "+Y",
+   "gemini-3.6-flash_sheet512": "+Y"
   },
   {
    "stem": "Concrete Chunk (6)",
@@ -343,7 +383,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Y",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+X",
+   "gemini-3.1-pro-preview_sheet512": "+X",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "32_Unsupported_Psyflayer_Body",
@@ -374,7 +418,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+X",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "75_Unsupported_Catarina_BodyMask",
@@ -405,7 +453,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "Body",
@@ -436,7 +488,11 @@
    "gemini-2.5-pro_sheet256": "+Y",
    "gemini-3.5-flash_sheet512": "+Y",
    "gemini-2.5-flash_sheet512": "-Z",
-   "gemini-2.5-pro_sheet512": "+Y"
+   "gemini-2.5-pro_sheet512": "+Y",
+   "gemini-3.1-pro-preview_sheet256": "+Y",
+   "gemini-3.1-pro-preview_sheet512": "+Y",
+   "gemini-3.6-flash_sheet256": "+Y",
+   "gemini-3.6-flash_sheet512": "+Y"
   },
   {
    "stem": "Floor",
@@ -467,7 +523,11 @@
    "gemini-2.5-pro_sheet256": "+X",
    "gemini-3.5-flash_sheet512": "-Z",
    "gemini-2.5-flash_sheet512": "+X",
-   "gemini-2.5-pro_sheet512": "-Z"
+   "gemini-2.5-pro_sheet512": "-Z",
+   "gemini-3.1-pro-preview_sheet256": "+X",
+   "gemini-3.1-pro-preview_sheet512": "+X",
+   "gemini-3.6-flash_sheet256": "-X",
+   "gemini-3.6-flash_sheet512": "+X"
   },
   {
    "stem": "Bedienkonsole",
@@ -498,7 +558,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "32mm_ReggidGraves",
@@ -529,7 +593,11 @@
    "gemini-2.5-pro_sheet256": "+Y",
    "gemini-3.5-flash_sheet512": "+Y",
    "gemini-2.5-flash_sheet512": "+Y",
-   "gemini-2.5-pro_sheet512": "+Y"
+   "gemini-2.5-pro_sheet512": "+Y",
+   "gemini-3.1-pro-preview_sheet256": "+Y",
+   "gemini-3.1-pro-preview_sheet512": "+Y",
+   "gemini-3.6-flash_sheet256": "+Y",
+   "gemini-3.6-flash_sheet512": "+Y"
   },
   {
    "stem": "32mm_Cavalrobot",
@@ -560,7 +628,11 @@
    "gemini-2.5-pro_sheet256": "+Y",
    "gemini-3.5-flash_sheet512": "+Y",
    "gemini-2.5-flash_sheet512": "+Y",
-   "gemini-2.5-pro_sheet512": "+Y"
+   "gemini-2.5-pro_sheet512": "+Y",
+   "gemini-3.1-pro-preview_sheet256": "+Y",
+   "gemini-3.1-pro-preview_sheet512": "+Y",
+   "gemini-3.6-flash_sheet256": "+Y",
+   "gemini-3.6-flash_sheet512": "+Y"
   },
   {
    "stem": "nsr-9j4",
@@ -591,7 +663,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "32mm_Gate_L",
@@ -622,7 +698,11 @@
    "gemini-2.5-pro_sheet256": "+X",
    "gemini-3.5-flash_sheet512": "+Y",
    "gemini-2.5-flash_sheet512": "+Y",
-   "gemini-2.5-pro_sheet512": "-X"
+   "gemini-2.5-pro_sheet512": "-X",
+   "gemini-3.1-pro-preview_sheet256": "+Y",
+   "gemini-3.1-pro-preview_sheet512": "+Y",
+   "gemini-3.6-flash_sheet256": "+Y",
+   "gemini-3.6-flash_sheet512": "+Y"
   },
   {
    "stem": "32mm_Goro",
@@ -653,7 +733,11 @@
    "gemini-2.5-pro_sheet256": "+Y",
    "gemini-3.5-flash_sheet512": "+Y",
    "gemini-2.5-flash_sheet512": "+Y",
-   "gemini-2.5-pro_sheet512": "+Y"
+   "gemini-2.5-pro_sheet512": "+Y",
+   "gemini-3.1-pro-preview_sheet256": "+Y",
+   "gemini-3.1-pro-preview_sheet512": "+Y",
+   "gemini-3.6-flash_sheet256": "+Y",
+   "gemini-3.6-flash_sheet512": "+Y"
   },
   {
    "stem": "Grass Tufts Tuner (3)",
@@ -684,7 +768,11 @@
    "gemini-2.5-pro_sheet256": "-Y",
    "gemini-3.5-flash_sheet512": "+Y",
    "gemini-2.5-flash_sheet512": "+Y",
-   "gemini-2.5-pro_sheet512": "+Y"
+   "gemini-2.5-pro_sheet512": "+Y",
+   "gemini-3.1-pro-preview_sheet256": "+Y",
+   "gemini-3.1-pro-preview_sheet512": "+Y",
+   "gemini-3.6-flash_sheet256": "+Y",
+   "gemini-3.6-flash_sheet512": "+Y"
   },
   {
    "stem": "32mm_OrcShaman",
@@ -715,7 +803,11 @@
    "gemini-2.5-pro_sheet256": "+Y",
    "gemini-3.5-flash_sheet512": "+Y",
    "gemini-2.5-flash_sheet512": "+Y",
-   "gemini-2.5-pro_sheet512": "+Y"
+   "gemini-2.5-pro_sheet512": "+Y",
+   "gemini-3.1-pro-preview_sheet256": "+Y",
+   "gemini-3.1-pro-preview_sheet512": "+Y",
+   "gemini-3.6-flash_sheet256": "+Y",
+   "gemini-3.6-flash_sheet512": "+Y"
   },
   {
    "stem": "32mm_OrcArcher",
@@ -735,7 +827,11 @@
    "gemini-2.5-pro_sheet256": "+Y",
    "gemini-3.5-flash_sheet512": "+Y",
    "gemini-2.5-flash_sheet512": "+Y",
-   "gemini-2.5-pro_sheet512": "+Y"
+   "gemini-2.5-pro_sheet512": "+Y",
+   "gemini-3.1-pro-preview_sheet256": "+Y",
+   "gemini-3.1-pro-preview_sheet512": "+Y",
+   "gemini-3.6-flash_sheet256": "+Y",
+   "gemini-3.6-flash_sheet512": "+Y"
   },
   {
    "stem": "ebj-prime4",
@@ -755,7 +851,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "75_Unsupported_Benoit_BodyNoMask",
@@ -775,7 +875,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "32_Unsupported_Mortimer_BodyNoMask",
@@ -795,7 +899,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "Concrete Chunk (2)",
@@ -815,7 +923,11 @@
    "gemini-2.5-pro_sheet256": "-Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Y",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "-X",
+   "gemini-3.6-flash_sheet256": "-X",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "32_Unsupported_Renard_BodyMask",
@@ -835,7 +947,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "fago_lapices_1",
@@ -855,7 +971,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "75_Unsupported_Arkham_BodyNoMask",
@@ -875,7 +995,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "32mm_TatteredTrooper2",
@@ -895,7 +1019,11 @@
    "gemini-2.5-pro_sheet256": "+Y",
    "gemini-3.5-flash_sheet512": "+Y",
    "gemini-2.5-flash_sheet512": "+Y",
-   "gemini-2.5-pro_sheet512": "+Y"
+   "gemini-2.5-pro_sheet512": "+Y",
+   "gemini-3.1-pro-preview_sheet256": "+Y",
+   "gemini-3.1-pro-preview_sheet512": "+Y",
+   "gemini-3.6-flash_sheet256": "+Y",
+   "gemini-3.6-flash_sheet512": "+Y"
   },
   {
    "stem": "75_Unsupported_Aimar_BodyNoMask",
@@ -915,7 +1043,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "Damaged Metal Sheet Sprue",
@@ -935,7 +1067,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "Bunker_smal_roof",
@@ -955,7 +1091,11 @@
    "gemini-2.5-pro_sheet256": "-X",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Y",
-   "gemini-2.5-pro_sheet512": "-X"
+   "gemini-2.5-pro_sheet512": "-X",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "Dwarf Slayer hammer only",
@@ -975,7 +1115,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "Rleg",
@@ -995,7 +1139,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "32_Unsupported_WisDevourer_Body",
@@ -1015,7 +1163,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "Dragonpeak_Barbarian_C_(m_helmet) (repaired)",
@@ -1035,7 +1187,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+X",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "Brunilde_Snakeslayer (repaired)",
@@ -1055,7 +1211,11 @@
    "gemini-2.5-pro_sheet256": "+X",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+X",
-   "gemini-2.5-pro_sheet512": "+X"
+   "gemini-2.5-pro_sheet512": "+X",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "tdr-5se3",
@@ -1075,7 +1235,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "Dragonpeak_Smilodon_Rider_D_(f) (repaired)",
@@ -1095,7 +1259,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "Container_complete",
@@ -1115,7 +1283,11 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+X",
-   "gemini-2.5-pro_sheet512": "-Z"
+   "gemini-2.5-pro_sheet512": "-Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   },
   {
    "stem": "arc-1a-doors-none4",
@@ -1135,11 +1307,15 @@
    "gemini-2.5-pro_sheet256": "+Z",
    "gemini-3.5-flash_sheet512": "+Z",
    "gemini-2.5-flash_sheet512": "+Z",
-   "gemini-2.5-pro_sheet512": "+Z"
+   "gemini-2.5-pro_sheet512": "+Z",
+   "gemini-3.1-pro-preview_sheet256": "+Z",
+   "gemini-3.1-pro-preview_sheet512": "+Z",
+   "gemini-3.6-flash_sheet256": "+Z",
+   "gemini-3.6-flash_sheet512": "+Z"
   }
  ],
  "cost": {
-  "note": "mean measured tokens per arbiter call, and $ for the 354 arbiter calls a 602-model run fires. Gemini only \u2014 the gemma/claude rows predate usage capture. Prices $/M tokens, list, 2026-08-12.",
+  "note": "mean measured tokens per arbiter call, and $ for the 354 arbiter calls a 602-model run fires. Gemini only \u2014 the gemma/claude rows predate usage capture. Prices $/M tokens, list, 2026-08-12. calls_measured is the number of calls the mean is over, present only where it is not the full 44.",
   "prices": {
    "gemini-3.5-flash": [
     1.5,
@@ -1152,6 +1328,18 @@
    "gemini-2.5-pro": [
     1.25,
     10.0
+   ],
+   "gemini-3.1-pro-preview": [
+    2.0,
+    12.0
+   ],
+   "gemini-3-pro-image": [
+    2.0,
+    12.0
+   ],
+   "gemini-3.6-flash": [
+    1.5,
+    7.5
    ]
   },
   "measured": {
@@ -1190,6 +1378,44 @@
     "thinking": 668,
     "out": 6,
     "mean_secs": 9.2
+   },
+   "gemini-3.1-pro-preview_sheet256": {
+    "in": 1168,
+    "thinking": 1844,
+    "out": 8,
+    "mean_secs": 19.8
+   },
+   "gemini-3-pro-image_sheet256": {
+    "in": 648,
+    "thinking": 0,
+    "out": 11,
+    "mean_secs": 3.1,
+    "calls_measured": 5
+   },
+   "gemini-3.6-flash_sheet256": {
+    "in": 1168,
+    "thinking": 851,
+    "out": 8,
+    "mean_secs": 7.8
+   },
+   "gemini-3.1-pro-preview_sheet512": {
+    "in": 1168,
+    "thinking": 1260,
+    "out": 8,
+    "mean_secs": 14.2
+   },
+   "gemini-3-pro-image_sheet512": {
+    "in": 648,
+    "thinking": 0,
+    "out": 10,
+    "mean_secs": 3.6,
+    "calls_measured": 6
+   },
+   "gemini-3.6-flash_sheet512": {
+    "in": 1168,
+    "thinking": 820,
+    "out": 8,
+    "mean_secs": 8.3
    }
   }
  }

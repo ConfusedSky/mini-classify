@@ -158,13 +158,16 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   one model is inside the noise this file keeps warning about, and the 23
   minutes is not. Blocked on the same thing as everything else: at n=44 the
   accuracy difference is one model, so more labels would decide it.
-- **Is `Floor` the new `tile9`?** The two newest models both fail `Floor`
-  (truth `-Z`) at both sheet sizes while gemini-3.5-flash gets it, and
-  3.1-pro-preview is the first method here to solve `tile9`, which every other
-  method fails. Every remaining error at this tier is terrain, and the models
-  now fail on *different* terrain. Worth pointing `eval/gold_upright.py` at
-  `Floor` and `tile9` together: if a flat slab's "up" is genuinely ambiguous
-  from six silhouettes, this is a label/task problem and no arbiter fixes it.
+- **Is `Floor` the new `tile9`?** `gemini-3.6-flash` and
+  `gemini-3.1-pro-preview` both fail `Floor` (truth `-Z`) at both sheet sizes
+  while gemini-3.5-flash gets it. Every remaining error at this tier is
+  terrain, and the models now fail on *different* terrain. Worth pointing
+  `eval/gold_upright.py` at `Floor` and `tile9` together: if a flat slab's "up"
+  is genuinely ambiguous from six silhouettes, this is a label/task problem and
+  no arbiter fixes it. Note `tile9` turned out **not** to be the universal
+  failure this file claimed — geometry, the ensemble and gemini-2.5-pro all get
+  it, and it never escalates. `Floor` may be the same kind of overstatement;
+  check the whole column before calling any model "the hard one".
 - **Is `Bedienkonsole` reachable without a VLM?** A console with a large flat
   rear panel, upright `+Z`. Geometry, the ensemble, and every SigLIP probe put
   it on its back; every Gemini model rescues it, as gemma and sonnet sometimes
