@@ -1,7 +1,9 @@
-"""Pose resolution for STL renders: up-axis detection with confidence,
-front-view scoring, a per-file pose cache, and a VLM arbiter for
-ambiguous cases. classify_stls.py orchestrates; this module never
-imports classify_stls (no rendering / model code here)."""
+"""Pose resolution for STL renders: up-axis detection with confidence, a
+SigLIP tie-break over the up-candidate tiles, front-view scoring, a per-file
+pose cache, and a VLM arbiter for ambiguous cases. classify_stls.py
+orchestrates; this module never imports classify_stls (no rendering / model
+code here) — the scorers here take embeddings as arguments and never load a
+model."""
 import base64
 import io
 import json
@@ -9,20 +11,24 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
+import open3d as o3d
 from PIL import Image, ImageDraw
 
 UP_CANDIDATES = [np.array(u, dtype=float) for u in
                  [(0, 0, 1), (0, 0, -1), (0, 1, 0), (0, -1, 0), (1, 0, 0), (-1, 0, 0)]]
 
 ABS_SCORE_FLOOR = 0.02  # best flat-base score below this = "no print base found"
+SAMPLE_SEED = 0
 
 
-def detect_up_axis(mesh, n_samples=4000):
-    """Score every candidate up by flat print-base evidence: how much
-    down-facing flat surface sits in the bottom 2% height slab.
+def up_axis_scores(mesh, n_samples=4000):
+    """Flat print-base evidence per candidate up: the fraction of sampled
+    surface that is both in the bottom 2% height slab and facing down.
 
-    Returns (up, ratio, best_score) — ratio = runner_up/best, lower is
-    more confident (symmetric meshes like a barrel come out ~1.0)."""
+    Seeded, because the winner can rest on ~30 of the 4000 points and an
+    unseeded draw moves picks between runs on identical input — which would
+    make the pose cache irreproducible and the ensemble below unstable."""
+    o3d.utility.random.seed(SAMPLE_SEED)
     pcd = mesh.sample_points_uniformly(n_samples, use_triangle_normal=True)
     pts = np.asarray(pcd.points)
     normals = np.asarray(pcd.normals)
@@ -36,10 +42,21 @@ def detect_up_axis(mesh, n_samples=4000):
         in_bottom_slab = h < h.min() + 0.02 * extent
         facing_down = normals @ up < -0.9
         scores.append(float(np.mean(in_bottom_slab & facing_down)))
+    return np.array(scores)
+
+
+def rank_up_scores(scores):
+    """(index, ratio, best_score) — ratio = runner_up/best, lower is more
+    confident (symmetric meshes like a barrel come out ~1.0)."""
     order = np.argsort(scores)[::-1]
-    best, runner = scores[order[0]], scores[order[1]]
-    ratio = runner / best if best > 0 else 1.0
-    return UP_CANDIDATES[order[0]], ratio, best
+    best, runner = float(scores[order[0]]), float(scores[order[1]])
+    return int(order[0]), (runner / best if best > 0 else 1.0), best
+
+
+def detect_up_axis(mesh, n_samples=4000):
+    """Geometry-only up axis. Returns (up, ratio, best_score)."""
+    idx, ratio, best = rank_up_scores(up_axis_scores(mesh, n_samples))
+    return UP_CANDIDATES[idx], ratio, best
 
 
 def needs_arbiter(ratio, best_score, threshold=0.6):
@@ -74,10 +91,12 @@ def up_str(up):
 def embed_cache_token(entry, up_axis_arg):
     """Embedding-cache key token for a file's resolved pose. Heuristic poses
     are a deterministic function of the file, so the legacy token keeps
-    existing caches valid; only VLM overrides (renders differ from what the
-    heuristic would produce) get their own token."""
-    if entry and entry.get("source") == "vlm":
-        return "vlm:" + up_str(entry["up"])
+    existing caches valid; only sources that *moved* the pose off the geometry
+    answer — a VLM override or an ensemble override — render differently and
+    get their own token."""
+    source = entry.get("source") if entry else None
+    if source in ("vlm", "ensemble"):
+        return f"{source}:" + up_str(entry["up"])
     return up_axis_arg
 
 
@@ -97,6 +116,44 @@ def front_view_index(view_embeds, front_embeds, back_embeds):
     score = ((view_embeds @ front_embeds.T).mean(1)
              - (view_embeds @ back_embeds.T).mean(1))
     return int(np.argmax(score))
+
+
+# Deliberately not phrased in terms of heads and feet: roughly half the
+# collection is terrain and scatter, where anatomy probes score 0/12.
+UPRIGHT_PROMPTS = [
+    "a 3D printed model sitting the right way up on a table",
+]
+TOPPLED_PROMPTS = [
+    "a 3D printed model tipped onto its side",
+    "a 3D printed model turned upside down",
+]
+
+
+def upright_scores(tile_embeds, upright_embeds, toppled_embeds):
+    """Per-candidate upright score for the up-candidate tiles. The toppled
+    probes are not optional padding: without something to contrast against,
+    raw similarity is near-flat across the six tiles and the argmax is noise."""
+    return ((tile_embeds @ upright_embeds.T).mean(1)
+            - (tile_embeds @ toppled_embeds.T).mean(1))
+
+
+def _unit(v):
+    """Min-max to [0,1]; all-equal input collapses to zeros (no vote)."""
+    lo, hi = float(v.min()), float(v.max())
+    return (v - lo) / (hi - lo) if hi > lo else np.zeros_like(v)
+
+
+def combine_up_scores(geo_scores, siglip_scores):
+    """Index of the up candidate favoured by geometry and SigLIP together.
+
+    The two are in different units — a flat-base area fraction against a
+    difference of cosine similarities — so each is min-maxed before the mean.
+    That is not merely a scale fix: geometry's weakest candidate is almost
+    always 0, so min-max maps its runner-up to runner/best, exactly the ratio
+    rank_up_scores reports. Geometry therefore votes with a ~1.0 margin when it
+    has real base evidence and with a ~0.0 margin when it is guessing, handing
+    those models to SigLIP without either method being thresholded."""
+    return int(np.argmax(_unit(geo_scores) + _unit(siglip_scores)))
 
 
 OLLAMA_URL = "http://localhost:11434"
@@ -173,15 +230,26 @@ def _ask_claude(sheet_path, n_tiles):
     return parse_tile_answer(json.loads(out.stdout).get("result", ""), n_tiles)
 
 
-def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b"):
+def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None):
     """Ask the VLM which candidate orientation is upright. One retry on a
     bad/failed answer, then None — the caller keeps the heuristic guess.
-    The pipeline never hard-fails because of the VLM."""
+    The pipeline never hard-fails because of the VLM.
+
+    save_to keeps a per-model copy of the sheet next to the saved renders. It
+    is the same image the VLM was shown, written whether or not the answer
+    parses, so a wrong pose can be read back off disk."""
     try:
         sheet = make_contact_sheet(tiles)
     except Exception as e:
         print(f"  pose VLM error ({backend}): {e}")
         return None
+    if save_to is not None:
+        try:
+            save_to = Path(save_to)
+            save_to.parent.mkdir(parents=True, exist_ok=True)
+            sheet.save(save_to)
+        except OSError as e:  # a debug artifact must never fail the run
+            print(f"  could not save pose sheet {save_to}: {e}")
     for _attempt in range(2):
         try:
             if backend == "ollama":

@@ -43,6 +43,54 @@ Not the lack of color — gray renders classify fine (the witch scored top-1
   directions by "how much down-facing flat surface sits in the bottom 2%
   slab". Verified on witch/gravedigger/bunny/building. Fails gracefully on
   symmetric objects (barrel: ±Y identical).
+- **The flat base is missing on a third of this collection**, so the
+  print-base heuristic alone is not enough. Measured over a 70-mesh sample:
+  31% score below the `ABS_SCORE_FLOOR` (no base at all — leaping figures,
+  flying creatures), 24% are an ambiguous ratio, 41% cannot be decided
+  without escalating. Median best score is 0.058 against ~0.39 for a genuine
+  base. The design assumed the candidate-list geometry would carry tier 1;
+  for characters it does not.
+- **Geometry and SigLIP fail on opposite populations, so average them.**
+  Hand-labelled 23 of a 40-mesh random sample (17 more had no defined
+  upright — a moustache, a gate pin, a flat gear disc, a dragon in flight):
+
+  | | terrain / scatter | characters |
+  |---|---|---|
+  | flat base present | almost always | often none |
+  | geometry | good | fails |
+  | SigLIP upright probes | fails | 11/11 |
+
+  Alone: geometry 17-18/23, SigLIP 19/23. **Averaged: 22/23, which is the
+  oracle ceiling** — every disagreement had exactly one method right, and the
+  mean arbitrates all of them. The one unrecoverable model (`Bedienkonsole`,
+  a console with a large flat back panel) is wrong under both.
+- **Min-max before averaging is doing real work, not just unit conversion.**
+  The two scores are a surface-area fraction and a difference of cosine
+  similarities. Because geometry's weakest candidate is almost always exactly
+  0, min-max maps its runner-up to `runner/best` — precisely the `ratio`
+  confidence already reported (measured: mean |margin − (1−ratio)| = 0.015).
+  So geometry votes with a ~1.0 margin when it has base evidence and ~0.0 when
+  guessing, and SigLIP decides those models. Ratio-weighting for free.
+  Schemes that discard this lose: z-score 21/23, Borda rank 19/23, and
+  "scale geometry against the absolute 0.02 floor" 20/23 — the last because
+  every candidate over the floor saturates at 1.0 and the margin vanishes.
+  A hard switch (geometry if a base was found, else SigLIP) only reaches
+  19/23; the soft blend beats it because partial base evidence should be
+  weighed, not thresholded.
+- **Run the ensemble on every model, not just low-confidence ones.** Gating it
+  on `needs_arbiter` drops to 21/23: `32mm_Gate_L` has a 0.43 ratio and a
+  0.033 best score — confident by both tests — and is still wrong.
+- **Probe wording swings this more than anything else**: 83% down to 4%
+  across phrasings. Never phrase them anatomically ("head at the top") — half
+  this collection is terrain and that scores 0/12. And always include negative
+  probes: with upright probes alone, raw similarity is near-flat across the
+  six tiles and the argmax is noise (4%, worse than chance).
+- **`sample_points_uniformly` is unseeded.** With 4000 points the winner can
+  rest on ~30, and picks moved between runs on identical input
+  (`Propane_Tank` −Z→+Z, `32mm_PitFiend` −X→+X, confidence 0.23→0.65). That
+  makes the pose cache irreproducible. `o3d.utility.random.seed()` fixes it —
+  verified identical scores across runs. Seed before sampling, not once at
+  startup, so the result doesn't depend on call order.
 - **Fixed world-space lights leave orbit views black** (back view =
   silhouette). Use a camera-following headlight: per view,
   `sun_dir = normalize(center - eye) + [0, 0, -0.6]`, renormalized — every

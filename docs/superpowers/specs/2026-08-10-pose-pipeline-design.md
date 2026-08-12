@@ -1,7 +1,7 @@
 # Canonical Pose Pipeline — Design
 
 **Date:** 2026-08-10
-**Status:** Approved
+**Status:** Approved — amended 2026-08-11, see [Amendments](#amendments)
 **Goal:** Ensure every model renders upright and we know which view faces the
 camera — improving classification robustness, render-sheet readability, and
 giving each model a canonical "hero" view. Fixes known failures (symmetric
@@ -120,3 +120,76 @@ re-embed; the rest of the warm cache survives.
 - Re-rendering models so azimuth 0 physically faces the camera — front is
   metadata by design.
 - Using the VLM for front detection or for classification.
+
+## Amendments
+
+The body above is left as approved on 2026-08-10. Amendments record what
+changed since, and why.
+
+### 2026-08-11 — SigLIP also decides the up axis (tier 1.5)
+
+**What broke.** Tier 1 assumed geometry decides the up axis for every model and
+only ambiguity needs escalating. That assumption does not hold for this
+collection: over a 70-mesh sample, 31% score below `ABS_SCORE_FLOOR` (no flat
+base at all — leaping figures, flying creatures), 24% are an ambiguous ratio,
+and **41% cannot be decided by geometry without escalating**. Median best score
+is 0.058 against ~0.39 for a genuine print base. The tier-3 VLM was absorbing
+that load, one model at a time.
+
+The Context section's other premise — that models sit in discrete axis-aligned
+orientations, so the six-candidate list stays — held up and is unchanged.
+
+**What changed.** SigLIP now votes on the up axis as well as the front view,
+scoring the same six candidate tiles tier 3 renders, against upright/toppled
+text probes. The geometry and SigLIP score vectors are min-max normalised per
+model and averaged; the argmax is the up axis.
+
+- Runs on **every** model, not only low-confidence ones. Gating it on
+  `needs_arbiter` costs a model that is confidently wrong: `32mm_Gate_L` has a
+  0.43 ratio and a 0.033 best score, passes both confidence tests, and picks
+  the wrong face.
+- Tier 3 is unchanged: same trigger (geometry's ratio and floor — geometry is
+  what knows there was no base to measure), and the VLM still wins when it
+  disagrees. Tiles are rendered once and shared by both tiers.
+- `--no-up-ensemble` reverts to geometry alone.
+
+**Evidence.** 23 hand-labelled models from a 40-mesh random sample (17 further
+models excluded — a moustache, a gate pin, a flat gear disc, a dragon in
+flight all have no defined upright). Geometry alone 17-18/23, SigLIP alone
+19/23, **averaged 22/23** — the oracle ceiling, since every disagreement had
+exactly one method right. The two fail on opposite populations: terrain almost
+always has a base and defeats the probes, characters often have no base and
+defeat the geometry.
+
+Min-max is load-bearing rather than cosmetic. Geometry's weakest candidate is
+almost always exactly 0, so min-max maps its runner-up to `runner/best` — the
+`ratio` this spec already defines as confidence (mean |margin − (1−ratio)| =
+0.015). Geometry therefore votes hard when it has base evidence and abstains
+when guessing, with nothing thresholded. Schemes that discard that structure
+score worse: z-score 21/23, Borda 19/23, absolute-scaled geometry 20/23, and a
+hard geometry-or-SigLIP switch 19/23.
+
+**Not yet validated.** `object_generic`'s probe wording was chosen after
+watching earlier phrasings fail on some of these same models, and the min-max
+scheme is the best of six measured against the same 23 labels with only 8
+disagreements to arbitrate. Both rates are optimistic. A clean holdout on an
+unseen sample is outstanding; `--no-up-ensemble` exists to A/B it.
+
+### 2026-08-11 — Pose cache: `source` gains `ensemble`, sampling is seeded
+
+Supersedes "**`source` is `heuristic` or `vlm`**" in [Pose cache](#pose-cache).
+`source` is now `heuristic`, `ensemble`, or `vlm`. It records which tier last
+*moved* the answer, so an ensemble or VLM run that merely confirms geometry
+stays `heuristic` and leaves the embedding-cache key untouched.
+
+Also note a pre-existing drift, unchanged by this amendment: that section says
+the embedding key "changes from the `--up-axis` argument to the **resolved up
+vector**". The implementation is append-only instead — `embed_cache_token`
+returns the `--up-axis` argument for `heuristic` poses and a `source:vector`
+token only for overrides, which is what let earlier warm caches survive.
+
+`detect_up_axis` now seeds Open3D's RNG before sampling. Unseeded, the winner
+can rest on ~30 of 4000 sampled points, and picks moved between runs on
+identical input (`Propane_Tank` −Z→+Z, `32mm_PitFiend` −X→+X, confidence
+0.23→0.65) — which made the pose cache irreproducible and would have made the
+ensemble unstable.

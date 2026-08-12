@@ -13,9 +13,10 @@ parameters in <cache-dir>/run-params.json; cluster_models.py and
 test_categories.py default from that file, so cache-identity flags (and the
 input directory) only have to be typed once, here.
 
-Meshes are stood upright first: the up axis is detected from flat print-base
-evidence and reported with a confidence ratio, and ambiguous meshes can be
-arbitrated by a local VLM (--pose-vlm). The front-facing view index is recorded
+Meshes are stood upright first, from three tiers of evidence: flat print-base
+geometry with a confidence ratio, a SigLIP vote over the six up-candidate tiles
+(the two averaged; --no-up-ensemble for geometry alone), and a local VLM
+arbitrating low-confidence cases (--pose-vlm). The front-facing view index is recorded
 per file (front_view column) so downstream tools can show the render that
 actually faces the viewer, and resolved poses persist in
 <cache-dir>/pose-cache.json.
@@ -152,19 +153,43 @@ def render_up_candidate_tiles(renderer, mesh):
     return tiles
 
 
-def resolve_up(mesh, args, get_renderer, vlm_backend):
-    """Resolve the up axis for --up-axis auto: heuristic first, VLM arbiter
-    for low-confidence cases. Returns (up, ratio, source); source is "vlm"
-    only when the VLM *disagrees* with the heuristic (a VLM confirmation
-    keeps source "heuristic" so the embedding-cache key is unchanged)."""
-    up, ratio, best = detect_up_axis(mesh)
-    if vlm_backend and pose.needs_arbiter(ratio, best, args.up_conf):
+def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None, sheet_path=None):
+    """Resolve the up axis for --up-axis auto, cheapest evidence first:
+    geometry, then SigLIP over the up-candidate tiles, then the VLM.
+
+    Returns (up, ratio, source). Sources that leave the geometry answer alone
+    stay "heuristic" so the embedding-cache key is unchanged — only an actual
+    override becomes "ensemble" or "vlm".
+
+    score_upright(tiles) -> per-candidate SigLIP scores; None (--skip-embed)
+    falls back to geometry alone. The ensemble runs on *every* model rather
+    than only low-confidence ones: geometry can be confidently wrong with a
+    real-looking base (32mm_Gate_L scores a 0.43 ratio on the wrong face), and
+    those never reach the arbiter.
+
+    sheet_path, when the arbiter runs at all, keeps that model's contact sheet
+    beside its renders — the scratch copy in the cache dir is one fixed name
+    every model overwrites, so it only ever shows the last file processed."""
+    geo_scores = pose.up_axis_scores(mesh)
+    geo_idx, ratio, best = pose.rank_up_scores(geo_scores)
+    up, source = pose.UP_CANDIDATES[geo_idx], "heuristic"
+
+    tiles = None
+    if score_upright is not None:
         tiles = render_up_candidate_tiles(get_renderer(), mesh)
+        idx = pose.combine_up_scores(geo_scores, score_upright(tiles))
+        if idx != geo_idx:
+            up, source = pose.UP_CANDIDATES[idx], "ensemble"
+
+    # confidence is still geometry's: it is what says "no base to measure"
+    if vlm_backend and pose.needs_arbiter(ratio, best, args.up_conf):
+        if tiles is None:
+            tiles = render_up_candidate_tiles(get_renderer(), mesh)
         idx = pose.ask_vlm_up(tiles, vlm_backend, args.cache_dir or ".",
-                              args.pose_vlm_model)
+                              args.pose_vlm_model, save_to=sheet_path)
         if idx is not None and not np.allclose(pose.UP_CANDIDATES[idx], up):
             return pose.UP_CANDIDATES[idx], ratio, "vlm"
-    return up, ratio, "heuristic"
+    return up, ratio, source
 
 
 @torch.no_grad()
@@ -362,7 +387,9 @@ def main():
     parser.add_argument("--categories", default="categories.txt")
     parser.add_argument("--out", default="results.csv")
     parser.add_argument("--save-renders", dest="renders_dir",
-                        help="directory to save render images for debugging")
+                        help="directory to save render images for debugging, as "
+                             "<stem>_view<i>.png plus <stem>_pose.png for each "
+                             "model whose up axis the VLM had to arbitrate")
     parser.add_argument("--rescan", action="store_true",
                         help="re-walk the input directory instead of using the cached file list")
     parser.add_argument("--pool", choices=["mean", "max", "softmax"], default="mean",
@@ -377,6 +404,9 @@ def main():
     parser.add_argument("--up-conf", type=float, default=0.6,
                         help="up-detection ambiguity threshold: runner-up/best flat-base "
                              "score ratio above this escalates to the pose VLM")
+    parser.add_argument("--no-up-ensemble", dest="up_ensemble", action="store_false",
+                        help="decide the up axis from flat-base geometry alone, without "
+                             "the SigLIP vote over the up-candidate tiles")
     parser.add_argument("--skip-embed", action="store_true",
                         help="skip embedding the generated images")
     args = apply_run_params(parser)
@@ -423,6 +453,15 @@ def main():
     front_T = embed_raw(model, processor, pose.FRONT_PROMPTS, device).float().cpu().numpy()
     back_T = embed_raw(model, processor, pose.BACK_PROMPTS, device).float().cpu().numpy()
 
+    score_upright = None
+    if args.up_ensemble and not args.skip_embed:
+        up_T = embed_raw(model, processor, pose.UPRIGHT_PROMPTS, device).float().cpu().numpy()
+        down_T = embed_raw(model, processor, pose.TOPPLED_PROMPTS, device).float().cpu().numpy()
+
+        def score_upright(tiles):
+            embeds = embed_images(model, processor, tiles, device).float().cpu().numpy()
+            return pose.upright_scores(embeds, up_T, down_T)
+
     def get_renderer():
         nonlocal renderer
         if renderer is None:
@@ -445,7 +484,9 @@ def main():
                     except Exception as e:
                         rows.append({"file": str(f), "top1": f"RENDER_ERROR: {e}"})
                         continue
-                    up, ratio, source = resolve_up(mesh, args, get_renderer, vlm_backend)
+                    up, ratio, source = resolve_up(
+                        mesh, args, get_renderer, vlm_backend, score_upright,
+                        sheet_path=rdir / f"{f.stem}_pose.png" if rdir else None)
                     entry = {"up": [float(v) for v in up],
                              "confidence": round(ratio, 4), "source": source}
                     pose_cache[pose.file_identity(f)] = entry
