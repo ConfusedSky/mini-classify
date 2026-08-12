@@ -94,18 +94,24 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   Sign test p≈0.375. It survived the holdout as "probably helps, unproven".
   Resolving it needs more labels, not more analysis — the bottleneck is that
   labelling is manual and ~45% of any random sample has no defined upright.
-- **The ensemble ignores `ABS_SCORE_FLOOR`, and min-max hides it.** Min-max
-  maps geometry's *ratio* to its vote margin, which is the documented feature —
-  but a model with no print base at all can still have an unequal score vector
-  and therefore a confident-looking margin. `32mm_Orguss_Head` scores 0.0075
-  (far under the 0.02 floor, i.e. no base) with ratio 0.43, so geometry votes
-  with a ~0.57 margin and overrides a four-view SigLIP answer that was right.
-  "Geometry votes with ~0.0 margin when guessing" holds when the six scores are
-  near-equal and fails when they are all near-zero but unequal. Candidate fix:
-  scale the geometry vote by `min(1, best / ABS_SCORE_FLOOR)` so absent
-  evidence cannot outvote present evidence. Untested — and `eval/ensemble.py`
-  already found that thresholding geometry against the floor *hurt* (20/23),
-  so this needs to be a soft attenuation, not the hard switch that was tried.
+- **Attenuate geometry's vote when it found no base** — measured, not yet
+  written. `w * _unit(geo) + _unit(siglip)` with `w = min(1, best/floor)**2`
+  changes exactly one answer across all 49 models: it fixes `32mm_Orguss_Head`,
+  the model every method in the gauntlet failed, and breaks nothing. It also
+  drops escalation from 9 of 44 to 7, dropping only models the ensemble already
+  had right. `eval/geo_floor.py`.
+
+  **Use the raw sum, not the rescaled margin.** Normalising the combined vector
+  back to a 0–2 axis looks better (escalation 9 → 6) but stops escalating
+  `WisDevourer_Body`, which the ensemble has wrong and Gemini rescues.
+
+  Held back because the evidence is one hand-picked model: `p=1` does nothing,
+  `p=2` was chosen as the smallest exponent that fixes the case it was designed
+  for, and the 44 sampled models do not move at all. The real content is that
+  geometry must be *nearly* silenced when `best << floor` (w=0.14 there), which
+  is why a hard switch scores identically. Worth adopting on the "costs
+  nothing, fixes a known failure" argument, not on the accuracy evidence —
+  and it needs a pose-cache version bump like the gate did.
 - **Is `up-only, 4 views` real?** Averaging the upright score over four
   azimuths instead of one is +2 on the holdout (17/21 → 19/21) and +1 pooled,
   at no extra geometry upload — but it turns on three disagreements, 2–1, which

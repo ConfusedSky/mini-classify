@@ -597,6 +597,56 @@ positional prior at all. gemini-2.5-flash picks `+X` five to six times where
 truth is zero, the same tell that exposed haiku, and it is correspondingly the
 weakest of the three.
 
+### `ABS_SCORE_FLOOR`: geometry votes on evidence it does not have
+
+`combine_up` min-maxes each score vector, which maps geometry's *ratio* to its
+vote margin — the documented feature, and a good one. What min-max cannot see
+is *magnitude*. A mesh with no flat base anywhere still yields an unequal score
+vector, so geometry votes confidently on evidence orders of magnitude below
+`ABS_SCORE_FLOOR`. `32mm_Orguss_Head` scores 0.0075 with ratio 0.43, votes with
+a ~0.57 margin, and overrides a four-view SigLIP answer that was right.
+
+Tested (`eval/geo_floor.py`): keep min-max, scale the whole geometry vote by
+`w = min(1, best/floor) ** p`.
+
+| scheme | orig | holdout | orig+hold | hard | escalates |
+|---|---|---|---|---|---|
+| production (p=0) | 21/23 | 19/21 | 40/44 | 4/5 | 9/44 |
+| p=0.5 | 21/23 | 19/21 | 40/44 | 4/5 | — no answer changes |
+| p=1 | 21/23 | 19/21 | 40/44 | 4/5 | — no answer changes |
+| **p=2** | 21/23 | 19/21 | 40/44 | **5/5** | **7/44** |
+| hard switch | 21/23 | 19/21 | 40/44 | 5/5 | 7/44 |
+
+**It changes exactly one answer across all 49 models, and that answer is
+`32mm_Orguss_Head` — fixed, nothing broken.** The model every one of the 17
+gauntlet methods failed, whose margin the four-view ensemble had *raised* while
+staying wrong, is solved by letting geometry abstain where it has nothing.
+
+It also drops escalation from 9 of 44 to 7, and the two it drops are models the
+ensemble already had right — the three ensemble-wrong models still escalate, so
+no rescue is lost.
+
+**Two honest caveats.** First, `p=1` — the form proposed in OPEN_QUESTIONS —
+does nothing at all; only `p≥2` bites, and `p=2` was chosen as the smallest
+exponent that fixes the one model it was designed to fix. That is fitting to a
+single hand-picked case, not a measurement. What it really shows is that
+geometry's vote has to be *nearly zeroed* when `best << floor` (Orguss_Head
+lands at w=0.14), which is why the hard switch performs identically.
+
+Second, **rescaling the margin is not free.** Attenuating geometry shrinks the
+combined vector's range to `1+w`, so margins compress. Normalising back to a
+0–2 axis (`× 2/(1+w)`) looks better — escalation 9 → 6 — but one of the three
+models it stops escalating is `WisDevourer_Body`, which the ensemble has
+*wrong* and Gemini rescues. The raw sum keeps all three rescues available at
+7 calls. **Take the raw sum; the tidier-looking normalisation quietly trades a
+correctable error for two saved calls.**
+
+This is also why the earlier "absolute-scaled geometry" scheme lost (20/23 in
+`eval/ensemble.py`): it replaced min-max with `clip(geo/floor, 0, 1)`, which
+saturates every candidate above the floor at 1.0 and destroys the margin.
+Attenuating the vote and rescaling the vector are different operations, and
+only one of them preserves what min-max was doing.
+
 ### Front-first makes up *worse*: order the pipeline by which signal is recoverable
 
 Today the pipeline finds up, then names the front among the azimuths it already
