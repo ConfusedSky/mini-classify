@@ -106,7 +106,7 @@ def main():
                 ok = sum(picks[s][0] == gold[s] for s in sets[grp])
                 cells.append(f"{ok}/{len(sets[grp])}")
             esc = sum(pose.needs_arbiter_margin(picks[s][1]) for s in sets["orig+hold"])
-            name = ("production (p=0)" if p == 0 else
+            name = ("unweighted (pre-v3)" if p == 0 else
                     f"hard switch (p={p:g})" if p >= 99 else
                     f"floor {floor:g}, p={p:g}")
             print(f"{name:34} " + " ".join(f"{c:>11}" for c in cells)
@@ -114,10 +114,10 @@ def main():
             results[name] = {s: (AX[picks[s][0]], round(picks[s][1], 3),
                                  round(picks[s][2], 3)) for s in gold}
 
-    base = results["production (p=0)"]
-    print("\nmodels whose answer changes, against production")
+    base = results["unweighted (pre-v3)"]
+    print("\nmodels whose answer changes, against the unweighted combination")
     for name, r in results.items():
-        if name == "production (p=0)":
+        if name == "unweighted (pre-v3)":
             continue
         moved = [s for s in gold if r[s][0] != base[s][0]]
         if not moved:

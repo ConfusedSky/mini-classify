@@ -626,6 +626,21 @@ It also drops escalation from 9 of 44 to 7, and the two it drops are models the
 ensemble already had right — the three ensemble-wrong models still escalate, so
 no rescue is lost.
 
+**Adopted in `pose.py` as `geo_weight()` (pose cache v3).** Re-measured through
+the real `resolve_up`: orig 21/23, holdout 19/21, orig+hold 40/44 all unchanged,
+`hard` 4/5 → **5/5**, and escalation 9/44 → **7/44** with all three
+ensemble-wrong models still escalating. With gemini-3.5-flash@512 arbitrating,
+the pipeline holds 43/44 pooled and 21/21 on the holdout while spending 7 calls
+instead of 9.
+
+**The fix does not reach the pipeline for the model it fixes.** `Orguss_Head`
+now comes out `+Y` from the ensemble — but at margin 0.19 it still escalates,
+and the arbiter answers `-Z`, so the pipeline still returns 4/5 on `hard`. The
+gate is behaving correctly (0.19 *is* unsure); the arbiter is simply wrong
+there. Improving a tier only shows up downstream if the tier above it stops
+overriding the result — the same lesson as the four-view/gate interaction,
+arriving from the other direction.
+
 **Two honest caveats.** First, `p=1` — the form proposed in OPEN_QUESTIONS —
 does nothing at all; only `p≥2` bites, and `p=2` was chosen as the smallest
 exponent that fixes the one model it was designed to fix. That is fitting to a

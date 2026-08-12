@@ -25,10 +25,18 @@ SAMPLE_SEED = 0
 # pooled, firing on ~20% of models against the old gate's ~55%). See LEARNINGS.
 MARGIN_THRESHOLD = 0.45
 
+# How hard geometry's vote is attenuated when it found no print base. min-max
+# maps geometry's *ratio* to its margin and is blind to magnitude, so a mesh
+# with no flat base anywhere still votes confidently on evidence orders of
+# magnitude under ABS_SCORE_FLOOR. Squaring is not tuning for its own sake: the
+# vote has to be nearly silenced before it stops overriding SigLIP (the case
+# this fixes lands at w=0.14), which is why a hard switch behaves identically.
+GEO_FLOOR_POWER = 2
+
 # Bumped when a change makes previously cached poses wrong. Entries written by
 # an older version are dropped on load and re-resolved: v2 = the four-view
-# ensemble and the margin gate, which move both the answer and when it escalates.
-POSE_CACHE_VERSION = 2
+# ensemble and the margin gate; v3 = geometry attenuated by its base evidence.
+POSE_CACHE_VERSION = 3
 
 
 def up_axis_scores(mesh, n_samples=4000):
@@ -191,13 +199,30 @@ def combine_up_scores(geo_scores, siglip_scores):
     return combine_up(geo_scores, siglip_scores)[0]
 
 
+def geo_weight(geo_scores):
+    """How loudly geometry gets to vote, from how much base evidence it has.
+
+    1.0 once a real print base is found, falling to ~0 when the best score is
+    far under ABS_SCORE_FLOOR. This is *not* the absolute-scaling scheme that
+    lost at 20/23 — that one replaced min-max with clip(geo/floor), saturating
+    every candidate above the floor and destroying the margin. Here min-max is
+    untouched inside the vote; only its amplitude changes."""
+    best = float(np.max(geo_scores))
+    return min(1.0, best / ABS_SCORE_FLOOR) ** GEO_FLOOR_POWER
+
+
 def combine_up(geo_scores, siglip_scores):
     """(index, margin) — the ensemble's pick and how far it leads the runner-up.
 
     The margin is the gate's input, and it predicts error far better than
     geometry's confidence does: measured over 44 labelled models its median is
-    1.31 where the ensemble is right and 0.22 where it is wrong."""
-    combined = _unit(geo_scores) + _unit(siglip_scores)
+    1.31 where the ensemble is right and 0.22 where it is wrong.
+
+    The margin is deliberately *not* rescaled to undo the geometry weight. A
+    quieter geometry vote does compress the margin, and that is correct — less
+    evidence should mean less certainty. Normalising it back looks tidier and
+    measurably stops escalating a model the ensemble gets wrong."""
+    combined = geo_weight(geo_scores) * _unit(geo_scores) + _unit(siglip_scores)
     top = np.sort(combined)[::-1]
     return int(np.argmax(combined)), float(top[0] - top[1])
 

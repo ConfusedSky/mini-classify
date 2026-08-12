@@ -63,10 +63,8 @@ def ensemble_state(labels, views):
         _, ratio, best = pose.rank_up_scores(geo)
         for v in views:
             sig = grid[:, 0] if v == 1 else grid.mean(1)
-            combined = pose._unit(geo) + pose._unit(sig)
-            top = np.sort(combined)[::-1]
-            out[v][l["stem"]] = {"ens": int(np.argmax(combined)),
-                                 "margin": float(top[0] - top[1]),
+            idx, margin = pose.combine_up(geo, sig)   # the real combination, weights and all
+            out[v][l["stem"]] = {"ens": idx, "margin": margin,
                                  "ratio": float(ratio), "best": float(best)}
     del model
     if dev == "cuda":

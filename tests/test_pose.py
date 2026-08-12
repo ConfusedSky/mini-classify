@@ -73,6 +73,18 @@ def test_combine_up_reports_the_winning_margin():
     assert pose.combine_up_scores(geo, agree) == 0        # legacy wrapper unchanged
 
 
+def test_geometry_vote_is_scaled_by_its_base_evidence():
+    real_base = np.array([0.4, 0.0, 0.0, 0.0, 0.0, 0.0])      # well over the floor
+    no_base = np.array([0.0075, 0.0032, 0.0, 0.0, 0.0, 0.0])  # under it, but unequal
+    assert pose.geo_weight(real_base) == pytest.approx(1.0)
+    assert pose.geo_weight(no_base) < 0.2
+
+    # the failure this fixes: geometry with no base outvoting SigLIP on ratio alone
+    sig = np.array([0.0, 0.0, 1.0, 0.0, 0.0, 0.0])
+    assert pose.combine_up(no_base, sig)[0] == 2          # SigLIP decides
+    assert pose.combine_up(real_base, sig)[0] in (0, 2)   # a real base still argues
+
+
 def test_margin_gate_escalates_only_the_unsure():
     assert pose.needs_arbiter_margin(0.1)
     assert not pose.needs_arbiter_margin(1.3)
