@@ -667,6 +667,103 @@ positional prior at all. gemini-2.5-flash picks `+X` five to six times where
 truth is zero, the same tell that exposed haiku, and it is correspondingly the
 weakest of the three.
 
+### Newer Gemini is not better here — the errors move, the count does not
+
+`gemini-3.1-pro-preview` and `gemini-3.6-flash` against the incumbent, same 44
+models, same `UP_PROMPT`, same cached sheets (`eval/gemini_vlm.py --models ...
+--out gemini_vlm-new3.json`). Note the served ID: **`gemini-3.1-pro` 404s** on
+Vertex in both `global` and `us-central1`; only the `-preview` suffix resolves.
+
+| pooled n=44 | @256 | @512 | holdout @512 |
+|---|---|---|---|
+| gemini-3.5-flash *(incumbent)* | 41/44 | **43/44** | 21/21 |
+| gemini-3.6-flash | 41/44 | 42/44 | **21/21** |
+| gemini-3.1-pro-preview | **42/44** | 41/44 | 20/21 |
+| gemini-2.5-pro | 37/44 | 39/44 | 18/21 |
+
+**Neither newer model beats 3.5-flash, and the pro tier is the worse of the
+two.** As the arbiter tier under the geometry gate, 3.6-flash is net +4 /
+breaks 0 (pipeline 42/44) at both sheet sizes — identical to the incumbent —
+while 3.1-pro-preview is net +3, breaking `Concrete Chunk (6)`.
+
+**All four rescue the same four models**: `Bedienkonsole`,
+`Mortimer_BodyNoMask`, `WisDevourer_Body`, `Container_complete`. Three model
+generations and two tiers agree exactly on what escalation is good for, which
+says the *rescuable* set is saturated — the arbiter tier's remaining headroom
+is not in a better VLM.
+
+**The interesting part is which models each one fails, not how many.** The
+errors are almost disjoint from the incumbent's:
+
+```
+                        tile9   Floor   ConcreteChunk(6)   ConcreteChunk(2)
+gemini-3.5-flash @512     X       ok           ok                ok
+gemini-3.6-flash @512     X       X            ok                ok
+gemini-3.1-pro    @256    ok      X            X                 ok
+gemini-3.1-pro    @512    ok      X            X                 X
+```
+
+`tile9` is recorded above as "the terrain piece every other method also
+fails" — **3.1-pro-preview gets it at both sheet sizes**, the first method in
+this project to do so. It pays for it with `Floor` and `Concrete Chunk (6)`,
+which the incumbent gets. Every model in this table now fails only on terrain,
+and each fails on *different* terrain. Aggregate accuracy at n=44 cannot
+separate these; it took the per-model table to see that a swap, not an
+improvement, is what a newer model bought.
+
+**Sheet size is noise here, in both directions.** Each new model flips exactly
+one model between 256 and 512, and they flip *opposite* ways — 3.6-flash gains
+`Concrete Chunk (2)` at 512, 3.1-pro-preview loses it. Consistent with the
+"512 px effect is model-specific" finding above: it was never a property of
+the pipeline.
+
+Answer distributions stay clean — truth is 29/1/14/0/0/0 across
+`+Z,-Z,+Y,-Y,+X,-X`; 3.6-flash@512 answers 29/0/13/1/1/0 and
+3.1-pro-preview@256 28/0/14/0/2/0. No positional prior in either, so the
+haiku/2.5-flash tell does not reappear at this tier.
+
+**What 3.6-flash actually buys is latency.** 8.3 s per call against the
+incumbent's 24.1 s — roughly 12 minutes of arbiter wall-clock on a
+full-collection run instead of ~35 — for one model of 44 and $0.58 more per
+run. That is the only reason in this table to touch the default, and it is a
+throughput argument, not an accuracy one.
+
+**A newer, more expensive tier thought harder and did worse.**
+3.1-pro-preview spends 1260–1844 thinking tokens per call against 3.6-flash's
+~820 and the incumbent's 638, costs **$8.70 per run against $2.68**, and
+scores one model lower. It also spends *more* thinking at 256 than at 512
+(1844 vs 1260) while being less accurate at 512 — thinking volume tracks how
+illegible the input is, not how well the answer comes out.
+
+### A quota limit reads exactly like an incapable model
+
+`gemini-3-pro-image` first measured **5/44 answered at 256 and 6/44 at 512** —
+and the accuracy table reported that as `5/5` and `6/6`, i.e. 100%, because
+`report()` scores only the rows that came back. The natural reading was that an
+image-generation model cannot do structured VLM tasks. It was **HTTP 429**:
+image-capable models carry a far lower RPM quota than the flash/pro tiers, and
+`ask()` retried 3 times at 2 s and 4 s before giving up. Every call that got
+through answered correctly and in the required `{"tile": n}` schema.
+
+Two things worth keeping:
+
+- **`n answered` is the guard that caught this, and an accuracy denominator is
+  not.** A method that silently answers 11% of the set looks *better* than one
+  that answers all of it, because the calls that survive a rate limiter are not
+  a random sample. Any harness that tolerates a null answer needs the response
+  count printed next to the score — this one had it, which is the only reason
+  the 5/5 was not filed as a result.
+- **Back off like you mean it.** `ask()` now retries 6 times at
+  `min(60, 4·2^attempt)`. The old 2 s/4 s budget was written for a transient
+  500, and a per-minute quota is not transient on that timescale.
+
+Also measured, and the reason sheet size cannot matter for this model:
+**`gemini-3-pro-image` bills 648 prompt tokens for the 256 px sheet and 648 for
+the 512 px one** — an identical 560-token image budget either way, where
+3.5-flash and 3.6-flash bill 1080 image tokens and 2.5-flash 1853. A model that
+tokenises both sheets identically cannot see the extra resolution, so the
+sheet-size axis is not available to it at all.
+
 ### `ABS_SCORE_FLOOR`: geometry votes on evidence it does not have
 
 `combine_up` min-maxes each score vector, which maps geometry's *ratio* to its
@@ -1038,7 +1135,11 @@ dominate here), scaled to the 354 arbiter calls a 602-model run fires:
 | gemini-3.5-flash @512 | 1168 | 638 | 7 | 24.1 | 7.56 | 2.68 | **+4** |
 | gemini-3.5-flash @256 | 1168 | 734 | 7 | 17.0 | 8.42 | 2.98 | +4 |
 | gemini-2.5-pro @512 | 1853 | 668 | 6 | 9.2 | 9.06 | 3.21 | +3 |
+| gemini-3.6-flash @512 | 1168 | 820 | 8 | **8.3** | 9.20 | 3.26 | **+4** |
+| gemini-3.6-flash @256 | 1168 | 851 | 8 | 7.8 | 9.49 | 3.36 | +4 |
 | gemini-2.5-pro @256 | 1853 | 795 | 6 | 10.2 | 10.33 | 3.66 | +4 |
+| gemini-3.1-pro-preview @512 | 1168 | 1260 | 8 | 14.2 | 17.55 | 6.21 | +3 |
+| gemini-3.1-pro-preview @256 | 1168 | 1844 | 8 | 19.8 | 24.57 | 8.70 | +3 |
 
 Three things fall out of this that the accuracy table alone does not show:
 
@@ -1053,8 +1154,15 @@ Three things fall out of this that the accuracy table alone does not show:
   input tokens for the same sheet that costs 2.5-flash and 2.5-pro 1853. Per-token
   price is the visible number; tokens-per-image is the one that moved the total.
 
+- **Price and capability are uncorrelated across this table.** The two most
+  expensive tiers (3.1-pro-preview at $6.21–8.70) are net +3; the cheapest
+  Gemini (2.5-flash at $0.84) is net +1; the winner sits in between at $2.68.
+  Every tier here is affordable enough that cost cannot pick one — latency and
+  the per-model error table have to.
+
 Latency is the real cost of 3.5-flash: 24 s mean and 45 s p95 against 7 s /
-18 s for 2.5-flash. At 4 workers that is ~35 min of the run, versus ~10.
+18 s for 2.5-flash, and 8.3 s for 3.6-flash at the same net +4. At 4 workers
+that is ~35 min of the run, versus ~10.
 gemma4:26b remains free per token, but holds 17 GB on an 8 GB card and evicts
 SigLIP between calls — its cost is the 10.1 s reload, not the tokens.
 
