@@ -30,32 +30,44 @@ BACKBONE = "google/siglip2-so400m-patch14-384"
 RENDER_PX = 2048
 
 
-def ensemble_state(labels):
-    """{stem: {"ens", "margin", "ratio", "best"}} under the production tower."""
+def ensemble_state(labels, views):
+    """{stem: {"ens", "margin", "ratio", "best"}} per view-count.
+
+    `views=1` is today's pipeline: one up-candidate tile per axis. `views=4`
+    averages the upright score over the four azimuths perpendicular to each
+    axis. Both read the *same* orbit tiles — azimuth 0 is the 1-view tile — so
+    the comparison is view count alone, with render size held fixed.
+    """
     import torch
     from PIL import Image
     from transformers import AutoModel, AutoProcessor
     import classify_stls as C
+    from front_first import N_AZ, RENDER_PX as ORBIT_PX, build_orbit_tiles
 
-    tiles = build_tiles(labels, RENDER_PX)
+    orbit = build_orbit_tiles(labels, ORBIT_PX)
+    geo_src = build_tiles(labels, RENDER_PX)          # geometry only; already cached
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     model = AutoModel.from_pretrained(BACKBONE, torch_dtype=torch.float16).to(dev).eval()
     proc = AutoProcessor.from_pretrained(BACKBONE)
     up = C.embed_raw(model, proc, pose.UPRIGHT_PROMPTS, dev).float().cpu().numpy()
     dn = C.embed_raw(model, proc, pose.TOPPLED_PROMPTS, dev).float().cpu().numpy()
 
-    out = {}
+    out = {v: {} for v in views}
     for l in labels:
-        rec = tiles[l["stem"]]
-        imgs = [Image.open(p).convert("RGB") for p in rec["tiles"]]
-        emb = C.embed_images(model, proc, imgs, dev).float().cpu().numpy()
-        sig = pose.upright_scores(emb, up, dn)
-        combined = pose._unit(np.asarray(rec["geo"])) + pose._unit(sig)
-        top = np.sort(combined)[::-1]
-        _, ratio, best = pose.rank_up_scores(rec["geo"])
-        out[l["stem"]] = {"ens": int(np.argmax(combined)),
-                          "margin": float(top[0] - top[1]),
-                          "ratio": float(ratio), "best": float(best)}
+        flat = [p for row in orbit[l["stem"]] for p in row]
+        emb = C.embed_images(model, proc,
+                             [Image.open(p).convert("RGB") for p in flat],
+                             dev).float().cpu().numpy()
+        grid = pose.upright_scores(emb, up, dn).reshape(6, N_AZ)
+        geo = np.asarray(geo_src[l["stem"]]["geo"])
+        _, ratio, best = pose.rank_up_scores(geo)
+        for v in views:
+            sig = grid[:, 0] if v == 1 else grid.mean(1)
+            combined = pose._unit(geo) + pose._unit(sig)
+            top = np.sort(combined)[::-1]
+            out[v][l["stem"]] = {"ens": int(np.argmax(combined)),
+                                 "margin": float(top[0] - top[1]),
+                                 "ratio": float(ratio), "best": float(best)}
     del model
     if dev == "cuda":
         torch.cuda.empty_cache()
@@ -84,10 +96,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--arbiter", default=None, help="only sweep this one")
     ap.add_argument("--steps", type=int, default=21)
+    ap.add_argument("--views", default="1,4",
+                    help="up-candidate views per axis to fold into the ensemble")
     args = ap.parse_args()
 
+    views = [int(v) for v in args.views.split(",")]
     labels = load_labels()
-    state = ensemble_state(labels)
+    states = ensemble_state(labels, views)
     arbiters = load_arbiters([l["stem"] for l in labels])
     if args.arbiter:
         arbiters = {k: v for k, v in arbiters.items() if k == args.arbiter}
@@ -115,13 +130,16 @@ def main():
     geo_gate = lambda s: pose.needs_arbiter(state[s]["ratio"], state[s]["best"])
     thresholds = [round(t, 3) for t in np.linspace(0, 1.0, args.steps)]
 
-    for name in ("orig", "holdout", "orig+hold", "hard"):
+    for view, name in [(v, n) for v in views
+                       for n in ("orig", "holdout", "orig+hold", "hard")]:
+        state = states[view]
         stems = [s for s in sets[name] if s in state]
         if not stems:
             continue
         base_ok = sum(state[s]["ens"] == gold[s] for s in stems)
         n_geo = sum(geo_gate(s) for s in stems)
-        print(f"\n=== {name} (n={len(stems)}) — ensemble alone {base_ok}/{len(stems)}, "
+        print(f"\n=== {name} (n={len(stems)}), {view}-view ensemble — alone "
+              f"{base_ok}/{len(stems)}, "
               f"geometry gate fires on {n_geo} ({100*n_geo/len(stems):.0f}%)")
         hdr = f"{'arbiter':30} {'geometry gate':>14} | " + \
               " ".join(f"{t:>5}" for t in thresholds[:11])
@@ -141,6 +159,7 @@ def main():
             print(f"{a[:30]:30} {f'{ok}/{fired}':>14} | " + " ".join(f"{c:>5}" for c in cells))
 
     # where the two gates disagree, on the set that matters
+    state = states[views[0]]
     print("\nmodels the geometry gate escalates but a tight margin gate would not")
     for s in sets["orig+hold"]:
         if s not in state:
@@ -150,7 +169,8 @@ def main():
             right = "ensemble right" if st["ens"] == gold[s] else "ensemble WRONG"
             print(f"  {s[:44]:44} margin {st['margin']:.2f}  best {st['best']:.4f}  {right}")
 
-    json.dump({s: dict(v, gold=AX[gold[s]], ens_ax=AX[v["ens"]]) for s, v in state.items()},
+    json.dump({f"{view}view": {s: dict(v, gold=AX[gold[s]], ens_ax=AX[v["ens"]])
+                              for s, v in states[view].items()} for view in views},
               open(OUT / "arbiter_gate.json", "w"), indent=1)
     print(f"\nwrote {OUT}/arbiter_gate.json")
 

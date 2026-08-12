@@ -39,6 +39,13 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   to be net-negative with a weak arbiter, which is what the "is this tier worth
   keeping" argument was always about. Needs a pose-cache migration: every
   cached `source: "vlm"` pose was decided under the old gate.
+
+  **Adopt it together with the four-view ensemble, or the four-view change will
+  look worthless.** Under the geometry gate four views measures *worse* (42/44
+  against 43/44) because its rescues duplicate the arbiter's; under the margin
+  gate the two stack to 43/44 on 9 calls and 21/21 on the holdout. A tier that
+  overrides another hides that tier's progress — measure component changes
+  against the component, gate changes against the pipeline.
 - **Raise the contact sheet to `thumb=512`** — with the caveat that the size
   matters far less than first measured. sonnet gains 10 of 44 going 256 → 512;
   every Gemini model gains 2, and gemini-3.5-flash returns an identical answer
@@ -102,8 +109,10 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
 - **Is `up-only, 4 views` real?** Averaging the upright score over four
   azimuths instead of one is +2 on the holdout (17/21 → 19/21) and +1 pooled,
   at no extra geometry upload — but it turns on three disagreements, 2–1, which
-  is p=0.5. The cheapest untested lead in this file, and blocked on the same
-  thing everything else is: more labels.
+  is p=0.5. Paired with the margin gate it is the best configuration measured
+  (43/44 pooled, 21/21 holdout, 9 calls) — see LEARNINGS — so it is now part of
+  the same decision as the gate rather than an independent lead. Still blocked
+  on the same thing everything else is: more labels.
 - **Confidently wrong models are a class no gate can catch.**
   `32mm_Orguss_Head` (ensemble `-Z`, truth `+Y`, margin 0.41) and
   `Concrete Chunk (2)` (margin 1.04) are wrong *and* confident, so no usable

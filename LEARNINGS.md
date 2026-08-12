@@ -707,6 +707,37 @@ Cost, if adopted: the arbiter fires on ~20% of a collection instead of ~55%,
 so a 602-model run drops from 354 calls to ~120 — $2.68 to roughly $0.90 with
 gemini-3.5-flash@512, and about a third of the arbiter wall-clock.
 
+**Improving the ensemble only pays if you are still using its answers.**
+Crossing the gate with the four-view ensemble (both at a 384 px source, so the
+1-view baseline reads 39/44 here rather than the 38/44 measured at 2048),
+gemini-3.5-flash@512 arbitrating, orig+holdout n=44:
+
+| ensemble | alone | geometry gate | best margin gate |
+|---|---|---|---|
+| 1 view (today) | 39/44 | 43/44 — 24 calls | 42/44 — 12 calls |
+| 4 views mean | 40/44 | **42/44** — 24 calls | **43/44 — 9 calls** (t=0.45) |
+
+Under the **geometry** gate the four-view ensemble is *worse* (42 against 43):
+its two extra rescues, `Mortimer_BodyNoMask` and `Container_complete`, are
+models the arbiter was already rescuing, so the gain is redundant — and the one
+model it loses is not. At a 55% escalation rate the ensemble's improvements are
+mostly discarded before they can count.
+
+Under the **margin** gate they stack, because the ensemble's answer is kept on
+80% of models: 43/44 on 9 calls, and **21/21 on the holdout** (threshold 0.35–
+0.5, 3 calls) against the geometry gate's 20/21 on 12. That is the best
+configuration measured in this project, at a third of the arbiter cost.
+
+The generalisable part: **a tier that overrides another tier hides that tier's
+progress.** Any improvement to the ensemble measured *through* a
+high-escalation gate will read as smaller than it is, or negative. Measure
+component changes against the component, and gate changes against the pipeline
+— we nearly filed the four-view result as "+1, not worth it" on exactly this
+confusion.
+
+Both still turn on one or two models at n=44. Same caveat as everything else
+here: this is a lead worth acting on, not a proof.
+
 Not applied to `pose.py`. It changes production behavior and every cached
 `source: vlm` pose was decided under the old gate, so it wants to be a
 deliberate migration rather than a drive-by.
