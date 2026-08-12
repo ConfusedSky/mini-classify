@@ -597,6 +597,60 @@ positional prior at all. gemini-2.5-flash picks `+X` five to six times where
 truth is zero, the same tell that exposed haiku, and it is correspondingly the
 weakest of the three.
 
+### Gating the arbiter on the ensemble's margin: same accuracy, a third of the calls
+
+`needs_arbiter(ratio, best)` asks *geometry* how confident it is, and fires
+whenever there is no print base. The ensemble's own confidence is a different
+quantity: `margin = top1 − top2` of `_unit(geo) + _unit(siglip)`, range 0–2.
+Sweeping a gate on that instead (`eval/arbiter_gate.py`), with
+gemini-3.5-flash@512 as the arbiter, orig+holdout n=44:
+
+| gate | fires | correct |
+|---|---|---|
+| none — ensemble alone | 0 | 38/44 |
+| geometry (`ratio>0.6 or best<0.02`) | 24 (55%) | 42/44 |
+| margin < 0.10 | 4 (9%) | 41/44 |
+| margin < 0.40 | 9 (20%) | **42/44** |
+
+**Same accuracy for 62% fewer calls.** The margin is strongly diagnostic where
+geometry's confidence is not: median margin is **1.31 on models the ensemble
+gets right and 0.22 on the ones it gets wrong**, and three of its six errors sit
+at ≤0.08.
+
+The mechanism is visible directly. Eighteen models are escalated by the
+geometry gate that a `margin ≥ 0.5` gate would skip — and **the ensemble
+already had 17 of the 18 right**. Geometry having no base says nothing about
+whether the *combination* is unsure, because that is exactly the case SigLIP
+was added to carry. The old gate was measuring the wrong tier's doubt.
+
+**It also makes a weak arbiter safe.** haiku@256 as the arbiter scores 30/44
+under the geometry gate — eight *below* the ensemble alone — and 39/44 under
+`margin < 0.10`. Escalating only genuinely-unsure models means a bad arbiter
+has few chances to overrule a good answer, so the tier stops being able to go
+net negative. That removes the failure mode the whole "is the VLM tier worth
+keeping" argument was about.
+
+Selected honestly: pick the threshold on `orig` (0.40 → 23/23) and read
+`holdout` — 19/21, against the geometry gate's 20/21 there. So on fresh data
+the margin gate is **one model behind for a quarter of the calls**. Pooled they
+tie at 42/44. Treat "same accuracy" as "no measurable difference at n=44", not
+as a win.
+
+**What it cannot do is rescue a confident wrong answer.** `32mm_Orguss_Head`
+(margin 0.41, ensemble `-Z`, truth `+Y`) and `Concrete Chunk (2)` (margin 1.04)
+are wrong *and* confident, so no margin threshold that is worth using will
+escalate them. The geometry gate catches Orguss_Head by accident, having no
+opinion about it either way. A gate cannot exceed the ceiling set by how well
+confidence tracks correctness.
+
+Cost, if adopted: the arbiter fires on ~20% of a collection instead of ~55%,
+so a 602-model run drops from 354 calls to ~120 — $2.68 to roughly $0.90 with
+gemini-3.5-flash@512, and about a third of the arbiter wall-clock.
+
+Not applied to `pose.py`. It changes production behavior and every cached
+`source: vlm` pose was decided under the old gate, so it wants to be a
+deliberate migration rather than a drive-by.
+
 ### The `hard` set through every method at once
 
 `eval/gauntlet.py` runs one label set through geometry, both backbones, and
