@@ -99,6 +99,42 @@ def contact_sheet(tiles, thumb, cols=3):
     return sheet
 
 
+def build_tiles(labels=None, render_px=2048):
+    """The 6 up-candidate tiles per labelled model, plus geometry's score
+    vector, cached in OUT/tiles<render_px>.
+
+    Returns {stem: {"tiles": [Path]*6, "geo": [float]*6}}. Splitting this out
+    of the embedding pass keeps the renderer and SigLIP off the GPU at the same
+    time (they evict each other on an 8 GB card) and lets a backbone sweep
+    re-embed identical pixels rather than re-rendering per backbone.
+    """
+    import numpy as np
+    import classify_stls as C
+    import pose as P
+    labels = labels if labels is not None else load_labels()
+    d = OUT / f"tiles{render_px}"
+    d.mkdir(parents=True, exist_ok=True)
+    geo_file = d / "geo.json"
+    geo = json.loads(geo_file.read_text()) if geo_file.exists() else {}
+    tiles = {l["stem"]: [d / f"{l['stem']}_up{i}.png" for i in range(6)] for l in labels}
+    todo = [l for l in labels
+            if l["stem"] not in geo or any(not p.exists() for p in tiles[l["stem"]])]
+    if todo:
+        print(f"rendering {len(todo)} models x 6 up-candidate tiles at {render_px}px -> {d}")
+        renderer = C.make_renderer(render_px)
+        for n, l in enumerate(todo, 1):
+            mesh = C.load_mesh(l["path"])
+            for p, im in zip(tiles[l["stem"]], C.render_up_candidate_tiles(renderer, mesh)):
+                im.save(p)
+            geo[l["stem"]] = [float(x) for x in np.asarray(P.up_axis_scores(mesh))]
+            print(f"  [{n}/{len(todo)}] {l['stem']}", flush=True)
+        geo_file.write_text(json.dumps(geo, indent=1))
+    # geo comes back as an array, not the cached JSON list — pose.combine_up_scores
+    # min-maxes it and a list has no .min().
+    return {l["stem"]: {"tiles": tiles[l["stem"]], "geo": np.asarray(geo[l["stem"]])}
+            for l in labels}
+
+
 def build_sheets(thumbs, labels=None, render_px=2048):
     """Up-candidate contact sheets per labelled model, in OUT/sheets<thumb>.
 

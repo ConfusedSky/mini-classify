@@ -560,6 +560,45 @@ positional prior at all. gemini-2.5-flash picks `+X` five to six times where
 truth is zero, the same tell that exposed haiku, and it is correspondingly the
 weakest of the three.
 
+### A higher-resolution SigLIP backbone does not move the ensemble
+
+`siglip2-so400m-patch16-512` against the production `so400m-patch14-384`, same
+44 models, probes and min-max combination frozen, re-embedding *identical*
+rendered pixels (`eval/backbone_sweep.py`):
+
+| n=44 | orig | holdout | pooled |
+|---|---|---|---|
+| geometry alone | 17/23 | 18/21 | 35/44 |
+| SigLIP alone — patch14-384 | 19/23 | 16/21 | 35/44 |
+| SigLIP alone — patch16-512 | 19/23 | 16/21 | 35/44 |
+| ensemble — patch14-384 | 21/23 | 17/21 | 38/44 |
+| ensemble — patch16-512 | 21/23 | 18/21 | **39/44** |
+
+**+1 of 44, and that is the whole result.** The two ensembles disagree on
+exactly one model (`Mortimer_BodyNoMask`, `-Z` → `+Z`); one disagreement in the
+right direction is p=0.5 by sign test, which is no evidence at all. SigLIP alone
+lands on the same 35/44 under both towers, differing on 4 models whose changes
+cancel out.
+
+The reason is worth keeping: **the up-candidate tiles are near-silhouettes** —
+a grey mesh on white, no texture, no text, no fine detail. Extra input
+resolution has nothing to resolve. The pose errors are not resolution-limited,
+they are shape-ambiguity-limited (`tile9`, the gate, the concrete chunk are
+genuinely ambiguous from a silhouette), which is exactly why the VLM tier
+rescues models the ensemble cannot.
+
+Not adopted. The cost is far past the evidence: `cache_key` includes
+`args.model`, so switching towers invalidates every cached embedding and forces
+a full multi-hour re-render/re-embed of all 602 models, for 17% slower
+inference (0.90 s vs 0.77 s per model) and 4.3 GB more weights.
+
+**This says nothing about category classification**, which is the actual
+product and the place a stronger tower would plausibly pay — categories are
+fine-grained text probes over detailed renders, not silhouettes. It is
+untested because there is no category ground truth in the repo; only
+`up_axis_labels.json` exists. Hand-labelling a category set is the prerequisite
+for that experiment, not another backbone run.
+
 ### What the arbiter tier costs
 
 Measured per-call usage (not estimated — thinking tokens bill as output and
