@@ -12,9 +12,46 @@ frozen — see LEARNINGS before quoting a number off the `orig` set).
   22% more disk. About 3 hours off a 600-model run for one keyword argument.
   Nothing blocks this.
 - **Raise the contact sheet to `thumb=512`.** Every VLM tested improves;
-  sonnet goes from net −4 to net +3 as an arbiter. The current 256 default has
-  been starving the tier for the whole project. Open sub-question: is 512 the
-  peak, or does 768/1024 keep helping? Only 256 vs 512 was measured.
+  sonnet goes from net −4 to net +3 as an arbiter and the full pipeline from
+  38/44 to 41/44. The current 256 default has been starving the tier for the
+  whole project, so every `source: "vlm"` pose already in the cache was decided
+  on a sheet too small to read — acting on this means re-resolving them.
+
+  **The numerals must scale with the tile, or this makes things worse.**
+  `make_contact_sheet` labels each tile with PIL's default ~11 px bitmap font.
+  That is legible on a 768×512 sheet and proportionally invisible on a
+  1536×1024 one, and the model cannot answer `{"tile": n}` about numbers it
+  cannot read — so a naive `thumb=512` would likely measure *worse* than 256
+  and be written off. The 512 px measurements were taken with a scaled
+  TrueType face:
+
+  ```python
+  from PIL import ImageFont
+  # numeral height proportional to the tile: 44px at thumb=512, 88px at 1024.
+  # (At thumb=256 this gives 22px, i.e. twice the current bitmap default --
+  # so adopting it also slightly improves the existing 256px sheets.)
+  size = max(11, thumb * 44 // 512)
+  try:
+      FONT = ImageFont.load_default(size=size)          # Pillow >= 10.1
+  except TypeError:
+      FONT = ImageFont.load_default()                   # bitmap, fixed ~11px
+  draw.text((x + thumb // 36, y + thumb // 64), str(i + 1), fill="red", font=FONT)
+  ```
+
+  `load_default(size=)` avoids hunting for a font file and is available on the
+  installed Pillow (12.3.0); the 512 px measurements themselves were taken with
+  `truetype(".../LiberationSans-Bold.ttf", 44)`, which is equivalent but not
+  portable. Either way, fall back rather than raise, and eyeball one sheet
+  before trusting a re-measurement.
+
+  Open sub-question: is 512 the peak, or does 768/1024 keep helping? Only 256
+  vs 512 was measured, and the gain was large enough (sonnet +10 of 44) that
+  the curve has probably not flattened. Cost is nil at inference — it is one
+  resize of already-rendered tiles — so this is worth sweeping properly.
+  `eval/tile_and_vlm.py` is the harness; note it currently sweeps *render*
+  resolution of the tiles, which did **not** matter (384/512/1024/2048 all
+  within noise), while *sheet* resolution did. Those are two different knobs
+  and it was easy to conflate them.
 - **Render up-candidate tiles at a fixed size**, independent of
   `--render-size`, so pose resolution stops depending on an output setting.
   `Damaged Roofing (4).stl` resolves `+Y` at 2048 px tiles and `-Y` at 384 px,
