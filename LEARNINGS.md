@@ -467,7 +467,36 @@ Generalised: a 17-point gap measured on the sample that shaped the method
 became −5 points on fresh data. Always spend the holdout before believing a
 number, and never quote the tuned figure as the accuracy.
 
-### The VLM tier is exactly net zero
+### The contact sheet was starving the VLM — `thumb=256` is too small
+
+`make_contact_sheet(tiles, thumb=256)` produces a 768×512 sheet where each
+candidate is 256 px and the miniature inside it maybe 150 px. Rebuilding the
+same 44 sheets at `thumb=512` (1536×1024, numerals scaled to match) changed
+the answer to every question below:
+
+| pooled n=44 | @256 | @512 |
+|---|---|---|
+| gemma4:26b | 34/44 | 37/44 |
+| sonnet | 27/44 | **37/44** |
+| haiku | 20/44 | 26/44 |
+
+As the arbiter tier, gemma goes from net 0 to **net +1**, and sonnet from
+**net −4 to net +3** — a full pipeline of **41/44 (93%)** against 38/44 for
+the ensemble alone. The tier that looked worthless was resolution-starved.
+
+The tell was in the answer distribution, before any of this was confirmed:
+haiku picked `+X` twelve times when the truth is `+X` zero times. A model that
+misjudges orientation makes varied mistakes; one that picks the same tile
+position repeatedly is guessing. **Check the distribution of a classifier's
+answers against the distribution of the labels — a positional prior is
+visible there and invisible in the accuracy number.** (haiku still shows it at
+512: `+X` ten times. It is genuinely weaker here, not just starved.)
+
+Also note the production pipeline has been running the arbiter at 256 the
+whole time, so every `source: vlm` pose in the cache was decided on a sheet
+too small to read.
+
+### At `thumb=256`, the VLM tier was exactly net zero
 
 Same 44 models. The arbiter fires on 24 of them, and the VLM overrides the
 ensemble on those:
@@ -487,9 +516,14 @@ nothing, so it returns the *same wrong answer* every time on terrain like
 Its one genuine virtue: it is the only method that ever got `Bedienkonsole`.
 
 What keeps it from being harmful is the `needs_arbiter` gate — applied to all
-44 models it would have been −3. Worth trying before dropping it: gate on the
-*ensemble's* own margin rather than geometry's confidence, since the two
-models it broke were ones the ensemble already had right.
+44 models it would have been −3. Worth trying anyway: gate on the *ensemble's*
+own margin rather than geometry's confidence, since the two models it broke
+were ones the ensemble already had right.
+
+**All of the above is the 256 px measurement and stands only there.** At 512
+the same tier is net positive. The lesson worth keeping is not "the VLM is
+weak" — it is that a tier was nearly deleted on the strength of a number that
+turned out to be measuring the input pipeline rather than the model.
 
 ### `source` records what *moved* the answer, not what ran
 
