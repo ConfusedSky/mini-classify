@@ -474,12 +474,13 @@ def main():
                              "max = single-view features decide, softmax = in between")
     parser.add_argument("--pose-vlm", choices=["auto", "ollama", "claude", "gemini", "off"],
                         default="auto",
-                        help="arbiter for uncertain up detection: local ollama vision "
-                             "model, claude CLI, gemini on Vertex AI, or off. auto = "
-                             "ollama if reachable — gemini is never chosen implicitly "
-                             "because it bills per call. gemini-3.5-flash is the only "
-                             "arbiter measured to beat the ensemble (43/44 against "
-                             "40/44); see LEARNINGS before picking one")
+                        help="arbiter for uncertain up detection: gemini on Vertex AI, "
+                             "local ollama vision model, claude CLI, or off. auto "
+                             "(default) = gemini if gcloud ADC resolves, else ollama if "
+                             "reachable, else none. gemini-3.5-flash is the only arbiter "
+                             "measured to beat the ensemble (43/44 against 40/44) and "
+                             "bills ~$0.30 per full-collection run; --pose-vlm ollama "
+                             "keeps it local at 41/44")
     parser.add_argument("--pose-vlm-model", default=None,
                         help="model for --pose-vlm; defaults per backend "
                              f"({', '.join(f'{k}={v}' for k, v in pose.DEFAULT_VLM_MODELS.items() if v)})")
@@ -536,9 +537,21 @@ def main():
     pose_cache = pose.load_pose_cache(args.cache_dir)
     vlm_backend = args.pose_vlm
     if vlm_backend == "auto":
-        vlm_backend = "ollama" if pose.ollama_available() else None
-        if vlm_backend is None:
-            print("pose VLM: ollama not reachable — ambiguous poses keep the heuristic guess")
+        # gemini first: it is the only arbiter measured to beat the ensemble
+        # (43/44 against 40/44), where gemma reaches 41/44 and haiku/sonnet on a
+        # 256px sheet score below running no arbiter at all. It bills per call —
+        # ~$0.30 for a 602-model run at ~120 escalations — so the choice is
+        # always announced, and --pose-vlm ollama/off opts out.
+        try:
+            args.gemini_project = args.gemini_project or pose.gcloud_project()
+            pose.gcloud_token()
+            vlm_backend = "gemini"
+        except Exception as e:
+            vlm_backend = "ollama" if pose.ollama_available() else None
+            print(f"pose VLM: gemini unavailable ({e}); "
+                  + ("falling back to ollama" if vlm_backend
+                     else "ollama not reachable either — ambiguous poses keep the "
+                          "heuristic guess"))
     elif vlm_backend == "off":
         vlm_backend = None
     vlm_model = args.pose_vlm_model or pose.DEFAULT_VLM_MODELS.get(vlm_backend)
@@ -546,12 +559,26 @@ def main():
         # Fail here rather than on the first ambiguous model, thousands of
         # renders into a run: resolving the project and minting a token are the
         # two things that go wrong, and both are cheap to check up front.
+        # Explicit --pose-vlm gemini is an error if unavailable; auto already
+        # fell back above and never reaches this.
         try:
             args.gemini_project = args.gemini_project or pose.gcloud_project()
             pose.gcloud_token()
-            print(f"pose VLM: {vlm_model} on Vertex AI, project {args.gemini_project}")
         except Exception as e:
             raise SystemExit(f"--pose-vlm gemini: {e}")
+        print(f"pose VLM: {vlm_model} on Vertex AI, project {args.gemini_project} "
+              f"— billed per escalation")
+    elif vlm_backend:
+        print(f"pose VLM: {vlm_model or vlm_backend}")
+
+    # The arbiter sheet scales each tile to SHEET_THUMB, and Image.thumbnail
+    # never enlarges — so tiles rendered smaller than that sit padded in their
+    # cells and the arbiter sees a smaller sheet than the number implies. Worth
+    # saying out loud: sheet size is the knob that moved sonnet 10 of 44.
+    if vlm_backend and args.render_size < pose.SHEET_THUMB:
+        print(f"  note: --render-size {args.render_size} is below the {pose.SHEET_THUMB}px "
+              f"sheet tile, so the arbiter sees {args.render_size}px tiles padded into "
+              f"{pose.SHEET_THUMB}px cells, not a {pose.SHEET_THUMB}px sheet")
 
     front_T = embed_raw(model, processor, pose.FRONT_PROMPTS, device).float().cpu().numpy()
     back_T = embed_raw(model, processor, pose.BACK_PROMPTS, device).float().cpu().numpy()

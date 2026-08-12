@@ -31,11 +31,12 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   barely notices, so the size still belongs in any report of a VLM number.
 - **Wire a Gemini backend into the arbiter** — done. `--pose-vlm gemini`,
   default `gemini-3.5-flash`, ADC auth, project from `--gemini-project` /
-  `$GOOGLE_CLOUD_PROJECT` / `gcloud config`. Not reachable from `auto`, which
-  still means "ollama if reachable" — a backend that bills per call should
-  never be selected implicitly. With the 512 px sheet the default ollama path
-  is net positive again (gemma 41/44 against the ensemble's 40/44), so the
-  "run with `--pose-vlm off`" advice no longer applies.
+  `$GOOGLE_CLOUD_PROJECT` / `gcloud config`. **`auto` now prefers it**, falling
+  back to ollama and then to no arbiter, because it is the only one that beats
+  the ensemble. It bills per call (~$0.30 per full-collection run at ~120
+  escalations), so the selection is always announced and `--pose-vlm ollama`
+  opts out at 41/44. With the 512 px sheet that local path is net positive too,
+  so the "run with `--pose-vlm off`" advice no longer applies either way.
 - **Should saved renders keep feeding SigLIP?** — no, and they no longer do.
   Embeddings now come from the `.npy` cache or a fresh in-memory render; saved
   renders are debug output living under the config that produced them. That
@@ -65,12 +66,14 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   overrides another hides that tier's progress — measure component changes
   against the component, gate changes against the pipeline.
 - **Render up-candidate tiles at a fixed 384 px**, independent of
-  `--render-size` — but note it now collides with the 512 px sheet. `thumb=512`
-  only upsamples the *cell*: `Image.thumbnail` never enlarges, so 384 px tiles
-  sit padded inside 512 px cells and the arbiter sees a 384 px sheet with more
-  whitespace. Either render the pose tiles at ≥512, or drop the sheet back to
-  the tile size and accept the weaker arbiter. Measured for the ensemble only,
-  where 384 is free. Now measured rather than assumed: neither tower gains
+  `--render-size` — but note it collides with the 512 px sheet, and
+  `classify_stls.py` now says so at startup whenever `--render-size` is below
+  `pose.SHEET_THUMB`. `thumb=512` only upsamples the *cell*: `Image.thumbnail`
+  never enlarges, so 384 px tiles sit padded inside 512 px cells and the arbiter
+  sees a 384 px sheet with more whitespace. Either render the pose tiles at
+  ≥512 — which costs nothing, since the sweep found 384–2048 equivalent for the
+  ensemble and the cost is the geometry upload either way — or drop the sheet
+  back to the tile size and accept the weaker arbiter. Now measured rather than assumed: neither tower gains
   anything from a source above 384 px, and 384 is `patch14-384`'s *best*
   column (39/44 against 38 at 2048). Embedding from it is ~3× faster (0.23 s vs
   0.66 s per model) before render savings. This also closes the dependency of
