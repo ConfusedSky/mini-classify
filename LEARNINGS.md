@@ -415,17 +415,31 @@ folded in — isolate the stage before optimising it.)
 
 ### Ground truth lives in `up_axis_labels.json`
 
-44 hand-labelled up axes — the only ground truth any pose number in this file
+47 hand-labelled up axes — the only ground truth any pose number in this file
 was measured against, and expensive to reproduce (labelled by eye from the
 6-tile up-candidate contact sheets). Keyed by **path relative to
 `collection_root`**, never by sample index: the walk grew 509 → 602 files
 mid-session, so a `random.sample(files, 40)` with the same seed no longer
-draws the same models. Two sets, and the distinction is the whole point:
+draws the same models. Three sets, and the distinction is the whole point:
 
 - `orig` (23) — the probes and the min-max scheme were tuned against these, so
   any score on this set is optimistic. Never quote it as accuracy.
 - `holdout` (21) — drawn from the 562 files `orig` never touched, method
   frozen before scoring.
+- `hard` (3) — added later because the pipeline gets them wrong, not by random
+  draw. **Every `n=44` in this file predates them and excludes them.** Their
+  selection is the bias: scoring them alongside a random sample drags any
+  pooled number down for a reason that has nothing to do with the method, so
+  quote them separately or not at all. `load_labels()` with no argument now
+  returns 47 — pass `"orig"` / `"holdout"` to reproduce a number recorded here.
+
+  What they have in common is a **flat geometry vector**: the winning score is
+  0.0095, 0.006 and 0.003 against the ~0.02 floor that means "a real print base
+  was found". None of the three has a base plane, so geometry has nothing to
+  lock onto and the arbiter decides. On `BondedSouls_bodies` that is actively
+  harmful — geometry ranks the correct `+Z` first and the VLM overrides it to
+  `-Z` at 0.263 confidence. A case where the arbiter *removes* a correct answer
+  is worth more than another model geometry was going to get right anyway.
 
 19 of the holdout's 40 and 17 of the original's 40 were **excluded, not
 mislabelled**: loose hands, wings, swords, pipes, pins, a moustache, a flat
@@ -560,44 +574,77 @@ positional prior at all. gemini-2.5-flash picks `+X` five to six times where
 truth is zero, the same tell that exposed haiku, and it is correspondingly the
 weakest of the three.
 
-### A higher-resolution SigLIP backbone does not move the ensemble
+### `patch16-512` buys resolution *invariance*, not accuracy
 
-`siglip2-so400m-patch16-512` against the production `so400m-patch14-384`, same
-44 models, probes and min-max combination frozen, re-embedding *identical*
-rendered pixels (`eval/backbone_sweep.py`):
+`siglip2-so400m-patch16-512` against the production `so400m-patch14-384`,
+probes and min-max combination frozen, re-embedding identical rendered pixels
+(`eval/backbone_sweep.py`). Ensemble, by the **source** render size of the
+up-candidate tiles — which the processor then resizes to the tower's native
+input:
 
-| n=44 | orig | holdout | pooled |
-|---|---|---|---|
-| geometry alone | 17/23 | 18/21 | 35/44 |
-| SigLIP alone — patch14-384 | 19/23 | 16/21 | 35/44 |
-| SigLIP alone — patch16-512 | 19/23 | 16/21 | 35/44 |
-| ensemble — patch14-384 | 21/23 | 17/21 | 38/44 |
-| ensemble — patch16-512 | 21/23 | 18/21 | **39/44** |
+| ensemble | 384px | 512px | 1024px | 2048px |
+|---|---|---|---|---|
+| patch14-384 — orig+holdout n=44 | 39/44 | **36/44** | 38/44 | 38/44 |
+| patch16-512 — orig+holdout n=44 | 39/44 | 39/44 | 39/44 | 39/44 |
+| patch14-384 — holdout n=21 | 17/21 | 17/21 | 17/21 | 17/21 |
+| patch16-512 — holdout n=21 | 18/21 | 18/21 | 18/21 | 18/21 |
 
-**+1 of 44, and that is the whole result.** The two ensembles disagree on
-exactly one model (`Mortimer_BodyNoMask`, `-Z` → `+Z`); one disagreement in the
-right direction is p=0.5 by sign test, which is no evidence at all. SigLIP alone
-lands on the same 35/44 under both towers, differing on 4 models whose changes
-cancel out.
+**On accuracy the answer is still +1 of 44** — one holdout model
+(`Mortimer_BodyNoMask`, `-Z` → `+Z`), stable at every size, p=0.5 by sign test.
+That is not the interesting column.
 
-The reason is worth keeping: **the up-candidate tiles are near-silhouettes** —
-a grey mesh on white, no texture, no text, no fine detail. Extra input
-resolution has nothing to resolve. The pose errors are not resolution-limited,
-they are shape-ambiguity-limited (`tile9`, the gate, the concrete chunk are
-genuinely ambiguous from a silhouette), which is exactly why the VLM tier
-rescues models the ensemble cannot.
+**patch16-512 returns an identical answer on all 47 models at every source size
+from 384 to 2048. patch14-384 does not** — three models flip on render size
+alone:
 
-Not adopted. The cost is far past the evidence: `cache_key` includes
-`args.model`, so switching towers invalidates every cached embedding and forces
-a full multi-hour re-render/re-embed of all 602 models, for 17% slower
-inference (0.90 s vs 0.77 s per model) and 4.3 GB more weights.
+```
+Propane_Tank   truth +Y   384:+Y  512:-Y  1024:+Y  2048:+Y
+Floor          truth -Z   384:-Z  512:+Z  1024:-Z  2048:-Z
+32mm_Gate_L    truth +Y   384:+Y  512:+Z  1024:+Z  2048:+Z
+```
+
+This is the first measurement that actually bears on the open bug in
+OPEN_QUESTIONS — **the pose cache is not keyed on render size**, so today the
+same mesh can resolve differently depending on an unrelated output setting, and
+the cache silently keeps whichever answer was computed first. The fix was
+assumed to be "key the cache on render size" or "render pose tiles at a fixed
+size". A tower that is resolution-invariant removes the failure mode instead of
+guarding it.
+
+The earlier version of this section concluded "no gain, not adopted". **That
+was measured at one source resolution and was the wrong experiment** — feeding
+only 2048px renders and letting each processor downsample compares towers, not
+their sensitivity. Sweeping the source is what exposed the difference. Vary the
+input a method has to work *from*, not just the method.
+
+Why 512px is patch14-384's worst source is worth a guess, not a claim: 384→384
+is identity and 2048→384 is a clean antialiased downsample, while 512→384 is an
+awkward non-integer resample. The middle of a resampling range can be worse
+than either end.
+
+Costs, unchanged and still real: `cache_key` includes `args.model`, so adopting
+a new tower invalidates every cached embedding and forces a full re-render and
+re-embed of all 602 models, for ~25% slower embedding (0.82 s vs 0.66 s per
+model at 2048) and 4.3 GB more weights.
+
+**The cheaper half of the win needs no backbone change.** Neither tower gains
+anything above a 384px source, and embedding is ~3× faster from it (0.23 s vs
+0.66 s per model on patch14-384, before render savings). Rendering pose tiles
+at a fixed 384px is the change OPEN_QUESTIONS already estimates at ~3 hours off
+a 600-model run; these numbers say it costs no accuracy — on patch14-384 it is
+that tower's *best* column.
 
 **This says nothing about category classification**, which is the actual
 product and the place a stronger tower would plausibly pay — categories are
 fine-grained text probes over detailed renders, not silhouettes. It is
-untested because there is no category ground truth in the repo; only
-`up_axis_labels.json` exists. Hand-labelling a category set is the prerequisite
-for that experiment, not another backbone run.
+untested: `up_axis_labels.json` is the only ground truth in the repo.
+Hand-labelling a category set is the prerequisite for that experiment, not
+another backbone run.
+
+Measured on the label file at 47 (orig 23, holdout 21, hard 3). The `hard`
+three are reported separately and are 3/3 for both towers at every size — they
+were picked to have no print base, so geometry scores 1/3 there and SigLIP
+carries them; they stress the arbiter, not this comparison.
 
 ### What the arbiter tier costs
 

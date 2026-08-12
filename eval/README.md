@@ -21,10 +21,11 @@ which is gitignored. Set `EVAL_OUT` to keep runs apart.
 | `tile_and_vlm.py` | Scores geometry / ensemble / ollama VLM against the labels, and sweeps up-candidate tile resolution (384/512/1024/2048). |
 | `claude_vlm.py` | Runs the arbiter prompt through Claude models via the CLI (`--model haiku`/`sonnet`) and compares with gemma. Reads predictions from `out/preds.json`, so run `tile_and_vlm.py` first. |
 | `gemini_vlm.py` | Runs the arbiter prompt through Gemini (3.5-flash / 2.5-flash / 2.5-pro) on Vertex AI, at both sheet sizes, and scores them beside the gemma/haiku/sonnet numbers. Also reports measured per-call tokens, latency, and $ per full-collection run. Self-contained: it builds its own sheets and reads the published predictions from `results-2026-08-12.json`. `--report-only` re-prints the tables from the last run's JSON. Auth is gcloud ADC. |
-| `backbone_sweep.py` | Swaps the SigLIP vision tower with probes and combination frozen, and scores geometry / SigLIP-alone / ensemble per backbone. Re-embeds identical rendered tiles, so a difference is the backbone alone. `siglip2-so400m-patch16-512` moved the ensemble by one model of 44 — see LEARNINGS. |
+| `backbone_sweep.py` | Crosses SigLIP vision towers with the **source** render size of the up-candidate tiles (384/512/1024/2048), probes and combination frozen, re-embedding identical pixels. `siglip2-so400m-patch16-512` is worth +1 of 44 on accuracy but is identical at every source size, where `patch14-384` flips three models on render size alone — see LEARNINGS. Reports `orig`/`holdout`/`hard` separately and prints the label composition it ran on. |
 | `ensemble.py` | Compares ways of combining the geometry and SigLIP score vectors — min-max, z-score, Borda, softmax, absolute-scaled, and a hard switch. Min-max wins, and `LEARNINGS.md` explains why that is not arbitrary. |
 | `one_model.py` | Per-candidate scores for named meshes. Reach for this when one model behaves oddly. |
 | `build_report.py` | Builds the standalone HTML failure report — truth tile beside each method's pick, grouped by failure mode. |
+| `gold_upright.py` | Renders every label in the orientation it asserts — `rotation_to_z_up(label)`, 3 azimuths — into one self-contained HTML page, so the ground truth itself can be eyeballed. This is how you check a new label before trusting a number measured against it. `--html` rebuilds the page from existing renders. |
 | `light_probe2.py`, `light_probe3.py` | Superseded. Compared fill-light strategies before `FILL_INTENSITY` landed; kept because they document how the indirect-light-as-fill decision was measured. |
 
 ## Watch out
@@ -46,3 +47,10 @@ which is gitignored. Set `EVAL_OUT` to keep runs apart.
 - **`orig` labels are tuned, `holdout` labels are not.** The probes and the
   combination scheme were selected against `orig`. Quote pooled or holdout
   numbers; the ensemble scored 91% on `orig` and 81% on the holdout.
+- **`hard` labels are neither — they were picked because they fail.** Three
+  models (`32mm_PitFiend`, `32mm_Orguss_OnePiece`, `BondedSouls_bodies_32mm_unsupported`)
+  added by hand, so `pooled` is no longer a random sample and no longer means
+  what it means in LEARNINGS, where every `n=44` predates them.
+  `load_labels()` returns all 47; pass `"orig"` / `"holdout"` to reproduce a
+  recorded number. All three have near-zero geometry scores — no print base —
+  so they measure the arbiter, not the geometry.
