@@ -1,7 +1,7 @@
 # Canonical Pose Pipeline — Design
 
 **Date:** 2026-08-10
-**Status:** Approved — amended 2026-08-11, see [Amendments](#amendments)
+**Status:** Approved — amended 2026-08-11 and 2026-08-12, see [Amendments](#amendments)
 **Goal:** Ensure every model renders upright and we know which view faces the
 camera — improving classification robustness, render-sheet readability, and
 giving each model a canonical "hero" view. Fixes known failures (symmetric
@@ -193,3 +193,33 @@ can rest on ~30 of 4000 sampled points, and picks moved between runs on
 identical input (`Propane_Tank` −Z→+Z, `32mm_PitFiend` −X→+X, confidence
 0.23→0.65) — which made the pose cache irreproducible and would have made the
 ensemble unstable.
+
+### 2026-08-12 — Saved renders are debug output, and per-config
+
+Amends "**After a VLM correction the model re-renders with the new up**" in
+[Pose cache](#pose-cache), and the assumption behind it.
+
+That rule existed because `--save-renders` output was a second-tier *input*: on
+an embedding-cache miss the classifier re-embedded the saved PNGs rather than
+re-rendering, so a stale file meant a silently wrong embedding. It no longer
+does. Embeddings come from the `.npy` cache or a fresh in-memory render, and
+nothing reads the saved images back.
+
+Two consequences for this design:
+
+- **The re-render after an override is now cosmetic, and still required.** The
+  embedding re-keys on its own, because an override moves `embed_cache_token`.
+  The re-render survives so the files on disk show the pose that was actually
+  used — poses are graded by eye off those files. It now also fires for
+  `source: "ensemble"`, which the 2026-08-11 amendment added without revisiting
+  this rule.
+- **Renders live under the camera config that produced them**
+  (`<renders-dir>/2048px-8v-e20,-20/`). A render filename carries only stem and
+  view index, but the embedding key covers render size, views and elevations —
+  so a rerun at a different size used to leave the previous config's images in
+  place, and the contact sheets stopped describing what was classified. A config
+  change is now a different directory.
+
+Non-goal unchanged: the up-candidate tiles still render through the main
+renderer at `--render-size`, so `pose-cache.json` still crosses render sizes.
+That gap is recorded in `OPEN_QUESTIONS.md`, not fixed here.

@@ -166,6 +166,57 @@ def render_up_candidate_tiles(renderer, mesh):
     return [row[0] for row in render_up_candidate_grid(renderer, mesh, 1)]
 
 
+# Encodings for --save-renders. These files are written and never read back —
+# the classifier always embeds the in-memory render — so the only thing a lossy
+# format costs is what a human eye needs, not embedding fidelity. Measured on 16
+# views at 2048 px: jpg 0.13 s / 205 KB each, png 3.83 s / 3.9 MB, webp 1.02 s /
+# 100 KB. compress_level=1 is byte-identical to PIL's default 6 and 6.1x faster.
+RENDER_FORMATS = {
+    "jpg": (".jpg", {"quality": 92}),
+    "png": (".png", {"compress_level": 1}),
+    "webp": (".webp", {"quality": 90}),
+}
+
+
+def render_subdir(args):
+    """Renders live under the camera config that produced them.
+
+    A filename carries only stem and view index, but cache_key covers render
+    size, views and elevations — so without this a rerun at a different size
+    leaves the previous config's images in place and the contact sheets stop
+    describing what was actually classified. Same elevation formatting as
+    cache_key, so the two never disagree about what one config is."""
+    elev = ",".join(f"{e:g}" for e in args.elevations)
+    return f"{args.render_size}px-{args.views}v-e{elev}"
+
+
+def render_index(rdir):
+    """Map '<stem>_view<i>' to the saved render, from one listing of the dir.
+
+    Extension-agnostic on purpose: a directory may hold PNGs written before
+    --render-format existed alongside new JPEGs, and switching format must
+    neither re-render them nor hide them from the tools. Newest wins when a view
+    exists in both. One listing rather than a glob per view — the lookup runs
+    n_views times per model, and real stems contain '(' and '['."""
+    if rdir is None or not Path(rdir).is_dir():
+        return {}
+    files = sorted((p for p in Path(rdir).iterdir() if p.is_file()),
+                   key=lambda p: p.stat().st_mtime)
+    return {p.stem: p for p in files}
+
+
+def save_renders(rdir, stem, images, fmt):
+    """Write the debug renders. Never fails the run — like the pose sheet, these
+    exist for a human to look at, not for the classifier."""
+    ext, opts = RENDER_FORMATS[fmt]
+    try:
+        rdir.mkdir(parents=True, exist_ok=True)
+        for i, im in enumerate(images):
+            im.save(rdir / f"{stem}_view{i}{ext}", **opts)
+    except OSError as e:
+        print(f"  could not save renders for {stem}: {e}")
+
+
 def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None, sheet_path=None):
     """Resolve the up axis for --up-axis auto, cheapest evidence first:
     geometry, then SigLIP over the up-candidate tiles, then the VLM.
@@ -357,7 +408,7 @@ RUN_PARAMS_FILE = "run-params.json"
 # What a classify run records for the tools that read its cache. Keys are
 # argparse dests; anything not declared by a given tool's parser is ignored.
 RUN_PARAMS_KEYS = ("input", "views", "elevations", "render_size", "model",
-                   "up_axis", "pool", "categories", "renders_dir")
+                   "up_axis", "pool", "categories", "renders_dir", "render_format")
 
 
 def load_run_params(cache_dir):
@@ -407,8 +458,13 @@ def main():
     parser.add_argument("--out", default="results.csv")
     parser.add_argument("--save-renders", dest="renders_dir",
                         help="directory to save render images for debugging, as "
-                             "<stem>_view<i>.png plus <stem>_pose.png for each "
-                             "model whose up axis the VLM had to arbitrate")
+                             "<render config>/<stem>_view<i>.<ext> plus <stem>_pose.png "
+                             "for each model whose up axis the VLM had to arbitrate")
+    parser.add_argument("--render-format", choices=sorted(RENDER_FORMATS), default="jpg",
+                        help="encoding for --save-renders images (default jpg). Nothing "
+                             "reads these back — the classifier embeds the in-memory "
+                             "render — so lossy is safe here, and jpg encodes ~180x "
+                             "faster and ~16x smaller than png at 2048 px")
     parser.add_argument("--rescan", action="store_true",
                         help="re-walk the input directory instead of using the cached file list")
     parser.add_argument("--pool", choices=["mean", "max", "softmax"], default="mean",
@@ -462,7 +518,9 @@ def main():
         cache_dir.mkdir(parents=True, exist_ok=True)
     hits = 0
 
-    rdir = Path(args.renders_dir) if args.renders_dir else None
+    rdir = Path(args.renders_dir) / render_subdir(args) if args.renders_dir else None
+    saved_renders = render_index(rdir)
+    redrawn = 0  # rendered only to refresh --save-renders, embedding already cached
     angles = view_angles(args.views, args.elevations)
 
     pose_cache = pose.load_pose_cache(args.cache_dir)
@@ -516,39 +574,46 @@ def main():
                              "margin": None if margin is None else round(margin, 4),
                              "v": pose.POSE_CACHE_VERSION}
                     pose_cache[pose.file_identity(f)] = entry
-                    # renders on disk predate a fresh VLM override — don't reuse them
-                    pose_changed = source == "vlm"
+                    # Saved renders predate a fresh override, so they show the old
+                    # pose. Only the debug files are at stake now — the embedding
+                    # re-keys on its own, because the override moves up_token.
+                    pose_changed = source in ("vlm", "ensemble")
 
             token = pose.embed_cache_token(entry, args.up_axis)
             cache_file = cache_dir / f"{cache_key(f, args, token)}.npy" if cache_dir else None
+            cached = cache_file is not None and cache_file.exists()
+            # Two independent questions. Embeddings come from the .npy cache or a
+            # fresh render, never from the files on disk: those are debug output,
+            # and nothing in their names ties them to this run's cache key. That
+            # decoupling is what makes a lossy --render-format safe.
+            need_embeds = not cached and not args.skip_embed
             # --save-renders only forces a re-render for files whose renders are missing
-            renders_saved = not pose_changed and (rdir is None or all(
-                (rdir / f"{f.stem}_view{i}.png").exists() for i in range(n_views)))
-            if cache_file and cache_file.exists() and renders_saved:
+            need_renders = rdir is not None and (pose_changed or not all(
+                f"{f.stem}_view{i}" in saved_renders for i in range(n_views)))
+
+            if need_embeds or need_renders:
+                try:
+                    if mesh is None:
+                        mesh = load_mesh(f)
+                    mesh.rotate(rotation_to_z_up(np.array(entry["up"])), center=(0, 0, 0))
+                    images = render_views(get_renderer(), mesh, angles)
+                except Exception as e:
+                    rows.append({"file": str(f), "top1": f"RENDER_ERROR: {e}"})
+                    continue
+                # write whenever we rendered, not only when files were missing:
+                # at 0.13 s it is cheaper than leaving a stale image on disk next
+                # to a fresh embedding
+                if rdir is not None:
+                    save_renders(rdir, f.stem, images, args.render_format)
+                    redrawn += not need_embeds
+
+            if cached and not args.skip_embed:
                 img_embeds = torch.from_numpy(np.load(cache_file)).to(device, dtype=text_embeds.dtype)
                 hits += 1
-            else:
-                if rdir and renders_saved:
-                    # embed straight from previously saved renders — no re-rendering
-                    images = [Image.open(rdir / f"{f.stem}_view{i}.png").convert("RGB")
-                              for i in range(n_views)]
-                else:
-                    try:
-                        if mesh is None:
-                            mesh = load_mesh(f)
-                        mesh.rotate(rotation_to_z_up(np.array(entry["up"])), center=(0, 0, 0))
-                        images = render_views(get_renderer(), mesh, angles)
-                    except Exception as e:
-                        rows.append({"file": str(f), "top1": f"RENDER_ERROR: {e}"})
-                        continue
-                    if rdir:
-                        rdir.mkdir(parents=True, exist_ok=True)
-                        for i, im in enumerate(images):
-                            im.save(rdir / f"{f.stem}_view{i}.png")
-                if not args.skip_embed:
-                    img_embeds = embed_images(model, processor, images, device)
-                    if cache_file:
-                        np.save(cache_file, img_embeds.float().cpu().numpy())
+            elif need_embeds:
+                img_embeds = embed_images(model, processor, images, device)
+                if cache_file:
+                    np.save(cache_file, img_embeds.float().cpu().numpy())
 
             if not args.skip_embed:
                 view_np = img_embeds.float().cpu().numpy()
@@ -578,7 +643,9 @@ def main():
         writer = csv.DictWriter(fh, fieldnames=fields)
         writer.writeheader()
         writer.writerows(rows)
-    print(f"wrote {args.out} ({len(rows)} models, {hits} from embedding cache)")
+    print(f"wrote {args.out} ({len(rows)} models, {hits} from embedding cache"
+          + (f", {redrawn} re-rendered only to refresh --save-renders" if redrawn else "")
+          + ")")
 
 
 if __name__ == "__main__":

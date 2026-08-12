@@ -1,3 +1,5 @@
 #!/usr/bin/env bash
 
-rm -f ./my_renders/* ./embed-cache/*
+# -r because renders now sit in a per-config subdirectory; plain -f cannot
+# remove a directory and -f does not silence that error
+rm -rf ./my_renders/* ./embed-cache/*

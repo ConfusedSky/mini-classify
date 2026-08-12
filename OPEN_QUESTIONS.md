@@ -25,12 +25,19 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   arbiter from going net negative (haiku@256: 30/44 → 39/44). Still to be
   *written* — see below. `eval/arbiter_gate.py`.
 
+- **Should saved renders keep feeding SigLIP?** — no, and they no longer do.
+  Embeddings now come from the `.npy` cache or a fresh in-memory render; saved
+  renders are debug output living under the config that produced them. That
+  also removed a worse bug than the format question it was filed under: a
+  render filename carries only stem and view index while `cache_key` covers
+  size/views/elevations, so changing `--render-size` embedded the old size's
+  pixels under the new key — 0.976 cosine, permanently wrong.
+- **`compress_level=1` on saved renders** — superseded. Decoupling made lossy
+  safe, so `--render-format` defaults to jpg: 23.3 s → 0.13 s per model and
+  ~27 GB → ~2 GB for the collection. `png` keeps `compress_level=1`.
+
 ## Ready to do — measured, decided, not yet written
 
-- **`compress_level=1` on saved renders.** PNG encoding is ~22 s/model of a
-  ~44 s/model run; `compress_level=1` is 6.1× faster, losslessly identical,
-  22% more disk. About 3 hours off a 600-model run for one keyword argument.
-  Nothing blocks this.
 - **Gate the arbiter on the ensemble's margin** (`top1 − top2` of
   `_unit(geo) + _unit(siglip)`) instead of `needs_arbiter(ratio, best)`.
   Threshold 0.4 picked on `orig`; holdout 19/21 against the geometry gate's
@@ -147,8 +154,9 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
 
 ## Performance work not done
 
-- **Thread the PNG writes.** Even at `compress_level=1` it is ~4 s of pure CPU
-  per model with 15 cores idle. PIL releases the GIL during encode.
+- **Thread the render writes.** Largely obsolete: the default is `jpg` now, at
+  0.13 s/model against PNG's 23 s. Still ~4 s of single-threaded CPU per model
+  if someone runs `--render-format png`, and PIL releases the GIL during encode.
 - **Prefetch mesh loads.** ~2.5 s/model, IO-bound, single-threaded; Open3D's
   reader is C++ and releases the GIL, so a small thread pool suffices.
 - **Split the VLM pass from the render pass** in `classify_stls.py`. Measured
@@ -160,12 +168,15 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
 
 ## Structural questions
 
-- **Should saved renders keep feeding SigLIP?** `classify_stls.py:505`
-  re-embeds from disk when render files exist but the embedding cache misses.
-  That puts the PNG encoder on the classifier's input path and is why lossy
-  formats are unsafe (JPEG q92 moves per-view embeddings up to 0.028 cosine,
-  the same order as the gap between competing categories). Decoupling costs a
-  re-render on those cache misses but makes renders a true debug artifact.
+- **Renders are not reproducible across pose-cache states.** A cold pose cache
+  renders the six up-candidate tiles through the same `OffscreenRenderer` first,
+  and the view renders that follow differ from a warm-cache run by up to 0.0098
+  per embedding component — a fifth of the ~0.03 gap between competing
+  categories. Measured on all three test STLs, identical on the old code, so it
+  is long-standing rather than new. Every embedding in the live cache was
+  therefore computed in whichever state that file happened to hit. Cheapest
+  honest fix is to warm the renderer the same way on both paths; widening the
+  cache key would only make the irreproducibility explicit, not remove it.
 - **Widen the labelled set.** 44 sampled models, ~45% exclusion rate, and the
   decisive comparisons come down to 6 disagreements. Most conclusions in
   LEARNINGS are one or two models from flipping. The `hard` set added since
