@@ -28,6 +28,9 @@ import hashlib
 import json
 import time
 import sys
+import queue
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -94,6 +97,7 @@ def load_mesh(mesh_path):
     return mesh
 
 
+_UNSET = object()   # 'no deferred arbiter answer', distinct from a None answer
 DEFAULT_ELEVATIONS = [20.0]
 UP_TILE_ELEVATION = 20.0  # pose contact sheet: fixed, independent of --elevations
 UP_TILE_AZIMUTHS = 4      # views per up candidate for the ensemble; the sheet still gets one
@@ -238,7 +242,59 @@ def save_renders(rdir, stem, images, fmt):
         print(f"  could not save renders for {stem}: {e}")
 
 
-def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None, sheet_path=None):
+class MeshPrefetcher:
+    """Load meshes a few files ahead of the consumer, on a background thread.
+
+    Loading is 33% of a median model and 55% of a p99 one (0.83 s / 15.4 s), it
+    is disk+CPU while everything after it is GPU, and Open3D's reader is C++ and
+    releases the GIL — so it overlaps with rendering for free. Bounded so a
+    queue of 4M-triangle meshes cannot outrun memory.
+
+    Files are consumed in order. A file the consumer skips (pose cached, nothing
+    to render) is dropped from the queue on the way past."""
+
+    def __init__(self, files, depth=2, enabled=True):
+        self.enabled = enabled and depth > 0
+        self._done = False
+        if not self.enabled:
+            return
+        # depth is the memory bound, not a speed knob: it caps how many loaded
+        # meshes may sit unconsumed. The GPU eats one at a time and the p99 mesh
+        # is 4M triangles, so running far ahead buys nothing and costs a lot.
+        self._q = queue.Queue(maxsize=depth)
+        threading.Thread(target=self._run, args=(list(files),), daemon=True).start()
+
+    def _run(self, files):
+        for f in files:
+            try:
+                self._q.put((f, load_mesh(f)))
+            except Exception as e:                 # re-raised when the consumer asks
+                self._q.put((f, e))
+        self._q.put((None, None))                  # end of list
+
+    def get(self, f):
+        """The mesh for f. Producer and consumer walk the same list in order, so
+        anything ahead of f in the queue is a file the consumer skipped.
+
+        Falls back to loading here once the producer is finished — a file
+        revisited after its deferred arbiter answer arrives is asked for a
+        second time, and the queue has nothing left to give it."""
+        if not self.enabled or self._done:
+            return load_mesh(f)
+        while True:
+            g, value = self._q.get()               # blocks if the loader is behind
+            if g is None:
+                self._done = True
+                return load_mesh(f)
+            if g != f:
+                continue                           # skipped file — let it go
+            if isinstance(value, Exception):
+                raise value
+            return value
+
+
+def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None,
+               sheet_path=None, defer=None):
     """Resolve the up axis for --up-axis auto, cheapest evidence first:
     geometry, then SigLIP over the up-candidate tiles, then the VLM.
 
@@ -276,12 +332,27 @@ def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None, sheet_
     if vlm_backend and escalate:
         if sheet_tiles is None:
             sheet_tiles = render_up_candidate_tiles(get_renderer(), mesh)
-        idx = pose.ask_vlm_up(sheet_tiles, vlm_backend, args.cache_dir or ".",
-                              args.pose_vlm_model or pose.DEFAULT_VLM_MODELS.get(vlm_backend),
-                              save_to=sheet_path,
-                              project=getattr(args, "gemini_project", None))
+        call = lambda: pose.ask_vlm_up(
+            sheet_tiles, vlm_backend, args.cache_dir or ".",
+            args.pose_vlm_model or pose.DEFAULT_VLM_MODELS.get(vlm_backend),
+            save_to=sheet_path, project=getattr(args, "gemini_project", None))
+        if defer is not None:
+            # Hand the call off and keep going. A network arbiter averages 24 s
+            # against 3-28 s of local work for a whole model, so waiting here
+            # leaves the run majority idle; the answer only decides the pose, so
+            # this file can be finished later. apply_arbiter closes the loop.
+            defer(call)
+            return up, ratio, source, margin
+        idx = call()
         if idx is not None and not np.allclose(pose.UP_CANDIDATES[idx], up):
             return pose.UP_CANDIDATES[idx], ratio, "vlm", margin
+    return up, ratio, source, margin
+
+
+def apply_arbiter(idx, up, ratio, source, margin):
+    """Fold a deferred arbiter answer into a pose already resolved without it."""
+    if idx is not None and not np.allclose(pose.UP_CANDIDATES[idx], up):
+        return pose.UP_CANDIDATES[idx], ratio, "vlm", margin
     return up, ratio, source, margin
 
 
@@ -303,11 +374,24 @@ def embed_texts(model, processor, categories, device):
     return torch.stack(embeds)  # (n_categories, dim)
 
 
+EMBED_BATCH = 0   # 0 = one call per image list, which is what --views implies
+
+
 @torch.no_grad()
-def embed_images(model, processor, images, device):
-    inputs = processor(images=images, return_tensors="pt").to(device)
-    feat = as_tensor(model.get_image_features(**inputs))
-    return torch.nn.functional.normalize(feat, dim=-1)  # (n_views, dim)
+def embed_images(model, processor, images, device, batch=None):
+    """Row-normalised embeddings, (n_images, dim).
+
+    batch caps how many images go to the GPU at once; 0/None sends the whole
+    list, which is the historical behaviour and fine at 16-40 images (measured
+    peak 2.5 GB of a 7.8 GB card). Raise it to keep the GPU busier when the
+    image list is long, lower it if SigLIP has to share the card."""
+    batch = batch or EMBED_BATCH or len(images)
+    out = []
+    for i in range(0, len(images), batch):
+        inputs = processor(images=images[i:i + batch], return_tensors="pt").to(device)
+        out.append(as_tensor(model.get_image_features(**inputs)))
+    feat = out[0] if len(out) == 1 else torch.cat(out)
+    return torch.nn.functional.normalize(feat, dim=-1)
 
 
 def pool_sims(view_sims, mode, axis=-2):
@@ -508,6 +592,18 @@ def main():
     parser.add_argument("--gemini-project", default=None,
                         help="GCP project for --pose-vlm gemini (default: "
                              "$GOOGLE_CLOUD_PROJECT or `gcloud config get-value project`)")
+    parser.add_argument("--embed-batch", type=int, default=0,
+                        help="images per SigLIP call (0 = the whole view list at once). "
+                             "Raise to keep the GPU busier on long lists; lower if "
+                             "SigLIP has to share the card")
+    parser.add_argument("--prefetch", type=int, default=2,
+                        help="meshes to load ahead on a background thread (0 disables). "
+                             "Loading is 33%% of a median model and 55%% of a heavy one, "
+                             "and it is disk+CPU while everything after it is GPU")
+    parser.add_argument("--arbiter-workers", type=int, default=8,
+                        help="concurrent pose-VLM calls for network backends. The call "
+                             "averages 24s against 3-28s of local work per model, so "
+                             "waiting inline leaves the run mostly idle")
     parser.add_argument("--up-margin", type=float, default=pose.MARGIN_THRESHOLD,
                         help="escalate to the pose VLM when the ensemble's winning "
                              "candidate leads the runner-up by less than this (0-2). "
@@ -621,7 +717,21 @@ def main():
 
     rows = []
     try:
-        for f in tqdm(files, desc="classifying"):
+        prefetch = MeshPrefetcher(files, args.prefetch)
+        # A network arbiter is worth overlapping; a local one is not — ollama
+        # shares the GPU with SigLIP and they evict each other (a measured 10.1 s
+        # reload against 0.49 s of inference), so running them concurrently is
+        # slower than taking turns.
+        defer_arbiter = vlm_backend in ("gemini", "claude")
+        arbiter_pool = ThreadPoolExecutor(max_workers=args.arbiter_workers) \
+            if defer_arbiter else None
+        deferred, pending_box = [], []
+
+        def process(f, deferred_idx=_UNSET):
+            """One file end to end. deferred_idx carries an arbiter answer that
+            arrived after the first visit, so the second visit repeats the work
+            with the final pose instead of re-asking."""
+            nonlocal hits, redrawn
             mesh = None
             pose_changed = False
             if args.up_axis in ("z", "y"):
@@ -631,13 +741,23 @@ def main():
                 entry = pose_cache.get(pose.file_identity(f))
                 if entry is None:
                     try:
-                        mesh = load_mesh(f)
+                        mesh = prefetch.get(f)
                     except Exception as e:
                         rows.append({"file": str(f), "top1": f"RENDER_ERROR: {e}"})
-                        continue
+                        return
                     up, ratio, source, margin = resolve_up(
                         mesh, args, get_renderer, vlm_backend, score_upright,
-                        sheet_path=rdir / f"{f.stem}_pose.png" if rdir else None)
+                        sheet_path=rdir / f"{f.stem}_pose.png" if rdir else None,
+                        defer=(lambda call: pending_box.append(call)) if defer_arbiter
+                             and deferred_idx is _UNSET else None)
+                    if deferred_idx is not _UNSET:
+                        up, ratio, source, margin = apply_arbiter(
+                            deferred_idx, up, ratio, source, margin)
+                    elif pending_box:
+                        # arbiter running elsewhere — park this file and move on
+                        deferred.append((f, arbiter_pool.submit(pending_box.pop()),
+                                         (up, ratio, source, margin)))
+                        return
                     entry = {"up": [float(v) for v in up],
                              "confidence": round(ratio, 4), "source": source,
                              "margin": None if margin is None else round(margin, 4),
@@ -668,7 +788,7 @@ def main():
                     images = render_views(get_renderer(), mesh, angles)
                 except Exception as e:
                     rows.append({"file": str(f), "top1": f"RENDER_ERROR: {e}"})
-                    continue
+                    return
                 # write whenever we rendered, not only when files were missing:
                 # at 0.13 s it is cheaper than leaving a stale image on disk next
                 # to a fresh embedding
@@ -680,7 +800,8 @@ def main():
                 img_embeds = torch.from_numpy(np.load(cache_file)).to(device, dtype=text_embeds.dtype)
                 hits += 1
             elif need_embeds:
-                img_embeds = embed_images(model, processor, images, device)
+                img_embeds = embed_images(model, processor, images, device,
+                                          batch=args.embed_batch)
                 if cache_file:
                     np.save(cache_file, img_embeds.float().cpu().numpy())
 
@@ -699,6 +820,18 @@ def main():
                     row[f"top{rank + 1}"] = categories[idx]
                     row[f"score{rank + 1}"] = round(sims[idx].item(), 4)
                 rows.append(row)
+
+        for f in tqdm(files, desc="classifying"):
+            process(f)
+
+        if deferred:
+            # The arbiter calls have been in flight since their file was parked,
+            # so most are already answered; this is the tail, not the wait. The
+            # mesh is reloaded rather than held — a 4M-triangle mesh costs more
+            # memory than the reload costs time, and only ~20% of files land here.
+            print(f"resolving {len(deferred)} deferred arbiter calls")
+            for f, fut, _ in tqdm(deferred, desc="arbiter"):
+                process(f, deferred_idx=fut.result())
     finally:
         # interrupted cold passes keep their (expensive) pose resolutions, and
         # still describe the cache they partly filled
