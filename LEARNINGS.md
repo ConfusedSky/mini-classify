@@ -60,10 +60,12 @@ Not the lack of color — gray renders classify fine (the witch scored top-1
   | geometry | good | fails |
   | SigLIP upright probes | fails | 11/11 |
 
-  Alone: geometry 17-18/23, SigLIP 19/23. **Averaged: 22/23, which is the
-  oracle ceiling** — every disagreement had exactly one method right, and the
-  mean arbitrates all of them. The one unrecoverable model (`Bedienkonsole`,
-  a console with a large flat back panel) is wrong under both.
+  Alone: geometry 17-18/23, SigLIP 19/23. Averaged: 21-22/23, the oracle
+  ceiling — every disagreement had exactly one method right. The one
+  unrecoverable model (`Bedienkonsole`, a console with a large flat back
+  panel) is wrong under both.
+  **That 22/23 did not replicate — see the holdout below. Treat it as the
+  number a tuned-on sample produces, not the method's accuracy.**
 - **Min-max before averaging is doing real work, not just unit conversion.**
   The two scores are a surface-area fraction and a difference of cosine
   similarities. Because geometry's weakest candidate is almost always exactly
@@ -312,6 +314,205 @@ a committed `.env`, or a manifest written by the run itself.
   and forgotten in the readers.
 - Bonus catch: `cluster_models.py` never had a `--renders-dir` default, so
   contact sheets were opt-in. It inherits the classifier's from the manifest.
+
+## Where a 7-hour run actually went (2026-08-12)
+
+First full-collection run with the pose ensemble: 601 models (602nd is the
+known FloatingRock2 parse failure), 7 h 21 m, **~44 s/model**. Profiled the
+same settings (2048 px, 8 azimuths × 2 elevations = 16 views, plus 6 up-tiles)
+on an *uncontended* GPU:
+
+| stage | avg | share |
+|---|---|---|
+| mesh load | 2.48 s | 47% |
+| up-candidate tiles (6 renders) | 1.20 s | 23% |
+| view renders (16) | 0.87 s | 16% |
+| tile + view embedding | 0.76 s | 14% |
+| geometry up-axis scan | 0.01 s | 0% |
+| **pipeline total** | **5.32 s** | |
+
+**5.32 s against 44 s observed — 85% of the run was not the pipeline.** Two
+things accounted for the gap, and neither was where I first looked.
+
+- **PNG encoding was ~half the run.** Saving 16 renders at 2048 px costs
+  **21–23 s per model** — pixel-bound, so it is constant whether the mesh has
+  3k or 1.8M triangles, and it dwarfs every other stage. It never appeared in
+  any timing I did until I measured it directly, because it isn't rendering
+  and it isn't inference.
+- **VRAM contention.** SigLIP (~2.8 GB) and ollama (~4 GB) do not both fit in
+  8 GB, so ollama gets evicted between arbiter calls. Measured on one call:
+  `load_duration` **10.1 s** against `eval_duration` **0.49 s** — the reload
+  costs 20× the inference. One window of the run ran at **187 s/model for
+  three hours**; that is the signature. Run the VLM pass separately from the
+  render pass, or pin the model resident.
+
+### `compress_level=1` is the whole fix
+
+Measured on real 2048 px renders, 16 images:
+
+| encoding | time | size each |
+|---|---|---|
+| PNG `compress_level=6` (PIL default) | 23.31 s | 3.2 MB |
+| PNG `compress_level=1` | **3.83 s** | 3.9 MB |
+| PNG `compress_level=0` | 1.99 s | 12.6 MB |
+| JPEG q92 | 0.13 s | 205 KB |
+| WEBP q90 | 1.02 s | 100 KB |
+
+**6.1× faster for 22% more disk, and losslessly identical.** ~19.5 s/model,
+about 3 hours off a 600-model run, for one keyword argument.
+
+### Saved renders are an *input*, not a debug artifact
+
+The trap that makes the lossy rows above the wrong answer:
+`classify_stls.py:505` re-embeds straight from the saved PNGs whenever the
+render files exist but the embedding cache misses. So the encoder sits on the
+classifier's input path. Measured per-view cosine against the in-memory render:
+
+| encoding | mean cos | worst view |
+|---|---|---|
+| PNG (any compress_level) | 1.00006 | 0.99941 |
+| JPEG q92 | 0.99224 | 0.97238 |
+| WEBP q90 | 0.99289 | 0.97480 |
+| grayscale PNG | 0.99409 | 0.98658 |
+| **render at 512 px instead of 2048** | 0.97587 | 0.95081 |
+
+A worst-case 0.972 reads as "nearly identical" and is not: competing
+categories separate by ~0.02–0.03 cosine, so a 0.028 perturbation is the same
+order as the signal. **Only lossless compression is safe here.** If lossy
+renders are ever wanted, the fix is to stop re-embedding from disk — not to
+pick a quality level.
+
+Two things that fell out of that measurement:
+
+- **The renders are not neutral gray.** `max|R−G| = 4/255` on every view: the
+  material is gray but the indirect-light fill is a coloured environment map,
+  so an `L`-mode conversion is lossy, not free.
+- **Render size is a real quality knob, the biggest in the table.** Rendering
+  at 2048 and letting the processor downsample to 384 is supersampling, and it
+  differs measurably from rendering at 512 natively. `render_size` being in
+  the cache key is correct, not incidental.
+
+### Up-tile rendering is geometry-bound, not pixel-bound
+
+`render_up_candidate_tiles` on a 1.8M-triangle mesh: **3.74 s at 2048 px vs
+3.33 s at 384 px**. Shrinking the tiles buys nothing. The cost is that it
+builds six rotated *copies* of the mesh and `render_views` does
+`clear_geometry()` + `add_geometry()` per tile, re-uploading millions of
+triangles six times. The fix is to upload once and move the camera. (I
+recommended shrinking them first, from a measurement that had mesh loading
+folded in — isolate the stage before optimising it.)
+
+### Other measurements worth keeping
+
+- Mesh load averages ~2.5 s at ~15 MB/s effective off the USB drive,
+  single-threaded, and scales with file size (121 MB → 9.4 s). Prefetching in
+  a thread pool would hide it; Open3D's reader is C++ and releases the GIL.
+- CPU never exceeded one core of 16, GPU compute utilisation sat at 1%. Both
+  processors were idle while a single-threaded PNG encoder was the bottleneck.
+- Production pose sources over 509 models: **heuristic 340, vlm 136,
+  ensemble 33**. VLM overrides fell from 31% (pre-ensemble, 157/508) to 26.7%,
+  so the ensemble is absorbing arbiter load as intended.
+
+### Ground truth lives in `up_axis_labels.json`
+
+44 hand-labelled up axes — the only ground truth any pose number in this file
+was measured against, and expensive to reproduce (labelled by eye from the
+6-tile up-candidate contact sheets). Keyed by **path relative to
+`collection_root`**, never by sample index: the walk grew 509 → 602 files
+mid-session, so a `random.sample(files, 40)` with the same seed no longer
+draws the same models. Two sets, and the distinction is the whole point:
+
+- `orig` (23) — the probes and the min-max scheme were tuned against these, so
+  any score on this set is optimistic. Never quote it as accuracy.
+- `holdout` (21) — drawn from the 562 files `orig` never touched, method
+  frozen before scoring.
+
+19 of the holdout's 40 and 17 of the original's 40 were **excluded, not
+mislabelled**: loose hands, wings, swords, pipes, pins, a moustache, a flat
+gear disc, a dragon in flight. Their upright genuinely isn't defined, and
+scoring against a guess would have manufactured signal. Excluding ~45% of a
+random sample is itself the finding — a large part of this collection is
+parts and props, not posable models.
+
+Before this file existed the labels were three drifting copies of a `GOLD`
+dict in separate scratch scripts plus a JSON keyed by sample index. Persist
+the labels, not the harness.
+
+### The holdout: the ensemble's win was mostly selection effect
+
+Fresh 40-model sample drawn from the 562 files the first sample never touched,
+probes and normalisation **frozen**, 21 hand-labelled (19 excluded — hands,
+wings, swords, pipes, a throwing axe). Scored blind:
+
+| | geometry | ensemble | VLM | pipeline |
+|---|---|---|---|---|
+| original (tuned here) n=23 | 74% | **91%** | 78% | 91% |
+| **holdout (frozen) n=21** | **86%** | **81%** | 76% | 81% |
+| pooled n=44 | 80% | 86% | 77% | 86% |
+
+**On unseen data the ensemble scored *below* geometry alone.** The first
+sample simply contained more of the models geometry fails on (the wolves, the
+gas cylinders, the gate); the holdout is dominated by upright +Z figures that
+the print-base heuristic already nails, so there was little left to win and
+one model to lose (`Mortimer_BodyNoMask`, which the ensemble flipped to −Z).
+
+The fairest read is the head-to-head, which is not sample-composition
+dependent: across all 44 models the two methods **differ on only 6**, and
+there the ensemble is right 4, geometry 1, both wrong 1. So it does help — on
+14% of models, not the 26% the first sample implied, and 4–1 on six trials is
+p≈0.375 by sign test. **"Probably helps, unproven"** is the honest summary,
+and it is worth keeping only because it is cheap (~1.6 s/model).
+
+Generalised: a 17-point gap measured on the sample that shaped the method
+became −5 points on fresh data. Always spend the holdout before believing a
+number, and never quote the tuned figure as the accuracy.
+
+### The VLM tier is exactly net zero
+
+Same 44 models. The arbiter fires on 24 of them, and the VLM overrides the
+ensemble on those:
+
+```
+rescued 2   Bedienkonsole, Mortimer_BodyNoMask
+broke   2   Concrete Chunk (6), arc-1a-doors-none4
+            -> net 0
+```
+
+It is also the **worst standalone method (77%)**, below both geometry and the
+ensemble, and it is by far the most expensive tier — 354 calls on a
+full-collection run. Its errors are stable, not noisy: 3 samples per model on
+the first set gave **21/23 unanimous (91%)**, and majority voting changed
+nothing, so it returns the *same wrong answer* every time on terrain like
+`tile9`, `Bunker_MiniV2_Roof_` and `Floor`. Voting cannot fix it.
+Its one genuine virtue: it is the only method that ever got `Bedienkonsole`.
+
+What keeps it from being harmful is the `needs_arbiter` gate — applied to all
+44 models it would have been −3. Worth trying before dropping it: gate on the
+*ensemble's* own margin rather than geometry's confidence, since the two
+models it broke were ones the ensemble already had right.
+
+### `source` records what *moved* the answer, not what ran
+
+`source: "heuristic"` does **not** mean the ensemble was skipped — it runs on
+every model, and the label stays `heuristic` when it agrees with geometry, so
+the pose is byte-identical to the legacy answer and the embedding-cache key can
+stay the legacy token. Verified by re-resolving 15 `heuristic`-marked models:
+**0 of 15 moved.** The name reads like "the ensemble didn't run" and invites
+exactly the wrong conclusion; `confirmed` would say it better.
+
+### Open gap: the pose cache is not keyed on render size
+
+The up-candidate tiles are rendered through the main renderer, so the
+ensemble's answer depends on `--render-size` — but `pose.file_identity` is only
+`path + mtime + size`. Same mesh, different `--render-size`, potentially a
+different pose, and the cache serves whichever was computed first. Live
+example: `Damaged Roofing (4).stl` resolves `+Y` with 2048 px tiles and `-Y`
+with 384 px tiles. It also cost an hour of confusion — a spot-check of cached
+poses at the wrong tile size showed a phantom disagreement.
+The clean fix is to render up-candidate tiles at a **fixed** size regardless of
+`--render-size`, so pose resolution is render-size independent (better than
+widening the cache key, and the tiles are geometry-upload-bound anyway so
+there is no speed cost either way).
 
 ## Open-set queries: detecting "not in the collection"
 

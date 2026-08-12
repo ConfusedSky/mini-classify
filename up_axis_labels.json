@@ -1,0 +1,283 @@
+{
+ "description": "Hand-labelled up axis for STL pose evaluation. Labelled by eye from 6-tile up-candidate contact sheets. Models whose upright is genuinely undefined (loose hands, wings, swords, pipes, pins) were excluded.",
+ "axes": [
+  "+Z",
+  "-Z",
+  "+Y",
+  "-Y",
+  "+X",
+  "-X"
+ ],
+ "sets": {
+  "orig": "first 40-model random sample; probes and the min-max scheme were tuned against these, so numbers on this set are optimistic",
+  "holdout": "fresh sample from files the first never touched; method frozen"
+ },
+ "labels": [
+  {
+   "stem": "tile9",
+   "set": "orig",
+   "up": "+Y",
+   "path": "Final STL/tile9.stl"
+  },
+  {
+   "stem": "OutPost_wall_edge",
+   "set": "orig",
+   "up": "+Z",
+   "path": "Warhammer/Warhammer_40K_Outpost_-_smal/files/OutPost_wall_edge.stl"
+  },
+  {
+   "stem": "Bunker_MiniV2_Roof_",
+   "set": "orig",
+   "up": "+Z",
+   "path": "Warhammer/Imperial_Bunker_-_Mini/files/Bunker_MiniV2_Roof_.stl"
+  },
+  {
+   "stem": "32_Unsupported_Wajoski_Wolf2",
+   "set": "orig",
+   "up": "+Z",
+   "path": "DM Stash/DM Stash Jan '22 Brawn & Brains STLs - Unsupported/Wajsoki - Unsupported/Unsupported/32_Unsupported_Wajoski_Wolf2.stl"
+  },
+  {
+   "stem": "Death_knight_body_32mm_unsupported",
+   "set": "orig",
+   "up": "+Z",
+   "path": "DM Stash/Singles/Morian/Unsupported/Death_knight_body_32mm_unsupported.stl"
+  },
+  {
+   "stem": "32mm_Torch",
+   "set": "orig",
+   "up": "+Y",
+   "path": "Loot Studios/A Light In the Shadow/All_Objects/Torch/No Supports/32mm_Torch.stl"
+  },
+  {
+   "stem": "Pressurized_Container_2",
+   "set": "orig",
+   "up": "+Y",
+   "path": "Basing/Industrial Drums & Canisters/Pressurized_Container_2.stl"
+  },
+  {
+   "stem": "75_Unsupported_Wajoski_Wolf2",
+   "set": "orig",
+   "up": "+Z",
+   "path": "DM Stash/DM Stash Jan '22 Brawn & Brains STLs - Unsupported/Wajsoki - Unsupported/Unsupported/75_Unsupported_Wajoski_Wolf2.stl"
+  },
+  {
+   "stem": "32mm_FemaleOrcWarrior",
+   "set": "orig",
+   "up": "+Y",
+   "path": "Loot Studios/Orconspiracy/Enemies/Female Orc Warrior/32mm/No Supports/32mm_FemaleOrcWarrior.stl"
+  },
+  {
+   "stem": "Propane_Tank",
+   "set": "orig",
+   "up": "+Y",
+   "path": "Basing/Industrial Drums & Canisters/Propane_Tank.stl"
+  },
+  {
+   "stem": "Concrete Chunk (6)",
+   "set": "orig",
+   "up": "+Z",
+   "path": "Basing/Debris Scatter/Concrete Chunk (6).stl"
+  },
+  {
+   "stem": "32_Unsupported_Psyflayer_Body",
+   "set": "orig",
+   "up": "+Z",
+   "path": "DM Stash/DM Stash Jan '22 Brawn & Brains STLs - Unsupported/Thilinos - Unsupported/Unsupported/32_Unsupported_Psyflayer_Body.stl"
+  },
+  {
+   "stem": "75_Unsupported_Catarina_BodyMask",
+   "set": "orig",
+   "up": "+Z",
+   "path": "DM Stash/Crimson Masquerade/Catarina von Strassen - Unsupported/75_Unsupported_Catarina_BodyMask.stl"
+  },
+  {
+   "stem": "Body",
+   "set": "orig",
+   "up": "+Y",
+   "path": "Final STL/Body.stl"
+  },
+  {
+   "stem": "Floor",
+   "set": "orig",
+   "up": "-Z",
+   "path": "Warhammer/Warhammer_30K___40K_-_Container/files/Floor.stl"
+  },
+  {
+   "stem": "Bedienkonsole",
+   "set": "orig",
+   "up": "+Z",
+   "path": "Warhammer/Warhammer_40k_Terrain_Kombination_of_Energy_bridge_and_turbine/files/Bedienkonsole.stl"
+  },
+  {
+   "stem": "32mm_ReggidGraves",
+   "set": "orig",
+   "up": "+Y",
+   "path": "Loot Studios/Welcome Pack/ReggidGraves/32mm/No Supports/32mm_ReggidGraves.stl"
+  },
+  {
+   "stem": "32mm_Cavalrobot",
+   "set": "orig",
+   "up": "+Y",
+   "path": "Loot Studios/Fear the Eternal Embrace/Cavalrobot/32mm/No Supports/32mm_Cavalrobot.stl"
+  },
+  {
+   "stem": "nsr-9j4",
+   "set": "orig",
+   "up": "+Z",
+   "path": "nsr-9j4.stl"
+  },
+  {
+   "stem": "32mm_Gate_L",
+   "set": "orig",
+   "up": "+Y",
+   "path": "Loot Studios/Panshaw Under Siege/GateWall/No Supports/32mm_Gate_L.stl"
+  },
+  {
+   "stem": "32mm_Goro",
+   "set": "orig",
+   "up": "+Y",
+   "path": "Loot Studios/Orconspiracy/Enemies/Goro/32mm/No Supports/32mm_Goro.stl"
+  },
+  {
+   "stem": "Grass Tufts Tuner (3)",
+   "set": "orig",
+   "up": "+Y",
+   "path": "Basing/Grass Tufts/Grass Tufts Tuner (3).stl"
+  },
+  {
+   "stem": "32mm_OrcShaman",
+   "set": "orig",
+   "up": "+Y",
+   "path": "Loot Studios/Orconspiracy/Enemies/Orc Shaman/32mm/No Supports/32mm_OrcShaman.stl"
+  },
+  {
+   "stem": "32mm_OrcArcher",
+   "set": "holdout",
+   "up": "+Y",
+   "path": "Loot Studios/Orconspiracy/Enemies/Orc Archer/32mm/No Supports/32mm_OrcArcher.stl"
+  },
+  {
+   "stem": "ebj-prime4",
+   "set": "holdout",
+   "up": "+Z",
+   "path": "Battletech/ebj-prime4.stl"
+  },
+  {
+   "stem": "75_Unsupported_Benoit_BodyNoMask",
+   "set": "holdout",
+   "up": "+Z",
+   "path": "DM Stash/Crimson Masquerade/Benoit - Unsupported/75_Unsupported_Benoit_BodyNoMask.stl"
+  },
+  {
+   "stem": "32_Unsupported_Mortimer_BodyNoMask",
+   "set": "holdout",
+   "up": "+Z",
+   "path": "DM Stash/Crimson Masquerade/Mortimer - Unsupported/32_Unsupported_Mortimer_BodyNoMask.stl"
+  },
+  {
+   "stem": "Concrete Chunk (2)",
+   "set": "holdout",
+   "up": "+Z",
+   "path": "Basing/Debris Scatter/Concrete Chunk (2).stl"
+  },
+  {
+   "stem": "32_Unsupported_Renard_BodyMask",
+   "set": "holdout",
+   "up": "+Z",
+   "path": "DM Stash/Crimson Masquerade/Renard - Unsupported/32_Unsupported_Renard_BodyMask.stl"
+  },
+  {
+   "stem": "fago_lapices_1",
+   "set": "holdout",
+   "up": "+Z",
+   "path": "fago_lapices_1.stl"
+  },
+  {
+   "stem": "75_Unsupported_Arkham_BodyNoMask",
+   "set": "holdout",
+   "up": "+Z",
+   "path": "DM Stash/Crimson Masquerade/Arkham Ravenswood - Unsupported/75_Unsupported_Arkham_BodyNoMask.stl"
+  },
+  {
+   "stem": "32mm_TatteredTrooper2",
+   "set": "holdout",
+   "up": "+Y",
+   "path": "Loot Studios/Fear the Eternal Embrace/TatteredTrooper2/32mm/No Supports/32mm_TatteredTrooper2.stl"
+  },
+  {
+   "stem": "75_Unsupported_Aimar_BodyNoMask",
+   "set": "holdout",
+   "up": "+Z",
+   "path": "DM Stash/Crimson Masquerade/Aimar - Unsupported/75_Unsupported_Aimar_BodyNoMask.stl"
+  },
+  {
+   "stem": "Damaged Metal Sheet Sprue",
+   "set": "holdout",
+   "up": "+Z",
+   "path": "Basing/Debris Scatter/Damaged Metal Sheet Sprue.stl"
+  },
+  {
+   "stem": "Bunker_smal_roof",
+   "set": "holdout",
+   "up": "+Z",
+   "path": "Warhammer/Imperial_Bunker_-_Smal/files/Bunker_smal_roof.stl"
+  },
+  {
+   "stem": "Dwarf Slayer hammer only",
+   "set": "holdout",
+   "up": "+Z",
+   "path": "Dwarf Slayer hammer only.stl"
+  },
+  {
+   "stem": "Rleg",
+   "set": "holdout",
+   "up": "+Z",
+   "path": "Warhammer/statistical cat/Rleg.stl"
+  },
+  {
+   "stem": "32_Unsupported_WisDevourer_Body",
+   "set": "holdout",
+   "up": "+Z",
+   "path": "DM Stash/DM Stash Jan '22 Brawn & Brains STLs - Unsupported/Wisdom Devourer - Unsupported/Unsupported/32_Unsupported_WisDevourer_Body.stl"
+  },
+  {
+   "stem": "Dragonpeak_Barbarian_C_(m_helmet) (repaired)",
+   "set": "holdout",
+   "up": "+Z",
+   "path": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian C (m)/Dragonpeak_Barbarian_C_(m_helmet) (repaired).stl"
+  },
+  {
+   "stem": "Brunilde_Snakeslayer (repaired)",
+   "set": "holdout",
+   "up": "+Z",
+   "path": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Brunilde Snakeslayer/Brunilde_Snakeslayer (repaired).stl"
+  },
+  {
+   "stem": "tdr-5se3",
+   "set": "holdout",
+   "up": "+Z",
+   "path": "Battletech/tdr-5se3.stl"
+  },
+  {
+   "stem": "Dragonpeak_Smilodon_Rider_D_(f) (repaired)",
+   "set": "holdout",
+   "up": "+Z",
+   "path": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider D (f)/Dragonpeak_Smilodon_Rider_D_(f) (repaired).stl"
+  },
+  {
+   "stem": "Container_complete",
+   "set": "holdout",
+   "up": "+Z",
+   "path": "Warhammer/Warhammer_30K___40K_-_Container/files/Container_complete.stl"
+  },
+  {
+   "stem": "arc-1a-doors-none4",
+   "set": "holdout",
+   "up": "+Z",
+   "path": "Battletech/arc-1a-archer-for-battletech/arc-1a-doors-none4.stl"
+  }
+ ],
+ "collection_root": "/run/media/masa/Files and S/STL",
+ "note_on_paths": "`path` is relative to collection_root; the root is recorded only so the set can be relocated. Match on path, not on sample index."
+}
