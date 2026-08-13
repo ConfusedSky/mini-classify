@@ -90,11 +90,15 @@ Same mesh, same 512×512 target, all three on this machine:
 | VRAM per copy | n/a (host) | +102 MiB, exact | n/a (host) |
 | explicit evict | no — hide only | `buffer.release()` | `buffer.release()` |
 | contexts per process | **1 — a 2nd core-dumps** | several, verified | several, verified |
+| GIL held per view @2048 | ~21–26 ms | — | **~4–9 ms** |
 
 **The frame numbers are not apples-to-apples.** The ModernGL figure is a
 hand-written Lambert shader; Filament's `defaultLit` with IBL does more work per
 pixel. Treat 20× as an upper bound on the shading side and the device move as
 the part that is solid. Upload and residency numbers *are* comparable.
+
+The GIL row carries the same caveat and is measured at 2048 rather than 512 —
+see [The GIL](#the-gil-multi-context-is-not-parallel-rendering).
 
 ## Topology matters more than triangle count
 
@@ -181,6 +185,31 @@ pixels differ at all.
 A ~10× cut to the pre-pixel path, for a parser and an eval re-run, against a
 renderer port that needs the same eval re-run and much more work.
 
+**How much of it reaches the wall clock is a separate question.** The 4158 ms
+path is parse + upload, and those two sit differently: `MeshPrefetcher` already
+overlaps the parse on a background thread, while `_upload` runs inline on the
+render thread. Spike 1 measured `mesh-wait` — the main thread actually blocked
+on a mesh — at **3.2% of wall** (177 ms/model, 8 models, 2048px), so on that set
+the prefetcher was hiding nearly all of the parse. The parser swap deletes
+~3.8 s of *loader-thread* work and ~0 ms of critical path directly.
+
+That is not an argument against it, because three things still make it pay:
+
+* **The p99 case, where the prefetcher loses.** One loader thread hides a 0.83 s
+  median load behind ~1.7 s of downstream work, but a 15.4 s p99 load against
+  ~12.6 s does not fit — that is the tail `loader_worker_count` exists for in
+  [actors_proposal.md](actors_proposal.md). A ~10× parse largely removes that
+  problem instead of parallelising around it.
+* **CPU freed for the thing that is on the critical path.** py-spy put
+  `load_mesh` at 33% of all samples; SigLIP's image preprocessing, which *is*
+  inline, is ~19% of run time. They compete for the same cores.
+* **Upload is inside the 6.6%, but it is the part that is not hidden.** Whatever
+  the residency cache or a renderer swap saves lands on the critical path
+  directly, which is why 6.6% understates it.
+
+Caveat on the 3.2%: that sample was 32 mm models from one collection, not the
+800k-tri mesh measured here. `mesh-wait` on a heavy set would be higher.
+
 ## The row that matters most
 
 `contexts per process`. Creating a second `OffscreenRenderer` aborts the
@@ -196,6 +225,57 @@ rendered through it, and exited clean.
 plus explicit residency. So "swap the renderer" and "move to the 4060" are
 independent decisions, and the first is the one carrying the structural win.
 Spike 2 can now measure three configurations rather than two.
+
+**Read that row as "several contexts", not "parallel rendering."** Contexts are
+only half the constraint; the GIL is the other half, and it does not go away —
+see below.
+
+## The GIL: multi-context is not parallel rendering
+
+A second context removes the *crash*. It does not make the render stage
+concurrent with Python, because ModernGL holds the GIL too — just far less of
+it. Same spinner method used on `render_to_image` (a background thread counting
+in pure Python; if a call releases the GIL the counter keeps climbing):
+
+Comparing the per-view sequence each actually pays — Open3D's
+`classify_stls.py:139`, ModernGL's draw + `finish` + `read`:
+
+| per view @2048 | wall | GIL held | GIL-held time |
+|---|---|---|---|
+| Open3D | 40–44 ms | 51–58% | **~21–26 ms** |
+| ModernGL (iGPU) | 7.4–12.9 ms | 51–66% | **~4–9 ms** |
+
+Call it **3–5× less GIL-held time per view** — but not released. Two ModernGL
+contexts on two threads still serialize for the held portion, so a threaded
+Renderer is not free and needs its own measurement before the actor design leans
+on it.
+
+What this changes is the *magnitude*, and with it the decision. Over ~40 renders
+that is roughly 0.25 s of GIL per model against Open3D's ~0.9 s — the difference
+between a Renderer that starves every other actor for the whole run and a
+serialization point that can be budgeted around. So "the Renderer must be its own
+process", which three separate findings were converging on, becomes optional
+rather than forced. Optional matters, because a process boundary means shipping
+renders across it: 12.6 MB per view at 2048.
+
+It also compounds with render size. At 512 the same sequence was ~1.8 ms, so
+render size, GIL pressure and SigLIP preprocessing cost all move together.
+
+**Caveats, and they are not small.** The ranges above are the honest output of
+five runs, not tidy means — this measurement is noisy on this machine, and both
+backends varied by ~1.7× run to run (Open3D's `render_to_image` alone came out
+at 36.6 ms in one run and 61.2 ms in another). The direction is robust; the
+multiplier is not. Re-measure before anything depends on it.
+
+It is also not a controlled comparison — 81,920-tri icosphere with a Lambert
+shader against a 159k-tri sphere with `defaultLit`+IBL, the same asymmetry the
+frame-time caveat above flags.
+
+Only the *combined* per-view row is trustworthy. Calls measured in isolation and
+repeated back-to-back disagree with it: `fbo.read` alone came out slower at 512
+than at 2048, and Open3D's `render_to_image` alone measured *longer* than the
+full line that contains it. A readback with no draw behind it does not hit the
+same path.
 
 ## raylib
 
@@ -277,7 +357,7 @@ parser lands rather than designing the actor graph around today's split.
 
 ## Reproducing
 
-Both harnesses are in `eval/` and print every number quoted above.
+The harnesses are in `eval/` and print every number quoted above.
 
 ```bash
 # Q1, Q2 and the device finding
@@ -286,6 +366,13 @@ Both harnesses are in `eval/` and print every number quoted above.
 # device selection, residency, second context
 uv venv /tmp/mgl && uv pip install --python /tmp/mgl/bin/python moderngl trimesh
 /tmp/mgl/bin/python eval/renderer_moderngl.py 0     # 0 = 4060, 1 = iGPU
+
+# GIL, both backends — run each a few times, the spread is real
+.venv/bin/python  eval/renderer_gil.py open3d 2048
+/tmp/mgl/bin/python eval/renderer_gil.py moderngl 1 2048
+
+# parse / weld / upload, and the pixel diff against the noise floor
+.venv/bin/python eval/load_path.py <mesh.stl>
 ```
 
 moderngl and trimesh are deliberately kept out of the project deps — nothing in
