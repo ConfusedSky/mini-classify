@@ -195,6 +195,39 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   currently untestable: `up_axis_labels.json` is the only ground truth in the
   repo. Hand-labelling a category set is the prerequisite, not another backbone
   run.
+- **Is the category ranking any good at all?** The prior entry asks whether a
+  *better* backbone helps. This asks the question underneath it, and it is the
+  one that gates the rest: every accuracy number in this project — 43/44, 39/44,
+  every arbiter comparison — is up-axis. The top-3 category ranking that the CSV
+  actually delivers has never been scored against anything. Until it is, render
+  size, backbone and pipeline work are all optimising the cost of producing an
+  output whose quality is unmeasured. **Cheaper than it looks:** the recorded
+  prerequisite is hand-labelling a category set (602 models), but if the real
+  use is search, precision@k over a dozen queries needs only the top ~20 results
+  per query judged — ~200 judgements, scoring the thing that is actually used.
+  `test_categories.py` already produces those ranked lists from cached
+  embeddings, so the harness mostly exists.
+- **Category classification is render-size sensitive; pose is not.** First data
+  on the asymmetry the entry above predicts. Same 8 models, cold, `--views 8
+  --elevations 20,-20`, 2048px against 384px:
+
+  | | identical |
+  |---|---|
+  | up axis | 8/8 |
+  | top1 category | 7/8 (`Remorhaz_A`: "demon or monster" → "dragon") |
+  | `front_view` | 4/8 |
+
+  Poses match exactly, as `patch16-512` invariance in LEARNINGS predicts for a
+  384px source. But half the front-view indices moved and one top1 flipped, so
+  the two paths cannot be assumed to behave alike, and the free win of rendering
+  pose tiles at a fixed 384 does **not** transfer to the classification views
+  without measuring it. With no ground truth this says "sensitive", not "worse" —
+  the Remorhaz flip is arguably an improvement. A no-label sensitivity run
+  bounds the risk without resolving correctness: at 2.7 s/model a full 602-model
+  pass at 384 is ~27 minutes, which counts how many models change answer.
+  Note this decoupling is currently blocked anyway — one `OffscreenRenderer` per
+  process, fixed size at construction, so pose tiles at 384 and views at 2048
+  cannot coexist in one process (see `docs/masa/actors_proposal.md`).
 
 ## Performance work not done
 
