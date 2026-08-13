@@ -44,14 +44,60 @@ def test_extract_puts_the_stl_where_the_walk_will_find_it(tmp_path):
     assert not list(z.parent.glob("*.partial"))
 
 
-def test_a_second_run_reports_done_and_does_not_re_extract(tmp_path):
+def test_a_second_run_on_an_intact_destination_is_done(tmp_path):
+    z = leaf(tmp_path)
+    _, dest, _ = plan_zip(z)
+    extract(z, dest)
+    action, again, _ = plan_zip(z)
+    assert action == "done" and again == dest
+
+
+def test_a_destination_that_no_longer_matches_the_archive_is_repaired(tmp_path):
+    # the archive is the authority on what a finished extraction looks like.
+    # The cost of that: a hand-edited file is treated as damage and replaced.
     z = leaf(tmp_path)
     _, dest, _ = plan_zip(z)
     extract(z, dest)
     (dest / "32mm_Barrier.stl").write_text("edited by hand\n")
-    action, again, _ = plan_zip(z)
-    assert action == "done" and again == dest
-    assert (dest / "32mm_Barrier.stl").read_text() == "edited by hand\n"
+    assert plan_zip(z)[0] == "repair"
+
+
+def test_a_zero_length_file_is_repaired_not_called_done(tmp_path):
+    # exactly what a drive going read-only mid-extraction leaves behind: the
+    # tree in place, the files inside it empty. The old check — directory
+    # exists and is non-empty — called this finished.
+    z = leaf(tmp_path)
+    _, dest, _ = plan_zip(z)
+    extract(z, dest)
+    (dest / "32mm_Barrier.stl").write_bytes(b"")
+    assert plan_zip(z)[0] == "repair"
+    extract(z, dest)
+    assert (dest / "32mm_Barrier.stl").read_text() == "solid\n"
+    assert plan_zip(z)[0] == "done"
+    assert not list(z.parent.glob("*.partial"))
+
+
+def test_a_missing_file_is_repaired(tmp_path):
+    z = leaf(tmp_path)
+    _, dest, _ = plan_zip(z)
+    extract(z, dest)
+    (dest / "32mm_Barrier.stl").unlink()
+    (dest / "leftover.txt").write_text("keeps the directory non-empty")
+    assert plan_zip(z)[0] == "repair"
+
+
+def test_a_failed_repair_leaves_the_damaged_copy_in_place(tmp_path):
+    # the swap happens only after the replacement is staged, so a mid-repair
+    # failure must not cost the files that were already there
+    z = leaf(tmp_path)
+    _, dest, _ = plan_zip(z)
+    extract(z, dest)
+    (dest / "32mm_Barrier.stl").write_bytes(b"")
+    z.write_bytes(z.read_bytes()[:-40])          # truncate the source
+    with pytest.raises(Exception):
+        extract(z, dest)
+    assert dest.is_dir() and (dest / "32mm_Barrier.stl").exists()
+    assert not list(z.parent.glob("*.partial"))
 
 
 def test_an_empty_leftover_directory_is_not_mistaken_for_a_finished_one(tmp_path):
