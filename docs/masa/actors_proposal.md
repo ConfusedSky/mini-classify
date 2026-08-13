@@ -8,10 +8,16 @@ each handle a stage of the process. This also should help simplify things
 because right now there is a huge mess of intertwined processes and
 conditionals, without many **hard** boundaries to break things up.
 
-The GPU sits at ~30% utilization and the CPU lower still, so there is real idle
-time to reclaim. Note that `nvidia-smi` utilization is percent-of-time-a-kernel-
-is-resident, not occupancy — 30% means the card is idle 70% of the time, which
-is the gap this is meant to close. Mesh loading is *not* part of that gap:
+The RTX 4060 sits at ~30% utilization and the CPU lower still, so there is real
+idle time to reclaim. Note that `nvidia-smi` utilization is
+percent-of-time-a-kernel-is-resident, not occupancy — 30% means the card is idle
+70% of the time.
+
+That idle is **not** render and embed contending for one card. Measured: Open3D
+brings up EGL headless on `/dev/dri/renderD129`, which is `amdgpu` — the Phoenix1
+integrated GPU. The 4060 is `renderD128`/`nvidia`. Rendering is hardware
+accelerated, just on the iGPU, and the 30% on the 4060 is SigLIP by itself. See
+[Devices](#devices). Mesh loading is not part of the gap either:
 `MeshPrefetcher` already overlaps it (see Loader below).
 
 The structural win stands on its own. Hard stage boundaries are what make it
@@ -84,13 +90,35 @@ index.
 * Passes along kind and pose metadata to the `Renderer`.
 * Two tiers:
   * **Host tier** — up to [loader_host_cache=4GiB] of decoded meshes in RAM.
-  * **Device tier** — up to [loader_device_cache=2GiB] of meshes already
-    uploaded to the GPU, handed to the `Renderer` ready to draw.
+  * **Device tier** — up to [loader_device_cache=2GiB] of meshes already uploaded
+    to the renderer, kept resident by name and hidden rather than destroyed.
 
-The device tier is the interesting half. `_upload` is ~15 s on a 4M-triangle
-mesh against ~0.15 s per view — it is the single largest per-model cost, and
-today it sits squarely on the Renderer's critical path. Uploading ahead is how
-that comes off it.
+The device tier is the interesting half. `_upload` is recorded as the single
+largest per-model cost, and it sits squarely on the Renderer's critical path —
+though how large is itself in question now (see
+[Spike 3](#spike-3-mesh-ownership-and-the-two-tier-loader)).
+
+**It is expressible against Open3D**, which is a correction to an earlier draft
+of this document. `show_geometry(name, False)` hides *without* freeing —
+`clear_geometry()` and `remove_geometry()` both destroy the buffers, but a hidden
+geometry stays registered (`has_geometry()` is still True,
+`geometry_is_visible()` is False). Measured:
+
+| operation                                 | time   |
+|-------------------------------------------|--------|
+| `show_geometry(True)` + render            | 34 ms  |
+| `remove_geometry` + `add_geometry` + render| 369 ms |
+
+So the device tier is: add each mesh under a unique name, hide instead of
+clearing, and keep an LRU of resident names. ~11× on any mesh revisited, with no
+renderer of our own required.
+
+**The only revisit in a run is the pose → embed round trip.** A file renders its
+candidate tiles, gets posed, and comes back for the embed renders. That means the
+LRU pays on *cold* runs — the ones that take hours — and buys nothing on a warm
+one, where a cached pose sends the file straight through as `"kind": "embed"` in
+a single pass. Worth being honest about the population rather than quoting 11×
+against the whole run.
 
 Loading is 33% of a median model and 55% of a p99 one (0.83 s / 15.4 s), it is
 disk+CPU while everything after it is GPU, and Open3D's reader releases the GIL.
@@ -100,29 +128,30 @@ downstream work); on a p99 model the 15.4 s load exceeds the ~12.6 s behind it,
 so a run of heavy meshes outruns one loader. That tail is what
 `loader_worker_count` is for, not a claim that disk is an unmeasured bottleneck.
 
-Three things are unresolved here and gate on
+**The rotation is the blocker, and it is now the whole design risk.** Hiding and
+re-showing only helps if the resident geometry is reusable *as-is*, and today it
+is not: the embed render mutates vertices via
+`mesh.rotate(rotation_to_z_up(...))` before `render_views`, so the geometry left
+resident by the pose pass is the *unrotated* mesh. Re-showing it renders the
+wrong pose and saves nothing. The fix is already proven in this codebase —
+`render_up_candidate_grid` does one upload and carries the rotation into the
+camera with `R.T` rather than rotating the mesh six times, verified
+pixel-identical. Move the rotation to the camera and the revisit costs 34 ms
+instead of 369 ms *plus* a mesh reload. Skip it and the LRU is inert on precisely
+the path that would use it.
+
+Two things remain unresolved and gate on
 [Spike 3](#spike-3-mesh-ownership-and-the-two-tier-loader):
 
-1. **The device tier presupposes we own the upload path.** It is not expressible
-   against Open3D at all: the upload is `renderer.scene.add_geometry` inside
-   `_upload`, owned by the Filament scene on the Renderer's thread, and
-   `clear_geometry()` evicts the previous mesh. There is no "keep these N
-   resident and pick one" against that API. So it is host-tier-only with Open3D,
-   or both tiers with a renderer we control — the two-tier design and the
-   roll-our-own question are one decision, not two.
-2. **Hold vs reload across the pose round trip.** "Hold until the Renderer
-   releases" pins a mesh across pose → arbiter → embed-render. With a network
-   arbiter at ~24 s and ~20% of files escalating, that pins multi-GB meshes for
-   half a minute each. The current code reloads instead, deliberately: "a
-   4M-triangle mesh costs more memory than the reload costs time." A device tier
-   changes that arithmetic — the file comes back and its mesh is still on the
-   card — but only if the geometry is reusable *as-is*. Today it is not: the
-   embed render mutates vertices via `mesh.rotate(rotation_to_z_up(...))` before
-   `render_views`. Our own renderer would apply the rotation as a model matrix at
-   draw time instead. That trick is already proven here —
-   `render_up_candidate_grid` does one upload and carries the camera with `R.T`
-   rather than rotating the mesh six times, verified pixel-identical.
-3. **Whether 4GiB of host tier is even reachable.** A 4M-triangle mesh is
+1. **How deep the LRU has to be.** For a non-escalating file the revisit distance
+   is short. For the ~20% that hit the arbiter it is ~24 s of other work, so the
+   LRU must still hold those meshes when they come back — otherwise the escalated
+   files, already the slow ones, also pay full re-upload. Depth is therefore a
+   function of how many files the `Supervisor` admits into the arbiter window:
+   the same counter as admission and quiescence, for the third time. Each entry
+   also carries the framing (`center`, `radius`) that `_upload` returns, since
+   that is computed from the mesh and would otherwise have to be recomputed.
+2. **Whether 4GiB of host tier is even reachable.** A 4M-triangle mesh is
    roughly 150 MB in Open3D's representation (double-precision points and
    normals, int32 triangles — to be confirmed by the spike), so 4GiB is ~27 heavy
    meshes, and four workers cannot usefully run that far ahead of a consumer that
@@ -140,7 +169,15 @@ Three things are unresolved here and gate on
 * Pose renders are then sent to `Poser` and embed renders are sent to `Embedder`.
 
 Single thread, single `OffscreenRenderer`, created on the Renderer's own thread
-rather than lazily on main. Filament is not something we drive from two threads.
+rather than lazily on main. This is not a style choice: **one
+`OffscreenRenderer` per process** is a hard limit — a second one does not fail
+politely, Filament's resource manager throws from a destructor and the
+interpreter aborts (LEARNINGS). Rendering cannot be threaded *or*
+multi-instanced within a run, only split across processes. So the render stage
+is a serial resource by construction, and everything else is arranged around it.
+
+The Renderer owns the device-tier LRU, since the resident names live in its
+scene. The Loader decides what should be resident; the Renderer is what holds it.
 
 ### Poser
 
@@ -213,26 +250,40 @@ takes priority over new work. Forward pressure is applied at the front instead �
 the `Supervisor` only admits a file when there is room for it, which is the same
 counter that detects quiescence.
 
-## GPU budget
+## Devices
 
-With ollama out, three consumers become two, both resident:
+There are **two** GPUs here, and the pipeline already straddles both:
 
-| consumer                | footprint     |
-|-------------------------|---------------|
-| Embedder                | ~2.2 GiB      |
-| Renderer + device tier  | up to ~2 GiB+ |
-| Arbiter                 | network only  |
-| **budget**              | **8 GiB**     |
+| stage      | device                          | memory                    |
+|------------|---------------------------------|---------------------------|
+| Renderer   | AMD Phoenix1 iGPU (`renderD129`)| shared system RAM         |
+| Embedder   | RTX 4060 (`renderD128`)         | ~2.2 GiB of 8 GiB VRAM    |
+| Arbiter    | network                         | —                         |
 
-The Renderer and the Loader's device tier are **one allocation, not two**: the
-Renderer draws from resident geometry the Loader uploaded rather than uploading
-its own. Counting them separately would put us at 2.2 + 2 + 2 = 6.2 GiB and
-spend most of the headroom for nothing.
+Consequences:
 
-That still leaves room, but note the Renderer figure is not enforced by anything
-today — it is whatever the largest mesh happens to be, and it scales with
-`--render-size`. [Spike 2](#spike-2-gpu-coresidency-and-overlap) measures the
-distribution at the real run config rather than trusting one number.
+* **Render and embed do not contend.** Different devices entirely, so overlapping
+  them is close to free. This is the strongest argument in the proposal and it
+  was discovered by accident.
+* **The 4060 holds SigLIP and nothing else.** The VRAM budget is not tight; there
+  is no renderer allocation on that card to account for.
+* **The device tier is host memory under another name.** The iGPU draws from
+  shared system RAM, so `loader_device_cache` and `loader_host_cache` come out of
+  the same pool and compete for the same bandwidth. Size them together, not
+  independently.
+
+Moving rendering onto the 4060 is **not** a flag flip. Forcing the NVIDIA EGL
+vendor library fails at `eglInitialize` and then core-dumps — NVIDIA headless
+wants `eglQueryDevicesEXT` + `EGL_PLATFORM_DEVICE_EXT` rather than a default
+display, and Filament's GL backend does not ask that way. Reaching the discrete
+card means Filament's Vulkan backend or a renderer of our own, which folds into
+the roll-our-own question rather than standing apart from it.
+
+And it is genuinely unclear that we *want* to. iGPU-render + dGPU-embed is free
+cross-device parallelism; consolidating onto the 4060 reintroduces exactly the
+contention we turn out not to have.
+[Spike 2](#spike-2-the-device-split) measures both rather than assuming the
+discrete card wins.
 
 ## Shutdown
 
@@ -284,31 +335,43 @@ idle 70% across render, embed and arbiter-tail. Loading is already known-
 overlapped except on heavy meshes, so it is not a suspect. This is the only thing
 that gives "worth it performance wise" a denominator.
 
-### Spike 2: GPU coresidency and overlap
+### Spike 2: the device split
 
-Filament and SigLIP resident together at the real run config
-(`--render-size 2048 --views 8 --elevations 20,-20`). Measure peak VRAM across
-the mesh size distribution, and whether concurrent render+embed actually beats
-taking turns or the driver just serializes them.
+Coresidency is mostly answered — the two stages are on different GPUs and do not
+contend. What is left is whether the current split is the right one, at the real
+run config (`--render-size 2048 --views 8 --elevations 20,-20`):
+
+* Render throughput on the Phoenix1 iGPU versus the RTX 4060, if Filament can be
+  reached on the 4060 at all (Vulkan backend, or our own renderer).
+* What iGPU rendering costs in system memory bandwidth, since the Loader's host
+  tier is competing for it.
+* Whether consolidating onto the 4060 is a net loss once SigLIP has to share it —
+  the split we have may already be the right answer.
 
 ### Spike 3: mesh ownership and the two-tier loader
 
-Host tier only with Open3D uploading on the Renderer's thread, versus host +
-device tier on a renderer we control. Measure:
+The named-LRU device tier, on real STLs rather than a synthetic mesh. Measure:
 
-* Bytes per mesh across the collection's size distribution, to confirm what
-  4GiB of host tier and 2GiB of device tier actually hold.
-* Peak RSS holding N meshes at 4 workers, and the hold-vs-reload tradeoff across
-  the pose round trip.
-* Whether upload can overlap Filament work at all under Open3D — if it cannot,
-  the device tier is the only way to get `_upload` off the critical path, and
-  the roll-our-own decision is made for us.
-* Whether the rotation can move to a model matrix at draw time, so a mesh
-  resident from the pose render is reusable for the embed render.
+* **Whether the rotation moves to the camera cleanly.** Everything else here is
+  worthless if it does not. `render_up_candidate_grid` is the precedent; confirm
+  it holds for the embed render across all six candidate ups.
+* **Whether render time degrades as hidden geometry accumulates.** The 34 ms
+  figure is at small depth. If Filament walks the scene graph per frame there
+  may be a per-resident cost that only shows up at depth 20 with 4M-triangle
+  meshes — that would quietly undo the win, and it is a ten-minute measurement.
+* **Bytes per mesh** across the collection's size distribution, host-side and
+  resident, to confirm what 4GiB and 2GiB actually hold.
+* **Re-measure `_upload`.** The 15 s figure for a 4M-triangle mesh does not
+  survive a first look: a 159k-triangle sphere uploads in 0.01 s and renders in
+  8 ms/view at 512 px, which extrapolates to ~0.25 s rather than 15 s. One
+  synthetic mesh is not enough to overturn a recorded measurement, but the gap is
+  wide enough that the real number has to be established before anything is
+  designed around it.
+* **Peak RSS** holding N meshes at 4 workers, and the hold-vs-reload tradeoff
+  across the pose round trip now that re-showing is 34 ms.
 
-`_upload` is ~15 s on a 4M-triangle mesh against ~0.15 s per view, so this
-dominates whatever it touches. It is the most expensive spike of the four and
-the one with the largest upside.
+This is the most expensive spike of the four and the one with the largest
+upside.
 
 ### Spike 4: GIL behaviour
 
