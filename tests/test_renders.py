@@ -4,8 +4,8 @@ import os
 import pytest
 from PIL import Image
 
-from classify_stls import (RENDER_FORMATS, render_index, render_key,
-                           render_subdir, save_renders)
+from classify_stls import (RENDER_FORMATS, embeds_dir, render_index, render_key,
+                           render_subdir, renders_dir, save_renders)
 
 
 def args(render_size=2048, views=8, elevations=(20.0, -20.0)):
@@ -41,8 +41,8 @@ def test_key_separates_models_that_share_a_filename(tmp_path):
     for d in (a, b):
         d.mkdir()
         (d / "Baal_Flaming_Sword_L.stl").touch()
-    ka, kb = render_key(a / "Baal_Flaming_Sword_L.stl"), \
-        render_key(b / "Baal_Flaming_Sword_L.stl")
+    ka, kb = render_key(a / "Baal_Flaming_Sword_L.stl", tmp_path), \
+        render_key(b / "Baal_Flaming_Sword_L.stl", tmp_path)
     assert ka != kb
     assert ka.startswith("Baal_Flaming_Sword_L_")  # stem stays searchable
 
@@ -52,9 +52,9 @@ def test_key_is_stable_across_edits_to_the_file(tmp_path):
     # rather than leaving a stale set behind under a new name
     f = tmp_path / "bunny.stl"
     f.write_bytes(b"one")
-    before = render_key(f)
+    before = render_key(f, tmp_path)
     f.write_bytes(b"two different bytes")
-    assert render_key(f) == before
+    assert render_key(f, tmp_path) == before
 
 
 def test_key_follows_the_file_not_the_spelling_of_the_path(tmp_path):
@@ -63,7 +63,28 @@ def test_key_follows_the_file_not_the_spelling_of_the_path(tmp_path):
     (tmp_path / "sub").mkdir()
     f = tmp_path / "sub" / "bunny.stl"
     f.touch()
-    assert render_key(tmp_path / "sub" / ".." / "sub" / "bunny.stl") == render_key(f)
+    assert render_key(tmp_path / "sub" / ".." / "sub" / "bunny.stl", tmp_path) \
+        == render_key(f, tmp_path)
+
+
+def test_the_cache_holds_both_derived_directories(tmp_path):
+    # one --cache-dir is the whole cache: a renders directory paired with the
+    # wrong cache would show one run's images beside another's embeddings
+    assert embeds_dir(tmp_path) == tmp_path / "embeds"
+    assert renders_dir(tmp_path, args(384, 8, [20.0, -20.0])) == \
+        tmp_path / "renders" / "384px-8v-e20,-20"
+
+
+def test_a_camera_config_change_is_a_different_render_directory(tmp_path):
+    a = renders_dir(tmp_path, args(384, 8, [20.0]))
+    b = renders_dir(tmp_path, args(512, 8, [20.0]))
+    assert a != b
+
+
+def test_caching_off_derives_no_directories(tmp_path):
+    # --cache-dir '' disables the cache; --save-renders then has nowhere to go
+    assert embeds_dir("") is None
+    assert renders_dir("", args()) is None
 
 
 def test_index_resolves_whatever_format_was_written(tmp_path):

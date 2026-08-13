@@ -23,8 +23,8 @@ def tile(path):
     Image.new("RGB", (8, 8)).save(path)
 
 
-def plan(rdir, files, by_stem):
-    return plan_dir(rdir, by_stem, {render_key(f) for f in files})
+def plan(rdir, files, by_stem, stl_root):
+    return plan_dir(rdir, by_stem, {render_key(f, stl_root) for f in files}, stl_root)
 
 
 def test_renames_when_one_model_owns_the_filename(tmp_path):
@@ -32,10 +32,10 @@ def test_renames_when_one_model_owns_the_filename(tmp_path):
     rdir = tmp_path / "renders"
     tile(rdir / "bunny_view0.jpg")
     tile(rdir / "bunny_pose.png")
-    renames, deletes, already, orphans = plan(rdir, files, by_stem)
+    renames, deletes, already, orphans = plan(rdir, files, by_stem, tmp_path)
     assert not deletes and not already and not orphans
     assert sorted(d.name for _, d in renames) == \
-        [f"{render_key(files[0])}_pose.png", f"{render_key(files[0])}_view0.jpg"]
+        [f"{render_key(files[0], tmp_path)}_pose.png", f"{render_key(files[0], tmp_path)}_view0.jpg"]
 
 
 def test_deletes_the_images_of_a_shared_filename(tmp_path):
@@ -43,7 +43,7 @@ def test_deletes_the_images_of_a_shared_filename(tmp_path):
     files, by_stem = collection(tmp_path, "kit1/sword.stl", "kit2/sword.stl")
     rdir = tmp_path / "renders"
     tile(rdir / "sword_view0.jpg")
-    renames, deletes, _, _ = plan(rdir, files, by_stem)
+    renames, deletes, _, _ = plan(rdir, files, by_stem, tmp_path)
     assert not renames
     assert [(p.name, why) for p, why in deletes] == \
         [("sword_view0.jpg", "filename shared by 2 models")]
@@ -55,15 +55,15 @@ def test_leaves_files_it_cannot_account_for(tmp_path):
     rdir = tmp_path / "renders"
     tile(rdir / "vanished_view0.jpg")
     tile(rdir / "contact-sheet.png")
-    renames, deletes, _, orphans = plan(rdir, files, by_stem)
+    renames, deletes, _, orphans = plan(rdir, files, by_stem, tmp_path)
     assert not renames and not deletes and orphans == 2
 
 
 def test_rerunning_it_changes_nothing(tmp_path):
     files, by_stem = collection(tmp_path, "stl/bunny.stl")
     rdir = tmp_path / "renders"
-    tile(rdir / f"{render_key(files[0])}_view0.jpg")
-    renames, deletes, already, orphans = plan(rdir, files, by_stem)
+    tile(rdir / f"{render_key(files[0], tmp_path)}_view0.jpg")
+    renames, deletes, already, orphans = plan(rdir, files, by_stem, tmp_path)
     assert not renames and not deletes and not orphans and already == 1
 
 
@@ -72,8 +72,8 @@ def test_drops_an_old_file_whose_migrated_copy_exists(tmp_path):
     files, by_stem = collection(tmp_path, "stl/bunny.stl")
     rdir = tmp_path / "renders"
     tile(rdir / "bunny_view0.jpg")
-    tile(rdir / f"{render_key(files[0])}_view0.jpg")
-    renames, deletes, already, _ = plan(rdir, files, by_stem)
+    tile(rdir / f"{render_key(files[0], tmp_path)}_view0.jpg")
+    renames, deletes, already, _ = plan(rdir, files, by_stem, tmp_path)
     # one fate per file: the migrated copy is the 1 "already", and the old
     # copy is a delete only — not also counted as migrated
     assert not renames and already == 1
@@ -86,6 +86,6 @@ def test_a_stem_ending_in_view_digits_is_split_at_the_right_end(tmp_path):
     files, by_stem = collection(tmp_path, "stl/Sword_view2.stl")
     rdir = tmp_path / "renders"
     tile(rdir / "Sword_view2_view0.jpg")
-    renames, deletes, _, orphans = plan(rdir, files, by_stem)
+    renames, deletes, _, orphans = plan(rdir, files, by_stem, tmp_path)
     assert not deletes and not orphans
-    assert renames[0][1].name == f"{render_key(files[0])}_view0.jpg"
+    assert renames[0][1].name == f"{render_key(files[0], tmp_path)}_view0.jpg"

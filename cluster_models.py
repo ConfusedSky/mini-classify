@@ -1,7 +1,7 @@
 """Cluster the collection by cached embeddings — discover structure without categories.
 
 Usage:
-  python cluster_models.py /path/to/stls --k 10 --renders-dir my_renders
+  python cluster_models.py /path/to/stls --k 10
 
 Groups models by visual similarity (k-means over the classifier's cached
 SigLIP embeddings — no text, no model download). For each cluster prints the
@@ -19,12 +19,12 @@ from PIL import Image
 from sklearn.cluster import KMeans
 
 import pose
-from classify_stls import (add_cache_args, apply_run_params, load_file_list,
-                           render_index, render_key, render_subdir)
+from classify_stls import (add_cache_args, apply_run_params, cache_root,
+                           load_file_list, render_index, render_key, renders_dir)
 from test_categories import load_embedding_matrix
 
 
-def contact_sheet(members, renders, out_base, thumb=160, cols=6, per_sheet=36,
+def contact_sheet(members, renders, out_base, root, thumb=160, cols=6, per_sheet=36,
                   poses=None):
     """Lay every member out on as many sheets as it takes.
 
@@ -35,8 +35,8 @@ def contact_sheet(members, renders, out_base, thumb=160, cols=6, per_sheet=36,
     """
     tiles, no_front, no_render = [], 0, 0
     for f in members:
-        front = (poses or {}).get(pose.file_identity(f), {}).get("front_view", 0)
-        key = render_key(f)
+        front = (poses or {}).get(pose.file_identity(f, root), {}).get("front_view", 0)
+        key = render_key(f, root)
         img_path = renders.get(f"{key}_view{front}")
         if img_path is None:
             no_front += 1
@@ -73,8 +73,6 @@ def main():
     add_cache_args(parser, "STL directory (defaults to the last classify_stls.py run)")
     parser.add_argument("--k", type=int, default=10, help="number of clusters")
     parser.add_argument("--out", default="clusters.csv")
-    parser.add_argument("--renders-dir", help="renders saved by classify_stls.py --save-renders; "
-                                              "enables per-cluster contact sheets")
     parser.add_argument("--sheets-dir", default="cluster-sheets")
     parser.add_argument("--per-sheet", type=int, default=36,
                         help="tiles per contact sheet; clusters larger than this "
@@ -84,8 +82,9 @@ def main():
         raise SystemExit("no input given, and no directory recorded by classify_stls.py — "
                          "pass the STL directory explicitly")
 
+    root = cache_root(Path(args.input), args.cache_dir, confirm=False)
     files = load_file_list(Path(args.input), args.cache_dir)
-    matrix, files, missing = load_embedding_matrix(files, args)
+    matrix, files, missing = load_embedding_matrix(files, args, root)
     poses = pose.load_pose_cache(args.cache_dir)
     matrix = matrix.mean(axis=1)  # pool the per-view embeddings
     matrix /= np.linalg.norm(matrix, axis=1, keepdims=True)
@@ -99,8 +98,10 @@ def main():
     sheets_dir = Path(args.sheets_dir)
     # renders live under the config that produced them, which the run manifest
     # already supplies through add_cache_args
-    renders = render_index(Path(args.renders_dir) / render_subdir(args)) \
-        if args.renders_dir else None
+    # renders live under the cache that produced them; absent when the run
+    # was not given --save-renders
+    rdir = renders_dir(args.cache_dir, args)
+    renders = render_index(rdir) if rdir and rdir.is_dir() else None
     if renders is not None:
         sheets_dir.mkdir(parents=True, exist_ok=True)
 
@@ -114,7 +115,7 @@ def main():
               + (" ..." if len(names) > 6 else ""))
         if renders is not None:
             sheets = contact_sheet([files[i] for i in members], renders,
-                                   sheets_dir / f"cluster_{c:02d}",
+                                   sheets_dir / f"cluster_{c:02d}", root,
                                    per_sheet=args.per_sheet, poses=poses)
             if len(sheets) > 1:
                 print(f"  {len(sheets)} sheets: {sheets_dir}/cluster_{c:02d}"

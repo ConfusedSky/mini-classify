@@ -28,8 +28,10 @@ import torch
 
 import pose
 from classify_stls import (add_cache_args, apply_run_params, as_tensor, cache_key,
-                           embed_raw, embed_texts, load_file_list, pool_sims,
-                           render_index, render_key, render_subdir, total_views)
+                           cache_root, embed_raw, embed_texts, embeds_dir,
+                           load_file_list,
+                           pool_sims, render_index, render_key, renders_dir,
+                           total_views)
 
 
 def link(f, text):
@@ -39,13 +41,13 @@ def link(f, text):
     return f"\033]8;;file://{quote(str(f))}\033\\{text}\033]8;;\033\\"
 
 
-def load_embedding_matrix(files, args):
-    cache_dir = Path(args.cache_dir)
+def load_embedding_matrix(files, args, root):
+    cache_dir = embeds_dir(args.cache_dir)
     poses = pose.load_pose_cache(args.cache_dir)
     vecs, kept, missing = [], [], 0
     for f in files:
-        token = pose.embed_cache_token(poses.get(pose.file_identity(f)), args.up_axis)
-        p = cache_dir / f"{cache_key(f, args, token)}.npy"
+        token = pose.embed_cache_token(poses.get(pose.file_identity(f, root)), args.up_axis)
+        p = cache_dir / f"{cache_key(f, args, token, root)}.npy"
         if p.exists():
             vecs.append(np.load(p))
             kept.append(f)
@@ -119,19 +121,21 @@ def main():
                         help="embed query text verbatim instead of through the "
                              "'a 3D render of a {} miniature' templates (:raw toggles it); "
                              "classification with categories.txt stays templated either way")
-    parser.add_argument("--renders-dir", default="my_renders",
-                        help="saved renders; display names link to the render image when it exists")
     args = apply_run_params(parser)
     if not args.input:
         sys.exit("no input given, and no directory recorded by classify_stls.py — "
                  "pass the STL directory explicitly")
 
-    root = Path(args.input)
-    files = load_file_list(root, args.cache_dir)
-    matrix, files, missing = load_embedding_matrix(files, args)
+    # the cache's anchor, which is also the display base
+    root = cache_root(Path(args.input), args.cache_dir, confirm=False)
+    # the walk follows the input, the keys follow the anchor: a run scoped to
+    # one kit must list that kit, not the whole library it is cached against
+    files = load_file_list(Path(args.input), args.cache_dir)
+    matrix, files, missing = load_embedding_matrix(files, args, root)
     # renders live under the config that produced them; add_cache_args and the
     # run manifest already agree with the classifier on what that config is
-    renders = render_index(Path(args.renders_dir) / render_subdir(args))
+    rdir = renders_dir(args.cache_dir, args)
+    renders = render_index(rdir) if rdir and rdir.is_dir() else {}
     poses = pose.load_pose_cache(args.cache_dir)
 
     # display name: path relative to the input root, minus filler dirs.
@@ -141,9 +145,9 @@ def main():
     names = []
     for f in files:
         rel = str(f.relative_to(root)) if f.is_relative_to(root) else str(f)
-        front = poses.get(pose.file_identity(f), {}).get("front_view", 0)
+        front = poses.get(pose.file_identity(f, root), {}).get("front_view", 0)
         order = [front] + [v for v in range(total_views(args)) if v != front]
-        rkey = render_key(f)
+        rkey = render_key(f, root)
         found = next((renders[k] for v in order if (k := f"{rkey}_view{v}") in renders), None)
         target = found.resolve() if found else f
         no_front += f"{rkey}_view{front}" not in renders
@@ -152,7 +156,7 @@ def main():
           + (f" ({missing} not in cache — run classify_stls.py to add them)" if missing else ""))
     if no_front:
         print(f"front render missing for {no_front} of {len(files)} models — links use "
-              f"another view or the STL; run classify_stls.py --save-renders {args.renders_dir}")
+              f"another view or the STL; rerun classify_stls.py --save-renders")
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     from transformers import AutoModel, AutoProcessor

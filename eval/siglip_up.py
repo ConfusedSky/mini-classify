@@ -14,7 +14,7 @@ import numpy as np
 import torch
 from PIL import Image
 
-from common import OUT, AX, IDX, load_labels, mark, score  # puts REPO on sys.path
+from common import OUT, AX, IDX, collection_root, load_labels, mark, score  # puts REPO on sys.path
 
 import classify_stls as C
 import pose
@@ -92,6 +92,7 @@ def main():
     pc = root / "embed-cache/pose-cache.json"
     pose_cache = json.load(open(pc)) if pc.exists() else {}
     files = [Path(p) for p in walk["files"]]
+    stl_root = collection_root()   # cache keys are relative to this
     random.seed(11)
     sample = random.sample(files, min(N, len(files)))
 
@@ -129,7 +130,7 @@ def main():
             picks[k] = {"pick": int(np.argmax(score)),
                         "scores": [round(float(v), 4) for v in score]}
 
-        cached = pose_cache.get(pose.file_identity(f))
+        cached = pose_cache.get(pose.file_identity(f, stl_root))
         cached_i = None
         if cached:
             cached_i = next((j for j, u in enumerate(pose.UP_CANDIDATES)

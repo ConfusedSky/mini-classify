@@ -2,9 +2,9 @@
 #
 # Remove derived artifacts so the next classify run recomputes them.
 #
-# By default this clears only the two things that are cheap to rebuild from the
-# STLs alone: the saved renders and the per-view embedding .npy files. Three
-# files in the cache directory survive, because none of them is a render:
+# Everything a run derives lives under the cache directory now. By default this
+# clears only the two cheap-to-rebuild parts of it — <cache>/renders/ and
+# <cache>/embeds/ — and leaves the three files beside them alone:
 #
 #   pose-cache.json   24 up-candidate renders + a SigLIP forward per model, and
 #                     any "vlm" entry also cost a paid arbiter call
@@ -18,8 +18,9 @@
 set -euo pipefail
 cd "$(dirname "$0")"  # the ./ paths below mean this repo, not the caller's cwd
 
-RENDERS=./my_renders2
 CACHE=./embed-cache2
+RENDERS="$CACHE/renders"
+EMBEDS="$CACHE/embeds"
 POSE_CACHE="$CACHE/pose-cache.json"
 
 usage() {
@@ -64,17 +65,17 @@ done
 # -mindepth 1 rather than a ./dir/* glob: it matches dotfiles too, and it does
 # not leave an unmatched literal behind when the directory is already empty.
 if [ -d "$RENDERS" ]; then
-  echo "renders: $(find "$RENDERS" -mindepth 1 -maxdepth 1 | wc -l) entries under $RENDERS"
+  echo "renders: $(find "$RENDERS" -mindepth 1 -maxdepth 1 | wc -l) config dirs under $RENDERS"
   [ "$dry" = 0 ] && find "$RENDERS" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 else
   echo "renders: $RENDERS not present"
 fi
 
-if [ -d "$CACHE" ]; then
-  echo "embeddings: $(find "$CACHE" -maxdepth 1 -name '*.npy' | wc -l) .npy files under $CACHE"
-  [ "$dry" = 0 ] && find "$CACHE" -maxdepth 1 -name '*.npy' -delete
+if [ -d "$EMBEDS" ]; then
+  echo "embeddings: $(find "$EMBEDS" -maxdepth 1 -name '*.npy' | wc -l) .npy files under $EMBEDS"
+  [ "$dry" = 0 ] && find "$EMBEDS" -mindepth 1 -delete
 else
-  echo "embeddings: $CACHE not present"
+  echo "embeddings: $EMBEDS not present"
 fi
 
 case "$poses" in

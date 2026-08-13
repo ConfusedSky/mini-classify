@@ -43,6 +43,13 @@ def load_labels(which=None):
     return out
 
 
+def collection_root():
+    """The collection the labels point into — also the base every cache key is
+    taken relative to (identity.py), so harnesses that read the pose or
+    embedding caches have to agree with it."""
+    return Path(json.loads(LABELS_FILE.read_text())["collection_root"])
+
+
 def mark(pick, gold):
     """Axis name for a prediction, starred when it disagrees with the label."""
     if pick is None:

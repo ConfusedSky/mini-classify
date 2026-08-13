@@ -16,6 +16,8 @@ import numpy as np
 import open3d as o3d
 from PIL import Image, ImageDraw, ImageFont
 
+import identity
+
 UP_CANDIDATES = [np.array(u, dtype=float) for u in
                  [(0, 0, 1), (0, 0, -1), (0, 1, 0), (0, -1, 0), (1, 0, 0), (-1, 0, 0)]]
 
@@ -96,10 +98,16 @@ def needs_arbiter_margin(margin, threshold=MARGIN_THRESHOLD):
     return margin < threshold
 
 
-def file_identity(f):
-    """Pose-cache key: same identity as the embedding cache (path+mtime+size)."""
+def file_identity(f, root):
+    """Pose-cache key: same identity as the embedding cache.
+
+    The path is relative to the collection root so the library can move drives
+    without discarding poses that cost a paid arbiter call to resolve — see
+    identity.py. mtime and size stay, because an edited file is a different
+    model; the mtime is truncated to whole seconds so that a change of
+    filesystem cannot move it out from under the key."""
     stat = f.stat()
-    return f"{f.resolve()}|{stat.st_mtime_ns}|{stat.st_size}"
+    return f"{identity.rel_path(f, root)}|{identity.mtime_key(stat)}|{stat.st_size}"
 
 
 def load_pose_cache(cache_dir):

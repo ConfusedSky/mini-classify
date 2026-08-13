@@ -155,10 +155,10 @@ def test_no_entry_is_never_sufficient():
 def test_file_identity_changes_with_mtime_and_size(tmp_path):
     f = tmp_path / "a.stl"
     f.write_text("x")
-    first = pose.file_identity(f)
-    assert str(f.resolve()) in first
+    first = pose.file_identity(f, tmp_path)
+    assert "a.stl" in first
     f.write_text("xy")
-    assert pose.file_identity(f) != first
+    assert pose.file_identity(f, tmp_path) != first
 
 
 def test_embed_cache_token_keeps_legacy_key_for_heuristic():

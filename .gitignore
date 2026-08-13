@@ -6,7 +6,7 @@ __pycache__/
 *embed-cache*/
 *.csv
 *renders*/
-instrument.json
+instrument*.json
 
 # local test meshes (bunny/torus/building smoke-test fixtures)
 test-stls/

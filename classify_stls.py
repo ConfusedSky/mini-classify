@@ -40,6 +40,7 @@ import torch
 from PIL import Image
 from tqdm import tqdm
 
+import identity
 import instrument
 import pose
 from naming import SKIP_TAGS, skip
@@ -267,7 +268,7 @@ def render_subdir(args):
     return f"{args.render_size}px-{args.views}v-e{elev}"
 
 
-def render_key(f):
+def render_key(f, root):
     """Per-file prefix for saved renders: '<stem>_<6 hex of the path>'.
 
     Stems are not unique — a collection routinely holds one Baal_Flaming_Sword_L
@@ -276,8 +277,33 @@ def render_key(f):
     then showed one model's render for all of them. The path disambiguates;
     mtime and size deliberately do not, so re-rendering a file replaces its own
     images instead of accumulating a set per edit. Only the path is hashed, so
-    the stem stays readable and searchable in a directory listing."""
-    return f"{f.stem}_{hashlib.sha1(str(f.resolve()).encode()).hexdigest()[:6]}"
+    the stem stays readable and searchable in a directory listing.
+
+    The path hashed is relative to the collection root (identity.py), so moving
+    the library does not orphan every render."""
+    return f"{f.stem}_{hashlib.sha1(identity.rel_path(f, root).encode()).hexdigest()[:6]}"
+
+
+# Cache layout. Everything a run derives from the collection lives under
+# --cache-dir, so the cache is one directory rather than two that have to be
+# passed around in step: the embeddings and the debug renders are both
+# rebuildable, and both are worthless against a different --cache-dir.
+EMBEDS_SUBDIR = "embeds"
+RENDERS_SUBDIR = "renders"
+
+
+def embeds_dir(cache_dir):
+    """Where the per-file .npy embeddings live, or None with caching off."""
+    return Path(cache_dir) / EMBEDS_SUBDIR if cache_dir else None
+
+
+def renders_dir(cache_dir, args):
+    """Where --save-renders writes, under the camera config that produced them.
+
+    Derived rather than passed: a renders directory paired with the wrong cache
+    shows one run's images beside another run's embeddings, and the two have no
+    way to notice."""
+    return Path(cache_dir) / RENDERS_SUBDIR / render_subdir(args) if cache_dir else None
 
 
 def render_index(rdir):
@@ -524,7 +550,7 @@ def load_file_list(inp, cache_dir, rescan=False):
     return files
 
 
-def cache_key(f, args, up_token):
+def cache_key(f, args, up_token, root):
     stat = f.stat()
     # A single 20° ring appends nothing, so keys written before --elevations
     # existed stay byte-identical and those (expensive) caches survive.
@@ -533,7 +559,9 @@ def cache_key(f, args, up_token):
     # "pv" = per-view cache format: (n_views, dim) instead of one pooled vector.
     # up_token is "auto"/"z"/"y" for deterministic poses (legacy-compatible)
     # and "vlm:<x,y,z>" when a VLM override changed the render.
-    raw = f"{f.resolve()}|{stat.st_mtime_ns}|{stat.st_size}|{args.views}|{args.render_size}|{up_token}|{args.model}|pv{elev}"
+    # The path is relative to the collection root (identity.py) so the library
+    # can change drives without re-embedding everything.
+    raw = f"{identity.rel_path(f, root)}|{identity.mtime_key(stat)}|{stat.st_size}|{args.views}|{args.render_size}|{up_token}|{args.model}|pv{elev}"
     return hashlib.sha1(raw.encode()).hexdigest()
 
 
@@ -583,7 +611,54 @@ RUN_PARAMS_FILE = "run-params.json"
 # What a classify run records for the tools that read its cache. Keys are
 # argparse dests; anything not declared by a given tool's parser is ignored.
 RUN_PARAMS_KEYS = ("input", "views", "elevations", "render_size", "model",
-                   "up_axis", "pool", "categories", "renders_dir", "render_format")
+                   "up_axis", "pool", "categories", "render_format",
+                   "collection_root")
+
+
+def cache_root(inp, cache_dir, confirm=True, reanchor=False):
+    """The root every cache key in `cache_dir` is taken relative to.
+
+    Deliberately not just `collection_root(inp)`. The anchor belongs to the
+    cache, not to the command line: running on one kit inside the library has
+    to key the same way the whole-library run did, or the same file is indexed
+    twice under two identities and re-rendered, re-embedded and re-arbitrated
+    for the privilege.
+
+    A mismatch stops to ask, because the two reasons for one are opposite: the
+    library moved (re-key, free, everything still matches) or this cache
+    belongs to a different collection (re-key, expensive, and the old entries
+    are orphaned). Read-only tools pass confirm=False and only warn — they
+    write nothing, and blocking a REPL on a prompt helps no one."""
+    recorded = load_run_params(cache_dir).get("collection_root")
+    root, note = identity.resolve_root(inp, recorded)
+    if note == "subdir":
+        print(f"cache keys stay anchored at {root} — this run is scoped to "
+              f"{identity.collection_root(inp)}, but the cache is the library's")
+    elif note in ("superdir", "mismatch"):
+        if note == "superdir":
+            why = (f"  every existing key is still valid under the wider root — it "
+                   f"needs\n    {root and Path(recorded).relative_to(root)}/\n"
+                   f"  on the front. migrate_cache_keys.py re-keys them; "
+                   f"--reanchor without it orphans them.")
+        else:
+            gone = "" if Path(recorded).exists() else \
+                " (which no longer exists, so this looks like the library moved)"
+            why = f"  the recorded root{gone or ' still exists'}."
+        print(f"\n  the cache in {cache_dir} was built against\n"
+              f"    {recorded}\n  and you have asked for\n    {root}\n{why}")
+        if reanchor:
+            print("  --reanchor given; re-keying to the new root")
+        elif not confirm:
+            print("  read-only tool: using the root you asked for, which may miss "
+                  "every cached entry")
+        elif not sys.stdin.isatty():
+            sys.exit("  refusing to re-key a cache without confirmation in a "
+                     "non-interactive run — pass --reanchor if that is what you want")
+        elif input("  re-key this cache to the new root? [y/N] ").strip().lower() \
+                not in ("y", "yes"):
+            sys.exit("  stopped; pass a path under the recorded root, or use a "
+                     "separate --cache-dir for a different collection")
+    return root
 
 
 def load_run_params(cache_dir):
@@ -631,17 +706,23 @@ def main():
                            "(defaults to the last run's directory)")
     parser.add_argument("--categories", default="categories.txt")
     parser.add_argument("--out", default="results.csv")
-    parser.add_argument("--save-renders", dest="renders_dir",
-                        help="directory to save render images for debugging, as "
-                             "<render config>/<stem>_<path hash>_view<i>.<ext> plus "
-                             "<stem>_<path hash>_pose.png for each model whose up axis "
-                             "the VLM had to arbitrate (the hash keeps two models that "
-                             "share a filename from overwriting each other)")
+    parser.add_argument("--save-renders", action="store_true",
+                        help="keep the render images for debugging, under "
+                             "<cache-dir>/renders/<camera config>/ as "
+                             "<stem>_<path hash>_view<i>.<ext>, plus <stem>_<path hash>"
+                             "_pose.png for each model whose up axis the VLM had to "
+                             "arbitrate (the hash keeps two models that share a "
+                             "filename from overwriting each other)")
     parser.add_argument("--render-format", choices=sorted(RENDER_FORMATS), default="jpg",
                         help="encoding for --save-renders images (default jpg). Nothing "
                              "reads these back — the classifier embeds the in-memory "
                              "render — so lossy is safe here, and jpg encodes ~180x "
                              "faster and ~16x smaller than png at 2048 px")
+    parser.add_argument("--reanchor", action="store_true",
+                        help="accept a collection root that differs from the one this "
+                             "cache was built against, re-keying every entry. Right after "
+                             "the library moves, wrong when the cache belongs to another "
+                             "collection")
     parser.add_argument("--rescan", action="store_true",
                         help="re-walk the input directory instead of using the cached file list")
     parser.add_argument("--pool", choices=["mean", "max", "softmax"], default="mean",
@@ -709,6 +790,10 @@ def main():
         instrument.enable(args.instrument)
 
     inp = Path(args.input)
+    root = cache_root(inp, args.cache_dir, reanchor=args.reanchor)
+    # sticky, and only a directory run may set it: a loose file describes no
+    # collection, and save_run_params drops None rather than overwriting
+    args.collection_root = str(root) if inp.is_dir() else None
     with stage("walk"):
         files = load_file_list(inp, args.cache_dir, args.rescan) if inp.is_dir() else [inp]
     if not files:
@@ -730,12 +815,15 @@ def main():
         text_embeds = embed_texts(model, processor, categories, device)
     renderer = None  # created lazily on first render
 
-    cache_dir = Path(args.cache_dir) if args.cache_dir else None
+    # the .npy files sit in their own subdirectory: they are the bulk of the
+    # entries, and keeping them out of the cache root leaves pose-cache.json,
+    # the walk lists and run-params.json legible in a listing
+    cache_dir = embeds_dir(args.cache_dir)
     if cache_dir:
         cache_dir.mkdir(parents=True, exist_ok=True)
     hits = 0
 
-    rdir = Path(args.renders_dir) / render_subdir(args) if args.renders_dir else None
+    rdir = renders_dir(args.cache_dir, args) if args.save_renders else None
     saved_renders = render_index(rdir)
     redrawn = 0  # rendered only to refresh --save-renders, embedding already cached
     angles = view_angles(args.views, args.elevations)
@@ -814,8 +902,8 @@ def main():
         # would reach prefetch.get() unannounced and retire the prefetcher.
         wanted = [] if args.up_axis in ("z", "y") else [
             f for f in files if not pose.pose_is_sufficient(
-                pose_cache.get(pose.file_identity(f)), score_upright is not None)]
-        stale = sum(1 for f in wanted if pose.file_identity(f) in pose_cache)
+                pose_cache.get(pose.file_identity(f, root)), score_upright is not None)]
+        stale = sum(1 for f in wanted if pose.file_identity(f, root) in pose_cache)
         if stale:
             print(f"pose cache: {stale} geometry-only poses (from a --no-up-ensemble "
                   f"pass) will be re-resolved with the ensemble")
@@ -845,12 +933,12 @@ def main():
             assert not pending_box
             mesh = None
             pose_changed = False
-            rkey = render_key(f) if rdir else None  # resolves the path; do it once
+            rkey = render_key(f, root) if rdir else None  # resolves the path; do it once
             if args.up_axis in ("z", "y"):
                 up = [0.0, 0.0, 1.0] if args.up_axis == "z" else [0.0, 1.0, 0.0]
                 entry = {"up": up, "confidence": 0.0, "source": "forced"}
             else:
-                entry = pose_cache.get(pose.file_identity(f))
+                entry = pose_cache.get(pose.file_identity(f, root))
                 # a true miss, or a geometry-only pose this run can upgrade
                 if not pose.pose_is_sufficient(entry, score_upright is not None):
                     if deferred_answer is not None:
@@ -888,14 +976,14 @@ def main():
                              "confidence": round(ratio, 4), "source": source,
                              "margin": None if margin is None else round(margin, 4),
                              "v": pose.POSE_CACHE_VERSION}
-                    pose_cache[pose.file_identity(f)] = entry
+                    pose_cache[pose.file_identity(f, root)] = entry
                     # Saved renders predate a fresh override, so they show the old
                     # pose. Only the debug files are at stake now — the embedding
                     # re-keys on its own, because the override moves up_token.
                     pose_changed = source in ("vlm", "ensemble")
 
             token = pose.embed_cache_token(entry, args.up_axis)
-            cache_file = cache_dir / f"{cache_key(f, args, token)}.npy" if cache_dir else None
+            cache_file = cache_dir / f"{cache_key(f, args, token, root)}.npy" if cache_dir else None
             cached = cache_file is not None and cache_file.exists()
             # Two independent questions. Embeddings come from the .npy cache or a
             # fresh render, never from the files on disk: those are debug output,
