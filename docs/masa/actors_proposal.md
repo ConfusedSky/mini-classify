@@ -326,14 +326,37 @@ introduced by this design:
 
 ## Spikes
 
-In the order that de-risks fastest.
+In the order that de-risks fastest. **Spikes 1 and 4 are done** — results below,
+full write-ups in `LEARNINGS.md`. What they found changes two of this document's
+conclusions; see [What the spikes changed](#what-the-spikes-changed).
 
-### Spike 1: baseline instrumentation
+### Spike 1: baseline instrumentation — DONE
 
-Per-stage timing through the current `process()` on a real run, attributing the
-idle 70% across render, embed and arbiter-tail. Loading is already known-
-overlapped except on heavy meshes, so it is not a suspect. This is the only thing
-that gives "worth it performance wise" a denominator.
+`--instrument PATH` (`instrument.py`) records exclusive per-stage timing plus
+CPU / NVIDIA / amdgpu utilization. Full collection, 602 models at 384px, 2121 s:
+
+| stage | % wall | | after the STL parser landed (104-model subset) |
+|---|---|---|---|
+| pose-embed | 29.3% | | 41.7% |
+| pose-render | 18.7% | | 15.9% |
+| mesh-wait | **18.6%** | | **0.4%** |
+| cache-save (SigLIP forward) | 16.8% | | 24.4% |
+| view-render | 13.7% | | 12.0% |
+| embed (preprocessing) | 1.8% | | 2.4% |
+
+Four things fell out of it:
+
+* **Nothing was ever saturated.** CPU 15%, NVIDIA 44%, AMD 26% on the baseline —
+  which is the strongest version of this proposal's premise, and it survived.
+* **`mesh-wait` was 18.6%, not the 3.2% an 8-model sample suggested.** One
+  prefetch thread at depth 2 does not keep up with the real collection.
+* **The numpy STL parser removed it** — 746 ms → 10 ms per model — which is most
+  of what `loader_worker_count` was for, without any actor machinery.
+* **The bottleneck is now SigLIP on the 4060**, 68.5% of the run against 27.9%
+  for rendering, and `pose-embed` alone costs 1.6× what embedding the
+  classification views costs.
+
+### Spike 2: the device split
 
 ### Spike 2: the device split
 
@@ -373,13 +396,53 @@ The named-LRU device tier, on real STLs rather than a synthetic mesh. Measure:
 This is the most expensive spike of the four and the one with the largest
 upside.
 
-### Spike 4: GIL behaviour
+### Spike 4: GIL behaviour — DONE
 
-Confirm Open3D's reader, Filament's render call and torch all release the GIL.
-The reader is documented to; if **Filament does not**, threads buy no overlap and
-the actors need to be processes — which changes message passing from queues to
-something with serialization. Cheapest of the four and the only one that can
-invalidate the architecture, so run it early.
+The question was whether Filament's render call releases the GIL. **It does
+not.** `py-spy record --gil` on a real run puts 99% of GIL-held time on the main
+thread, with `_shoot`'s line 139 alone at 62% of it; splitting that line
+(`eval/renderer_gil.py`) shows `render_to_image` holding the GIL for ~85–92% of
+its 36–61 ms, while `np.asarray` is free and `Image.fromarray` releases.
+
+Open3D's mesh reader *does* release it — the prefetch thread takes 1% of GIL time
+while being 33% of all samples, which is exactly why `MeshPrefetcher` works.
+
+So the split is: actors doing native GIL-free work (mesh loading, torch, the
+network arbiter) overlap fine; actors doing **Python-level** work — Cache
+Checker, Poser bookkeeping, `Done`'s scoring, `Supervisor` accounting — are
+starved while a render is in flight. At ~40 renders per model that was ~1.25 s
+per model of held GIL.
+
+ModernGL holds it too, ~3–5× less (~4–9 ms per view against ~21–26 ms), so
+"several contexts per process" is **not** parallel rendering — see
+`docs/masa/renderer_alternatives.md`.
+
+## What the spikes changed
+
+Two conclusions in this document moved, in opposite directions.
+
+**The Loader shrank.** `loader_worker_count` and the host tier were sized against
+a parse that turned out to be replaceable: the numpy STL parser took `mesh-wait`
+from 18.6% of wall to 0.4%, which is most of what multiple loader threads were
+for. The two-tier design still stands on the *device* tier — the resident-mesh
+LRU, which targets `_upload`, not the parse — but the host tier is now a memory
+bound with little left to buy.
+
+**"The Renderer must be its own process" became optional rather than forced.**
+Three findings were converging on it: the GIL result above, the
+one-`OffscreenRenderer`-per-process abort, and the fact that pose tiles at 384
+cannot coexist with 2048 view renders in one process. ModernGL answers the first
+two — several contexts per process, and 3–5× less GIL — which turns a forced
+architectural move into a budgeting question. That matters, because a process
+boundary means shipping 12.6 MB per view across it.
+
+**What did not change:** nothing is saturated, so overlap still has room
+everywhere. But the target moved. The proposal was written against a run where
+rendering and loading dominated; after the parser it is 68.5% SigLIP on the
+4060, and the largest single item — `pose-embed`, 24 tiles per model through a
+1.1B-param tower over near-silhouettes — is an eval question rather than an
+architecture one (`OPEN_QUESTIONS.md`). Fix that first and the pipeline this
+document describes is arranging a much smaller amount of work.
 
 ## Fallback
 

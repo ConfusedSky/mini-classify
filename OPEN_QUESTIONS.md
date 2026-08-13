@@ -262,29 +262,66 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
 - **Thread the render writes.** Largely obsolete: the default is `jpg` now, at
   0.13 s/model against PNG's 23 s. Still ~4 s of single-threaded CPU per model
   if someone runs `--render-format png`, and PIL releases the GIL during encode.
-- **Prefetch mesh loads** — done (`MeshPrefetcher`, `--prefetch`, default 2).
-  Not currently the pacer: measured load/GPU ratio 0.37 on the Loot Studios
-  subset (0.67 s load against 1.81 s GPU per model). It would only become one on
-  the heavy tail, where a p99 mesh loads in 15.4 s. **Do not multi-thread it
-  without measuring that ratio on the input in question** — one loader thread
-  ahead of the GPU is enough whenever the ratio is under 1.
+- ~~**Prefetch mesh loads**~~ — **settled, and the old guidance here was
+  wrong.** This entry said one loader thread is enough whenever the load/GPU
+  ratio is under 1, from a 0.37 ratio measured on a subset. Collection-wide
+  instrumentation says `mesh-wait` — the main thread actually blocked — was
+  **18.6% of a 2121 s run**, the third largest line item. Subsets understate this
+  badly, because mesh size varies more across the collection than anything else.
+  The fix was not more threads: the numpy STL parser took it to 0.4%. See
+  LEARNINGS.
 - **Overlap the VLM arbiter with everything else** — done and measured at
   **28%** end to end (631 s → 456 s on 74 models). See LEARNINGS for the A/B and
   for the bug the A/B caught, where the first version ran *slower* than what it
   replaced.
 
-  Still open: **the GPU is idle ~73% of the main pass** and about 2 s per model
-  is unattributed. GPU work is ~2.7 s of a 5.4 s model; mesh load (0.67 s) is
-  prefetched, JPEG is 0.13 s, geometry is 0.01 s. Where the rest goes needs a
-  profiler on a live run — `py-spy` requires root here (`ptrace_scope=1`), so it
-  wants a terminal, not a harness. This is where any further speedup lives, and
-  it should be attributed before anything is built.
+  ~~Still open: the GPU is idle ~73% of the main pass and ~2 s per model is
+  unattributed.~~ **Attributed** — `--instrument` plus py-spy, see LEARNINGS.
+  Two corrections to what this entry assumed. The idle was not one GPU going
+  unused: rendering runs on the **amdgpu iGPU**, so the 4060's idle time was
+  never render/embed contention. And `py-spy` does *not* need root here —
+  `ptrace_scope=1` permits tracing descendants, so `py-spy record -- <cmd>`
+  works; only attaching to an unrelated pid needs sudo.
 - **Split the VLM pass from the render pass** in `classify_stls.py`. Measured
   again this session from the other side: gemma4:26b sits at 6818 MiB resident
   on a 7834 MiB card, so it and SigLIP (2.2 GB) genuinely cannot coexist. Every
   harness in `eval/` now phases render → SigLIP → VLM by construction
   (`common.build_tiles` caches the pixels so the towers never overlap); the
   production path still interleaves them.
+
+- **Should the contact sheet fill its cells?** `make_contact_sheet` uses
+  `Image.thumbnail`, which never enlarges, so tiles rendered under
+  `SHEET_THUMB` sit padded in the top-left of their cells. Measured on
+  gemini-3.5-flash: padded-384 scores **41/44**, filling the cells 42/44, native
+  512 43/44 — i.e. rendering pose tiles at 384 costs the entire documented
+  256→512 gain, and upscaling recovers half of it for free
+  (`eval/gemini_sheet_fill.py`, LEARNINGS). The one-line change is not made:
+  +1 of 44 is p=0.5 alone, the upscale moves *more* answers than a real 512
+  render does (6/49 against 3/49), and on the frozen holdout padded actually
+  beat filled 21/21 to 20/21. Worth a second measurement before adopting, and
+  worth deciding against `--render-size` rather than in isolation.
+- **Can pose-tile render size be decoupled from `--render-size` at all?** Three
+  separate wanted changes now collide with one `OffscreenRenderer` per process:
+  rendering pose tiles at a fixed 384 for speed (LEARNINGS says neither tower
+  gains above a 384 source), rendering them at ≥512 so the Gemini arbiter is not
+  starved, and rendering classification views at 2048 for detail. Any two of
+  those need two live renderers at different sizes, which aborts the
+  interpreter. ModernGL holds several contexts per process and would dissolve
+  this — see `docs/masa/renderer_alternatives.md`. Until then `--render-size` is
+  one knob serving three consumers with different optima.
+- **Does `MARGIN_THRESHOLD` want re-reading after the parser swap?** The numpy
+  parser shifts ensemble margins by a mean of 0.024, which walks models across
+  the 0.45 gate. `Concrete Chunk (2)` stops escalating at both render sizes and
+  `Bedienkonsole` at 384, and the ensemble has both wrong — two arbiter rescues
+  silently removed, invisible in any accuracy column. Whether that costs
+  anything depends on whether Gemini would have got them right, which
+  `eval/parser_gate.py` does not test. More generally: the gate was tuned
+  against margins from a different loader.
+- **`common.build_sheets`' docstring is wrong** and should be corrected. It says
+  "only the sheet size matters to a VLM; render_px ... made no difference", but
+  the sweeps it rests on measured the *ensemble* — `tile_and_vlm.py` hands the
+  VLM only its 2048 tiles. Measured directly, render_px matters to the arbiter a
+  great deal (entry above). Left in place for now because it is a code change.
 
 ## Structural questions
 

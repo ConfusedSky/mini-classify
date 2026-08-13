@@ -350,6 +350,18 @@ different SigLIP embeddings, which invalidates `pose-cache.json` and every tuned
 threshold, and needs an eval re-run to show classification did not regress.
 That re-validation, not the port, is the thing to budget for.
 
+Two things now sharpen that. `eval/parser_gate.py` is the pattern to copy — it
+runs the production pose path twice changing one thing, and it reports
+`MARGIN_THRESHOLD` crossings separately, because a change that perturbs margins
+silently adds or removes arbiter escalations without moving any accuracy number.
+The parser did exactly that on two models the ensemble gets wrong.
+
+And the re-run can only validate *pose*. There is no category ground truth in
+this repo, so "classification did not regress" is currently unmeasurable — the
+output most likely to move under different shading is the one nothing can score.
+See `OPEN_QUESTIONS.md`; that gap is a prerequisite for a renderer swap, not a
+parallel nice-to-have.
+
 ## Recommendation
 
 **Swap the STL parser first.** It is ~10× on the pre-pixel path, it is a
