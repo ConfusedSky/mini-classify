@@ -118,6 +118,21 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   (43/44 pooled, 21/21 holdout, 9 calls) — see LEARNINGS — so it is now part of
   the same decision as the gate rather than an independent lead. Still blocked
   on the same thing everything else is: more labels.
+- **Is the arbiter deterministic?** Two runs of the same code on the same input
+  disagreed on the up axis for one model, and a third arm on two — all
+  `vlm`-sourced, all at `temperature: 0` against byte-identical sheets. The
+  likely answer is that Gemini simply is not deterministic at temperature 0, but
+  that has not been tested: run one arm twice and see whether it disagrees with
+  *itself*. It matters beyond tidiness — every VLM number in this file is a
+  single sample, and if the arbiter has a per-call variance then "43/44" carries
+  an error bar nobody has measured. The 3-sample gemma test earlier (21/23
+  unanimous) is the only evidence in the other direction, and it was a different
+  model on a different backend.
+- **What does `--save-renders` cost on a *warm* embedding cache?** Measured free
+  on a cold one (456 s against 459 s, inside noise), but that run rendered every
+  model anyway. Warm, the flag is the difference between rendering nothing and
+  rendering everything to refresh the debug images — which is exactly the case
+  the day-to-day reruns hit.
 - **Confidently wrong models are a class no gate can catch.**
   `32mm_Orguss_Head` (ensemble `-Z`, truth `+Y`, margin 0.41) and
   `Concrete Chunk (2)` (margin 1.04) are wrong *and* confident, so no usable
@@ -186,16 +201,23 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
 - **Thread the render writes.** Largely obsolete: the default is `jpg` now, at
   0.13 s/model against PNG's 23 s. Still ~4 s of single-threaded CPU per model
   if someone runs `--render-format png`, and PIL releases the GIL during encode.
-- **Prefetch mesh loads.** ~2.5 s/model, IO-bound, single-threaded; Open3D's
-  reader is C++ and releases the GIL, so a small thread pool suffices.
-- **Overlap the VLM arbiter with everything else — the largest win available.**
-  gemini-3.5-flash averages 24 s per call (p95 45 s) against 2.5–28 s of local
-  work for the whole model, and the gate fires on ~20% of the collection. For
-  597 files that is ~120 calls ≈ **48 minutes of pure HTTP wait**, against
-  roughly 30 minutes of local work — the run is majority idle. The arbiter's
-  answer only decides the *pose*, so escalating models can be set aside and
-  revisited when their call returns while the other 80% flow straight through.
-  8 concurrent calls turns 48 minutes into ~6.
+- **Prefetch mesh loads** — done (`MeshPrefetcher`, `--prefetch`, default 2).
+  Not currently the pacer: measured load/GPU ratio 0.37 on the Loot Studios
+  subset (0.67 s load against 1.81 s GPU per model). It would only become one on
+  the heavy tail, where a p99 mesh loads in 15.4 s. **Do not multi-thread it
+  without measuring that ratio on the input in question** — one loader thread
+  ahead of the GPU is enough whenever the ratio is under 1.
+- **Overlap the VLM arbiter with everything else** — done and measured at
+  **28%** end to end (631 s → 456 s on 74 models). See LEARNINGS for the A/B and
+  for the bug the A/B caught, where the first version ran *slower* than what it
+  replaced.
+
+  Still open: **the GPU is idle ~73% of the main pass** and about 2 s per model
+  is unattributed. GPU work is ~2.7 s of a 5.4 s model; mesh load (0.67 s) is
+  prefetched, JPEG is 0.13 s, geometry is 0.01 s. Where the rest goes needs a
+  profiler on a live run — `py-spy` requires root here (`ptrace_scope=1`), so it
+  wants a terminal, not a harness. This is where any further speedup lives, and
+  it should be attributed before anything is built.
 - **Split the VLM pass from the render pass** in `classify_stls.py`. Measured
   again this session from the other side: gemma4:26b sits at 6818 MiB resident
   on a 7834 MiB card, so it and SigLIP (2.2 GB) genuinely cannot coexist. Every
