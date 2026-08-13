@@ -185,30 +185,46 @@ pixels differ at all.
 A ~10× cut to the pre-pixel path, for a parser and an eval re-run, against a
 renderer port that needs the same eval re-run and much more work.
 
-**How much of it reaches the wall clock is a separate question.** The 4158 ms
-path is parse + upload, and those two sit differently: `MeshPrefetcher` already
-overlaps the parse on a background thread, while `_upload` runs inline on the
-render thread. Spike 1 measured `mesh-wait` — the main thread actually blocked
-on a mesh — at **3.2% of wall** (177 ms/model, 8 models, 2048px), so on that set
-the prefetcher was hiding nearly all of the parse. The parser swap deletes
-~3.8 s of *loader-thread* work and ~0 ms of critical path directly.
+**It reaches the wall clock, and by more than the 6.6% suggests.** The 4158 ms
+path is parse + upload, and those sit differently: `MeshPrefetcher` overlaps the
+parse on a background thread, while `_upload` runs inline. So the question is how
+often the prefetcher actually keeps up — which is what `mesh-wait`, the main
+thread blocked on a mesh, measures.
 
-That is not an argument against it, because three things still make it pay:
+A full-collection instrumented pass answers it (602 models, 528 needing work,
+`--render-size 384 --views 8 --elevations 20,-20`, 2121 s wall):
 
-* **The p99 case, where the prefetcher loses.** One loader thread hides a 0.83 s
-  median load behind ~1.7 s of downstream work, but a 15.4 s p99 load against
-  ~12.6 s does not fit — that is the tail `loader_worker_count` exists for in
-  [actors_proposal.md](actors_proposal.md). A ~10× parse largely removes that
-  problem instead of parallelising around it.
-* **CPU freed for the thing that is on the critical path.** py-spy put
-  `load_mesh` at 33% of all samples; SigLIP's image preprocessing, which *is*
-  inline, is ~19% of run time. They compete for the same cores.
-* **Upload is inside the 6.6%, but it is the part that is not hidden.** Whatever
-  the residency cache or a renderer swap saves lands on the critical path
-  directly, which is why 6.6% understates it.
+| stage | % wall | ms/model |
+|---|---|---|
+| pose-embed | 29.3% | 1176 |
+| pose-render | 18.7% | 750 |
+| **mesh-wait** | **18.6%** | **746** |
+| cache-save (SigLIP forward) | 16.8% | 673 |
+| view-render | 13.7% | 551 |
+| embed (preprocessing) | 1.8% | 73 |
 
-Caveat on the 3.2%: that sample was 32 mm models from one collection, not the
-800k-tri mesh measured here. `mesh-wait` on a heavy set would be higher.
+`mesh-wait` is 394 s of 2121 s. One prefetch thread at depth 2 is nowhere near
+keeping up with the real collection — the parse is *not* hidden, it is the third
+largest line item. An 8-model sample of 32 mm models put this at 3.2% and was
+wrong by ~6×; collection-wide is the number to trust.
+
+At the 17–40× measured on real meshes, `mesh-wait` should mostly collapse — the
+end-to-end check on 8 models took it from 177 ms to 25 ms per model. If that
+ratio holds, ~340 s comes off a 2121 s run, roughly **16% of wall**, for a parser
+and an eval re-run.
+
+Two things follow beyond the direct saving:
+
+* **It is the cheaper half of what `loader_worker_count` was for.** More loader
+  threads and a faster parse target the same 18.6%; the parser removes the
+  problem rather than parallelising around it, and needs no actor model to do it
+  ([actors_proposal.md](actors_proposal.md)).
+* **CPU freed for what is inline.** py-spy put `load_mesh` at 33% of all samples,
+  competing for cores with SigLIP's preprocessing, which is on the critical path.
+
+Note also what the same run says about the renderer thread: `pose-render` plus
+`view-render` is 32.4% of wall, so the upload-and-draw path this document is
+about is still the largest single consumer once the parse is fixed.
 
 ## The row that matters most
 
