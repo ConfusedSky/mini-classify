@@ -2,7 +2,11 @@
 
 Research note, 2026-08-12. Measured on this machine (RTX 4060 Laptop + AMD
 Phoenix1 iGPU, Open3D 0.19.0 CUDA build) against `test-stls/bunny.stl`
-subdivided to 4,444,864 triangles / ~2.2M verts.
+subdivided to 4,444,864 triangles.
+
+**Read [Topology](#topology-matters-more-than-triangle-count) before trusting any
+upload number here.** Upload cost tracks vertex count, not triangle count, and a
+real STL has ~4× the vertices of the subdivided mesh most of these figures use.
 
 Two questions started this: can we stage mesh data on the GPU *before*
 `add_geometry`, and can we clear a scene without evicting the mesh already
@@ -91,6 +95,36 @@ Same mesh, same 512×512 target, all three on this machine:
 hand-written Lambert shader; Filament's `defaultLit` with IBL does more work per
 pixel. Treat 20× as an upper bound on the shading side and the device move as
 the part that is solid. Upload and residency numbers *are* comparable.
+
+## Topology matters more than triangle count
+
+`read_triangle_mesh` does **not** weld STL vertices. An STL is a triangle soup —
+every triangle carries its own three vertices — and Open3D loads it that way:
+`bunny.stl` comes in at exactly 3.00 verts per triangle. Subdividing welds them
+(ratio drops to 0.70), so a subdivided benchmark mesh is *not* representative of
+what the pipeline actually uploads.
+
+Filament's buffer construction is O(vertices), so this dominates. Same geometry,
+4,444,864 triangles either way:
+
+| topology | verts | `add_geometry` | first render | total |
+|---|---|---|---|---|
+| welded (subdivided) | 3.1M | 268 ms | 118 ms | 386 ms |
+| soup (**what an STL is**) | 13.3M | 1024 ms | 320 ms | **1344 ms** |
+
+So a real 4M-triangle STL costs ~1.3 s to upload, not the ~0.26 s quoted
+elsewhere in this note — **3.5× more**. Every Open3D upload figure above was
+measured on welded geometry and should be read as a floor. The relative
+comparisons (hide vs re-add, tensor vs legacy, Open3D vs ModernGL) are
+unaffected, since they all use the same mesh.
+
+Two consequences:
+
+* The residency cache is **worth more** than the Q2 numbers suggest, because the
+  upload it avoids is the larger of the two figures.
+* Welding at load (`merge_close_vertices`, or trimesh's loader, which already
+  returned 2.2M verts for the same mesh) is worth measuring on its own — it may
+  buy most of the upload win without changing renderer at all. Untested.
 
 ## The row that matters most
 

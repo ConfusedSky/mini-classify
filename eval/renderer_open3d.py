@@ -85,6 +85,35 @@ timed("add t.geometry CPU", lambda: r.scene.add_geometry("c", tmesh, material(),
 timed("add t.geometry CUDA  <- watch for the copy-to-CPU warning",
       lambda: r.scene.add_geometry("d", tcuda, material(), False))
 
+# 1b. Topology, which dominates everything above. read_triangle_mesh does not
+#     weld STL vertices -- an STL is a triangle soup at exactly 3.00 verts per
+#     triangle -- but subdividing welds them, so the mesh built above is NOT
+#     representative of what the pipeline uploads. Filament's buffer build is
+#     O(verts), so the same geometry as soup costs several times more.
+print("\n--- Q1b: welded vs soup, same geometry ---")
+shoot()  # drain Q1's deferred uploads, else they land in the first timing below
+for n in "abcd":  # and stop the Q1 meshes being redrawn in it
+    r.scene.show_geometry(n, False)
+shoot()
+v, f = np.asarray(mesh.vertices), np.asarray(mesh.triangles)
+soup = o3d.geometry.TriangleMesh(
+    o3d.utility.Vector3dVector(v[f].reshape(-1, 3)),
+    o3d.utility.Vector3iVector(np.arange(len(f) * 3).reshape(-1, 3)))
+soup.compute_vertex_normals()
+raw = o3d.io.read_triangle_mesh(MESH)
+print(f"  as loaded from disk: {len(raw.vertices) / len(raw.triangles):.2f} "
+      f"verts/tri (3.00 = soup, this is what we really upload)")
+for label, g in (("welded", mesh), ("soup  ", soup)):
+    t = time.perf_counter()
+    r.scene.add_geometry(f"topo_{label.strip()}", g, material(), False)
+    add = time.perf_counter() - t
+    t = time.perf_counter()
+    shoot()
+    first = time.perf_counter() - t
+    r.scene.show_geometry(f"topo_{label.strip()}", False)
+    print(f"  {label} verts={len(g.vertices):>10,}  add={add * 1000:8.1f} ms  "
+          f"first-render={first * 1000:7.1f} ms  total={(add + first) * 1000:8.1f} ms")
+
 # 2. Clearing without evicting. show_geometry keeps the buffers; clear_geometry
 #    and remove_geometry destroy them.
 print("\n--- Q2: hide vs remove/re-add ---")
