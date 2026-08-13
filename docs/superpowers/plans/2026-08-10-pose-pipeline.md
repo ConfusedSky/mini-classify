@@ -2,9 +2,9 @@
 
 > **ARCHIVED 2026-08-13 — do not implement this plan.** The work shipped; this is a historical record of how it was built.
 >
-> The instruction that stood here told agentic workers to execute the plan task-by-task, and all 40 of its `- [ ]` checkboxes are still unticked because completion was tracked in the SDD ledger instead. Left as it was, this file would send a worker to re-implement finished code.
+> The instruction that stood here told agentic workers to execute the plan task-by-task, and all 40 of its `- [ ]` checkboxes are still unticked because completion was tracked in a separate ledger, which was a working file and is not in this repository. Left as it was, this file would send a worker to re-implement finished code.
 >
-> Tasks 1-6 completed through the SDD flow (commits `c7f73b3..4f5f0c0`; see `.superpowers/sdd/2026-08-10-pose-pipeline/progress.md`). Task 7 — the eyeball pass, the live arbiter test, and the LEARNINGS append — was completed directly in commit `e1ad372`, which the ledger never recorded: it still reads `PAUSED … resume at Task 7`.
+> Tasks 1-6 completed through the SDD flow, commits `c7f73b3..4f5f0c0`. Task 7 — the eyeball pass, the live arbiter test, and the LEARNINGS append — was completed directly in commit `e1ad372`, outside that flow. The git history is the record; read it rather than the checkboxes below.
 >
 > Treat the code, `classify_stls.py --help`, and `LEARNINGS.md` as current. This plan and its spec have both drifted — see the spec's archive note for the `--pose-vlm` discrepancy.
 
