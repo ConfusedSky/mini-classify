@@ -1,6 +1,24 @@
 """Two questions on the 23 hand-labelled models:
   1. does up-candidate tile resolution change ensemble accuracy?
   2. what does the ollama VLM tier actually add over the ensemble?
+
+Two caveats before reaching for this, both learned the hard way (2026-08-13):
+
+**It does not currently run.** It reads `OUT/siglip_up/results.json`, which is
+not in the repo and has to be produced first. Anything pointing here as "the
+gate" should say that.
+
+**The resolution sweep measures the *ensemble*, not the VLM.** `SIZES` is swept
+for the SigLIP columns, but the VLM is asked exactly once per model, always with
+`tiles_big` — the 2048 px tiles. So this file says nothing about how the arbiter
+behaves at other render sizes, and it is the source of the (wrong) claim in
+`common.build_sheets` that render_px makes no difference to a VLM. Measured
+directly, it makes a large one: `eval/gemini_sheet_fill.py`, and LEARNINGS.
+
+For gating a change that *moves the pixels* — a parser, a renderer, a lighting
+tweak — use `eval/parser_gate.py` instead. It runs the production pose path
+twice changing one thing, needs no prior harness output, and reports
+`MARGIN_THRESHOLD` crossings, which is where a pixel change hides its cost.
 """
 import json, sys, os
 import numpy as np, torch

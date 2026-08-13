@@ -184,9 +184,14 @@ def _shoot(renderer, cams):
 
 
 def _upload(renderer, mesh):
-    """Put the mesh on the GPU and return its framing. This is the expensive
-    half of rendering — 15 s on a 4M-triangle mesh against ~0.15 s per view —
-    so callers should upload once and move the camera."""
+    """Put the mesh on the GPU and return its framing. Still the expensive half
+    of rendering — 275 ms on an 800k-triangle STL and ~1.0 s on a 4.4M-triangle
+    one, against ~30-50 ms per view — so callers should upload once and move the
+    camera.
+
+    (An earlier version of this said 15 s per upload. `eval/load_path.py`
+    measures ~10x less; the cost tracks *vertices*, and an STL is a soup at 3.00
+    verts per triangle, so quote a figure with its vertex count.)"""
     mat = rendering.MaterialRecord()
     mat.shader = "defaultLit"
     mat.base_color = [0.7, 0.7, 0.7, 1.0]
@@ -208,8 +213,10 @@ def render_up_candidate_grid(renderer, mesh, n_az=UP_TILE_AZIMUTHS):
     """[6][n_az] renders — each candidate up, seen from n_az azimuths.
 
     One upload, not six. Rotating the mesh per candidate and re-uploading costs
-    the expensive half of rendering six times over (15 s each on a 4M-triangle
-    mesh); moving the camera instead costs nothing. The two are exactly
+    the expensive half of rendering six times over — measured, an upload is
+    275 ms on an 800k-triangle STL against ~30 ms per tile, so five extra
+    uploads would roughly triple this call; moving the camera instead costs
+    nothing. The two are exactly
     equivalent here because all six candidate rotations are signed axis
     permutations: the rotated mesh's bounding box is the rotated box, so its
     centre is R@c and its extent is a permutation of e — leaving the framing
@@ -289,10 +296,17 @@ def save_renders(rdir, stem, images, fmt):
 class MeshPrefetcher:
     """Load meshes a few files ahead of the consumer, on a background thread.
 
-    Loading is 33% of a median model and 55% of a p99 one (0.83 s / 15.4 s), it
-    is disk+CPU while everything after it is GPU, and Open3D's reader is C++ and
-    releases the GIL — so it overlaps with rendering for free. Bounded so a
-    queue of 4M-triangle meshes cannot outrun memory.
+    Loading is disk+CPU while everything after it is GPU, and the reader
+    releases the GIL — measured, this thread takes 1% of GIL time while being
+    33% of all py-spy samples — so it overlaps with rendering for free. Bounded
+    so a queue of 4M-triangle meshes cannot outrun memory.
+
+    **It matters much less than it used to.** Against `read_triangle_mesh` this
+    hid a real cost: `mesh-wait`, the main thread blocked here, was 18.6% of a
+    602-model run (746 ms/model), and one thread at depth 2 was not keeping up.
+    Since `read_binary_stl` the same measurement is 0.4% (10 ms/model) and a
+    whole mesh parses in 11-66 ms, so what is left to hide is ~1-2% of a run.
+    Do not re-tune depth or worker count off the old figures — see LEARNINGS.
 
     Files are consumed in order. A file the consumer skips (pose cached, nothing
     to render) is dropped from the queue on the way past."""
@@ -647,8 +661,9 @@ def main():
                              "SigLIP has to share the card")
     parser.add_argument("--prefetch", type=int, default=2,
                         help="meshes to load ahead on a background thread (0 disables). "
-                             "Loading is 33%% of a median model and 55%% of a heavy one, "
-                             "and it is disk+CPU while everything after it is GPU")
+                             "Worth ~1-2%% of a run since the binary-STL parser landed; "
+                             "it was worth 18.6%% before that, so do not re-tune this "
+                             "off the older figures")
     parser.add_argument("--arbiter-workers", type=int, default=8,
                         help="concurrent pose-VLM calls for network backends. The call "
                              "averages 24s against 3-28s of local work per model, so "

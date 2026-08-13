@@ -173,8 +173,23 @@ twice differs by 0.004% of pixels above 2/255. Against that floor:
 Both are ~1000× the noise floor, so both are real changes, not jitter. The diff
 map is diffuse low-magnitude shading noise spread over the model surface rather
 than anything structural, and the numpy render is visually correct — but "looks
-the same" is not the bar. Embeddings move, so this needs `eval/tile_and_vlm.py`
-re-run against the labels before it ships.
+the same" is not the bar. Embeddings move, so this needs a re-run against the
+labels before it ships.
+
+**That gate is `eval/parser_gate.py`, not `tile_and_vlm.py`.** This section
+originally named the latter; it turned out to be the wrong tool twice over — it
+needs a prior harness's `results.json` which is not in the repo, and its
+resolution sweep measures the ensemble, since the VLM is only ever asked with
+the 2048 px tiles. `parser_gate.py` runs the production pose path twice changing
+one thing and reports `MARGIN_THRESHOLD` crossings separately, which is where a
+pixel change hides its real cost.
+
+**The parser has since been gated and shipped** (`classify_stls.py`,
+`read_binary_stl`): 45/49 either way at 384 px with 0/49 picks moved, 43→44 at
+2048 px on one model whose margin is 0.001. The cost that showed up was not in
+accuracy — two models the ensemble gets wrong stopped escalating to the arbiter,
+because a 0.024 mean margin shift walked them across the 0.45 gate. See
+LEARNINGS.
 
 Two notes on the numpy parser. It is binary-STL only, so it needs an ASCII
 fallback (`read_triangle_mesh` handles both). And it produces 2,400,708 verts
