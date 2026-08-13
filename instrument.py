@@ -22,6 +22,7 @@ effectively free.
 Everything is off unless enable() is called, and stage() is a cheap flag check
 when it is off.
 """
+import atexit
 import json
 import os
 import subprocess
@@ -42,6 +43,7 @@ _arbiter_inflight = 0
 _started = None
 _out_path = None
 _sampler = None
+_nv_proc = None
 _stop = threading.Event()
 
 
@@ -149,7 +151,8 @@ def _sample_loop(interval_ms):
     psutil.cpu_percent(interval=None)      # prime; first call is meaningless
     proc.cpu_percent(interval=None)
 
-    nv = subprocess.Popen(
+    global _nv_proc
+    _nv_proc = nv = subprocess.Popen(
         ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used",
          "--format=csv,noheader,nounits", "-lms", str(interval_ms)],
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
@@ -181,6 +184,27 @@ def _sample_loop(interval_ms):
         nv.terminate()
 
 
+def _shutdown():
+    """Stop sampling and reap the nvidia-smi child.
+
+    The sampler is a daemon thread blocked on that child's stdout, so its own
+    `finally` is not guaranteed to run — an interpreter exit kills the thread
+    where it stands. In practice nvidia-smi dies anyway once its stdout closes,
+    but 'in practice' is not a lifecycle, and a ~24 s-per-call arbiter pool
+    already taught this codebase what an unowned child costs on Ctrl-C.
+
+    Registered with atexit rather than left to report(), because report() runs
+    after the CSV write and never executes on an interrupt at all."""
+    _stop.set()
+    proc = _nv_proc
+    if proc is not None and proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
 def enable(path, interval_ms=100):
     """Start sampling. path is where the raw samples and summary are written."""
     global _enabled, _started, _out_path, _sampler
@@ -189,6 +213,7 @@ def enable(path, interval_ms=100):
     _enabled, _started, _out_path = True, time.perf_counter(), Path(path)
     _sampler = threading.Thread(target=_sample_loop, args=(interval_ms,), daemon=True)
     _sampler.start()
+    atexit.register(_shutdown)
 
 
 def _table(rows, headers):
@@ -205,7 +230,7 @@ def report():
     if not _enabled:
         return
     try:
-        _stop.set()
+        _shutdown()
         wall = time.perf_counter() - _started
 
         def stage_rows(role):
