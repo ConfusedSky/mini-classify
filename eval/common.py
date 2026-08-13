@@ -74,6 +74,40 @@ def contact_sheet(tiles, thumb, cols=3):
     return pose.make_contact_sheet(tiles, thumb, cols)
 
 
+def ask_claude(model, sheet, n_tiles=6):
+    """Arbiter answer from a Claude model through the CLI. One retry, then None
+    — the pipeline never hard-fails on the VLM, so neither does a harness."""
+    import subprocess
+    import pose
+    prompt = f"Read the image at {sheet}. {pose.UP_PROMPT}"
+    for _ in range(2):
+        try:
+            out = subprocess.run(["claude", "-p", prompt, "--model", model,
+                                  "--output-format", "json", "--max-turns", "3"],
+                                 capture_output=True, text=True, timeout=300)
+            if out.returncode != 0:
+                continue
+            v = pose.parse_tile_answer(json.loads(out.stdout).get("result", ""), n_tiles)
+            if v is not None:
+                return v
+        except Exception:
+            pass
+    return None
+
+
+def ask_gemma(sheet, model="gemma4:26b", n_tiles=6):
+    """Arbiter answer from the local ollama VLM. Same contract as ask_claude."""
+    import pose
+    for _ in range(2):
+        try:
+            v = pose._ask_ollama(sheet.read_bytes(), n_tiles, model)
+            if v is not None:
+                return v
+        except Exception as e:
+            print(f"  ollama error: {e}")
+    return None
+
+
 def build_tiles(labels=None, render_px=2048):
     """The 6 up-candidate tiles per labelled model, plus geometry's score
     vector, cached in OUT/tiles<render_px>.

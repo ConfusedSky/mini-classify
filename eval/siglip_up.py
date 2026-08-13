@@ -14,10 +14,10 @@ import numpy as np
 import torch
 from PIL import Image
 
+from common import OUT, AX, IDX, load_labels, mark, score  # puts REPO on sys.path
+
 import classify_stls as C
 import pose
-
-from common import OUT, AX, IDX, load_labels, mark, score
 
 OUT = OUT / "siglip_up"
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 12

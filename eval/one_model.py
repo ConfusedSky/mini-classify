@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from common import OUT, AX, IDX, load_labels, mark, score  # puts REPO on sys.path
+
 import classify_stls as C
 import pose
 from siglip_up import PROBES, robust_geometry, geometry_scores
@@ -20,8 +22,6 @@ TARGETS = [
 ]
 
 from transformers import AutoModel, AutoProcessor
-
-from common import OUT, AX, IDX, load_labels, mark, score
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 mid = "google/siglip2-so400m-patch14-384"

@@ -6,10 +6,10 @@ import json, sys, os
 import numpy as np, torch
 from pathlib import Path
 
+from common import OUT, AX, IDX, load_labels, mark, score  # puts REPO on sys.path
+
 import classify_stls as C, pose
 from transformers import AutoModel, AutoProcessor
-
-from common import OUT, AX, IDX, load_labels, mark, score
 
 D = OUT / "siglip_up"
 AX = ["+Z", "-Z", "+Y", "-Y", "+X", "-X"]
