@@ -20,7 +20,7 @@ from sklearn.cluster import KMeans
 
 import pose
 from classify_stls import (add_cache_args, apply_run_params, load_file_list,
-                           render_index, render_subdir)
+                           render_index, render_key, render_subdir)
 from test_categories import load_embedding_matrix
 
 
@@ -36,10 +36,11 @@ def contact_sheet(members, renders, out_base, thumb=160, cols=6, per_sheet=36,
     tiles, no_front, no_render = [], 0, 0
     for f in members:
         front = (poses or {}).get(pose.file_identity(f), {}).get("front_view", 0)
-        img_path = renders.get(f"{f.stem}_view{front}")
+        key = render_key(f)
+        img_path = renders.get(f"{key}_view{front}")
         if img_path is None:
             no_front += 1
-            alts = sorted(p for k, p in renders.items() if k.startswith(f"{f.stem}_view"))
+            alts = sorted(p for k, p in renders.items() if k.startswith(f"{key}_view"))
             img_path = alts[0] if alts else None
         if img_path is None:
             no_render += 1

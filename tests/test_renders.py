@@ -4,7 +4,8 @@ import os
 import pytest
 from PIL import Image
 
-from classify_stls import RENDER_FORMATS, render_index, render_subdir, save_renders
+from classify_stls import (RENDER_FORMATS, render_index, render_key,
+                           render_subdir, save_renders)
 
 
 def args(render_size=2048, views=8, elevations=(20.0, -20.0)):
@@ -31,6 +32,38 @@ def test_subdir_separates_configs_that_share_filenames():
 
 def tile(path, size=(8, 8), colour="white"):
     Image.new("RGB", size, colour).save(path)
+
+
+def test_key_separates_models_that_share_a_filename(tmp_path):
+    # the real case: one Baal_Flaming_Sword_L per kit, both rendered into one
+    # flat directory. Keyed by stem alone the second overwrote the first.
+    a, b = tmp_path / "Kit I", tmp_path / "Kit II"
+    for d in (a, b):
+        d.mkdir()
+        (d / "Baal_Flaming_Sword_L.stl").touch()
+    ka, kb = render_key(a / "Baal_Flaming_Sword_L.stl"), \
+        render_key(b / "Baal_Flaming_Sword_L.stl")
+    assert ka != kb
+    assert ka.startswith("Baal_Flaming_Sword_L_")  # stem stays searchable
+
+
+def test_key_is_stable_across_edits_to_the_file(tmp_path):
+    # only the path is hashed: re-rendering replaces a model's own images
+    # rather than leaving a stale set behind under a new name
+    f = tmp_path / "bunny.stl"
+    f.write_bytes(b"one")
+    before = render_key(f)
+    f.write_bytes(b"two different bytes")
+    assert render_key(f) == before
+
+
+def test_key_follows_the_file_not_the_spelling_of_the_path(tmp_path):
+    # render_index keys come from filenames, so writer and readers must agree
+    # even when one of them was handed a relative or unnormalised path
+    (tmp_path / "sub").mkdir()
+    f = tmp_path / "sub" / "bunny.stl"
+    f.touch()
+    assert render_key(tmp_path / "sub" / ".." / "sub" / "bunny.stl") == render_key(f)
 
 
 def test_index_resolves_whatever_format_was_written(tmp_path):

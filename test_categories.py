@@ -29,7 +29,7 @@ import torch
 import pose
 from classify_stls import (add_cache_args, apply_run_params, as_tensor, cache_key,
                            embed_raw, embed_texts, load_file_list, pool_sims,
-                           render_index, render_subdir, total_views)
+                           render_index, render_key, render_subdir, total_views)
 
 
 def link(f, text):
@@ -143,9 +143,10 @@ def main():
         rel = str(f.relative_to(root)) if f.is_relative_to(root) else str(f)
         front = poses.get(pose.file_identity(f), {}).get("front_view", 0)
         order = [front] + [v for v in range(total_views(args)) if v != front]
-        found = next((renders[k] for v in order if (k := f"{f.stem}_view{v}") in renders), None)
+        rkey = render_key(f)
+        found = next((renders[k] for v in order if (k := f"{rkey}_view{v}") in renders), None)
         target = found.resolve() if found else f
-        no_front += f"{f.stem}_view{front}" not in renders
+        no_front += f"{rkey}_view{front}" not in renders
         names.append(link(target, rel.replace("/No Supports", "").removesuffix(".stl")))
     print(f"{len(files)} models with cached embeddings"
           + (f" ({missing} not in cache — run classify_stls.py to add them)" if missing else ""))

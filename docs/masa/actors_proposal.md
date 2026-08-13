@@ -81,8 +81,8 @@ known**. Only a forced `--up-axis z|y` can go straight to the embedding key.
       the `Loader's` queue.
 
 "Renders needed" is the existing `need_renders` rule: `--save-renders` is set and
-either the pose just changed or some `<stem>_view<i>` is missing from the render
-index.
+either the pose just changed or some `<render_key>_view<i>` is missing from the
+render index.
 
 ### Loader
 

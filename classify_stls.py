@@ -266,8 +266,21 @@ def render_subdir(args):
     return f"{args.render_size}px-{args.views}v-e{elev}"
 
 
+def render_key(f):
+    """Per-file prefix for saved renders: '<stem>_<6 hex of the path>'.
+
+    Stems are not unique — a collection routinely holds one Baal_Flaming_Sword_L
+    per kit — and the renders all land in one flat directory, so keying by stem
+    alone let the last file walked overwrite the others' images and every tool
+    then showed one model's render for all of them. The path disambiguates;
+    mtime and size deliberately do not, so re-rendering a file replaces its own
+    images instead of accumulating a set per edit. Only the path is hashed, so
+    the stem stays readable and searchable in a directory listing."""
+    return f"{f.stem}_{hashlib.sha1(str(f.resolve()).encode()).hexdigest()[:6]}"
+
+
 def render_index(rdir):
-    """Map '<stem>_view<i>' to the saved render, from one listing of the dir.
+    """Map '<render_key>_view<i>' to the saved render, from one listing of the dir.
 
     Extension-agnostic on purpose: a directory may hold PNGs written before
     --render-format existed alongside new JPEGs, and switching format must
@@ -281,16 +294,17 @@ def render_index(rdir):
     return {p.stem: p for p in files}
 
 
-def save_renders(rdir, stem, images, fmt):
-    """Write the debug renders. Never fails the run — like the pose sheet, these
-    exist for a human to look at, not for the classifier."""
+def save_renders(rdir, key, images, fmt):
+    """Write the debug renders under a render_key() prefix. Never fails the run —
+    like the pose sheet, these exist for a human to look at, not for the
+    classifier."""
     ext, opts = RENDER_FORMATS[fmt]
     try:
         rdir.mkdir(parents=True, exist_ok=True)
         for i, im in enumerate(images):
-            im.save(rdir / f"{stem}_view{i}{ext}", **opts)
+            im.save(rdir / f"{key}_view{i}{ext}", **opts)
     except OSError as e:
-        print(f"  could not save renders for {stem}: {e}")
+        print(f"  could not save renders for {key}: {e}")
 
 
 class MeshPrefetcher:
@@ -628,8 +642,10 @@ def main():
     parser.add_argument("--out", default="results.csv")
     parser.add_argument("--save-renders", dest="renders_dir",
                         help="directory to save render images for debugging, as "
-                             "<render config>/<stem>_view<i>.<ext> plus <stem>_pose.png "
-                             "for each model whose up axis the VLM had to arbitrate")
+                             "<render config>/<stem>_<path hash>_view<i>.<ext> plus "
+                             "<stem>_<path hash>_pose.png for each model whose up axis "
+                             "the VLM had to arbitrate (the hash keeps two models that "
+                             "share a filename from overwriting each other)")
     parser.add_argument("--render-format", choices=sorted(RENDER_FORMATS), default="jpg",
                         help="encoding for --save-renders images (default jpg). Nothing "
                              "reads these back — the classifier embeds the in-memory "
@@ -827,6 +843,7 @@ def main():
             nonlocal hits, redrawn
             mesh = None
             pose_changed = False
+            rkey = render_key(f) if rdir else None  # resolves the path; do it once
             if args.up_axis in ("z", "y"):
                 up = [0.0, 0.0, 1.0] if args.up_axis == "z" else [0.0, 1.0, 0.0]
                 entry = {"up": up, "confidence": 0.0, "source": "forced"}
@@ -847,7 +864,7 @@ def main():
                             return
                         up, ratio, source, margin = resolve_up(
                             mesh, args, get_renderer, vlm_backend, score_upright,
-                            sheet_path=rdir / f"{f.stem}_pose.png" if rdir else None,
+                            sheet_path=rdir / f"{rkey}_pose.png" if rdir else None,
                             defer=(lambda call: pending_box.append(call))
                                   if defer_arbiter else None)
                         if pending_box:
@@ -879,7 +896,7 @@ def main():
             need_embeds = not cached and not args.skip_embed
             # --save-renders only forces a re-render for files whose renders are missing
             need_renders = rdir is not None and (pose_changed or not all(
-                f"{f.stem}_view{i}" in saved_renders for i in range(n_views)))
+                f"{rkey}_view{i}" in saved_renders for i in range(n_views)))
 
             if need_embeds or need_renders:
                 try:
@@ -897,7 +914,7 @@ def main():
                 # to a fresh embedding
                 if rdir is not None:
                     with stage("save-renders"):
-                        save_renders(rdir, f.stem, images, args.render_format)
+                        save_renders(rdir, rkey, images, args.render_format)
                     redrawn += not need_embeds
 
             if cached and not args.skip_embed:
