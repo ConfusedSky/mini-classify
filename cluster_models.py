@@ -83,7 +83,7 @@ def main():
                          "pass the STL directory explicitly")
 
     root = cache_root(Path(args.input), args.cache_dir, confirm=False)
-    files = load_file_list(Path(args.input), args.cache_dir)
+    files = load_file_list(Path(args.input), args.cache_dir, args.rescan)
     matrix, files, missing = load_embedding_matrix(files, args, root)
     poses = pose.load_pose_cache(args.cache_dir)
     matrix = matrix.mean(axis=1)  # pool the per-view embeddings

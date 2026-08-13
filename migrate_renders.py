@@ -78,7 +78,7 @@ def main():
         sys.exit(f"{root} is not a directory")
 
     stl_root = identity.collection_root(Path(args.input))
-    files = load_file_list(Path(args.input), args.cache_dir)
+    files = load_file_list(Path(args.input), args.cache_dir, args.rescan)
     by_stem = defaultdict(list)
     for f in files:
         by_stem[f.stem].append(f)

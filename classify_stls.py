@@ -605,6 +605,10 @@ def add_cache_args(parser, input_help):
     parser.add_argument("--cache-dir", default="embed-cache",
                         help="directory of cached per-file image embeddings; reruns with new "
                              "categories skip rendering/embedding entirely (set '' to disable)")
+    # shared because every tool here walks the collection, and a stale list is
+    # not merely slow — migrate_cache_keys drops entries for files it cannot see
+    parser.add_argument("--rescan", action="store_true",
+                        help="re-walk the input directory instead of using the cached file list")
 
 
 RUN_PARAMS_FILE = "run-params.json"
@@ -723,8 +727,6 @@ def main():
                              "cache was built against, re-keying every entry. Right after "
                              "the library moves, wrong when the cache belongs to another "
                              "collection")
-    parser.add_argument("--rescan", action="store_true",
-                        help="re-walk the input directory instead of using the cached file list")
     parser.add_argument("--pool", choices=["mean", "max", "softmax"], default="mean",
                         help="how per-view scores combine: mean = whole-object consensus, "
                              "max = single-view features decide, softmax = in between")

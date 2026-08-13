@@ -130,7 +130,7 @@ def main():
     root = cache_root(Path(args.input), args.cache_dir, confirm=False)
     # the walk follows the input, the keys follow the anchor: a run scoped to
     # one kit must list that kit, not the whole library it is cached against
-    files = load_file_list(Path(args.input), args.cache_dir)
+    files = load_file_list(Path(args.input), args.cache_dir, args.rescan)
     matrix, files, missing = load_embedding_matrix(files, args, root)
     # renders live under the config that produced them; add_cache_args and the
     # run manifest already agree with the classifier on what that config is
