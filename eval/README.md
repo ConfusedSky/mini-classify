@@ -36,15 +36,20 @@ which is gitignored. Set `EVAL_OUT` to keep runs apart.
 ## Watch out
 
 - **Contact sheet resolution changes the answer — for some models.**
-  `pose.make_contact_sheet` defaults to `thumb=256`, which starves sonnet
-  (27/44 → 37/44 at 512, net −4 → net +3 as an arbiter). It barely touches
-  Gemini: +2 for each of the three, with 3.5-flash returning an identical
-  answer on 42 of 44 models across both sizes. State the sheet size in any VLM
-  comparison, and the model in any sheet-size comparison.
-- **Scaled numerals are part of the 512 px result.** `common.contact_sheet`
-  scales the tile numbers with the tile; `pose.make_contact_sheet` uses PIL's
-  fixed ~11 px bitmap face, which is unreadable on a 1536×1024 sheet. A naive
-  `thumb=512` measures worse than 256 — see OPEN_QUESTIONS.
+  `pose.make_contact_sheet` now defaults to `thumb=512` (it was 256, which
+  starved sonnet: 27/44 → 37/44 at 512, net −4 → net +3 as an arbiter). It
+  barely touches Gemini: +2 for each of the three, with 3.5-flash returning an
+  identical answer on 42 of 44 models across both sizes. State the sheet size in
+  any VLM comparison, and the model in any sheet-size comparison.
+- **Scaled numerals are part of the 512 px result**, and live in
+  `pose.sheet_font` — `common.contact_sheet` delegates there rather than
+  keeping a second copy. PIL's fixed ~11 px bitmap face is unreadable on a
+  1536×1024 sheet, so a `thumb=512` without the scaling measures *worse* than
+  256. If you write a sheet by hand, use `pose.make_contact_sheet`.
+- **The sheet only scales the cell, never the tile.** `Image.thumbnail` does not
+  enlarge, so tiles rendered below 512 px sit padded inside 512 px cells and the
+  arbiter sees a smaller sheet than the number suggests. `classify_stls.py`
+  warns at startup when `--render-size` is under `pose.SHEET_THUMB`.
 - **Don't run the VLM and SigLIP against the same GPU.** On an 8 GB card they
   evict each other; a measured reload costs 10.1 s against 0.49 s of
   inference. Run the SigLIP phase, then the VLM phase — 40 calls took 112 s
