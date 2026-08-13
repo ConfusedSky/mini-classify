@@ -42,6 +42,7 @@ from tqdm import tqdm
 
 import instrument
 import pose
+from naming import SKIP_TAGS, skip
 from pose import detect_up_axis
 from instrument import stage
 
@@ -485,16 +486,6 @@ def pool_sims(view_sims, mode, axis=-2):
     BETA = 50.0
     w = np.exp(BETA * (view_sims - view_sims.max(axis, keepdims=True)))
     return (w * view_sims).sum(axis) / w.sum(axis)
-
-
-SKIP_TAGS = ("presupported", "pre-supported", "pre_supported", "supported",
-             "base", "hollow", "75mm")
-
-
-def skip(name):
-    # "unsupported" means NO supports — don't let the "supported" tag match inside it
-    low = name.lower().replace("unsupported", "")
-    return any(t in low for t in SKIP_TAGS)
 
 
 def find_stls(root):
