@@ -308,8 +308,11 @@ class MeshPrefetcher:
     whole mesh parses in 11-66 ms, so what is left to hide is ~1-2% of a run.
     Do not re-tune depth or worker count off the old figures — see LEARNINGS.
 
-    Files are consumed in order. A file the consumer skips (pose cached, nothing
-    to render) is dropped from the queue on the way past."""
+    The caller passes only the files that will actually ask for a mesh, so the
+    queue is consumed strictly in order and the head always matches the request.
+    It used to take the whole file list and drop skipped files on the way past,
+    which made one cache miss pay for every skip before it: 275 pose-cached
+    files ahead of a miss meant 11.6 GB read and discarded inside one get()."""
 
     def __init__(self, files, depth=2, enabled=True):
         self.enabled = enabled and depth > 0
@@ -331,24 +334,21 @@ class MeshPrefetcher:
         self._q.put((None, None))                  # end of list
 
     def get(self, f):
-        """The mesh for f. Producer and consumer walk the same list in order, so
-        anything ahead of f in the queue is a file the consumer skipped.
+        """The mesh for f, which must be the next file in the prefetch list.
 
-        Falls back to loading here once the producer is finished — a file
-        revisited after its deferred arbiter answer arrives is asked for a
-        second time, and the queue has nothing left to give it."""
+        Anything but f at the head means the list is exhausted or the caller has
+        diverged from it. Rather than hunt down the queue for f — the old
+        behaviour, and the reason one miss could drag gigabytes through it — the
+        prefetcher retires and this and every later get() loads directly."""
         if not self.enabled or self._done:
             return load_mesh(f)
-        while True:
-            g, value = self._q.get()               # blocks if the loader is behind
-            if g is None:
-                self._done = True
-                return load_mesh(f)
-            if g != f:
-                continue                           # skipped file — let it go
-            if isinstance(value, Exception):
-                raise value
-            return value
+        g, value = self._q.get()                   # blocks if the loader is behind
+        if g != f:                                 # end of list, or divergence
+            self._done = True
+            return load_mesh(f)
+        if isinstance(value, Exception):
+            raise value
+        return value
 
 
 def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None,
@@ -799,7 +799,12 @@ def main():
     rows = []
     arbiter_pool = None       # the finally below shuts it down; it must exist first
     try:
-        prefetch = MeshPrefetcher(files, args.prefetch)
+        # Only a pose-cache miss ever calls prefetch.get(): a forced --up-axis
+        # skips pose resolution altogether, and the render path below loads its
+        # own mesh. Anything else here is gigabytes read and thrown away.
+        wanted = [] if args.up_axis in ("z", "y") else [
+            f for f in files if pose.file_identity(f) not in pose_cache]
+        prefetch = MeshPrefetcher(wanted, args.prefetch)
         # A network arbiter is worth overlapping; a local one is not — ollama
         # shares the GPU with SigLIP and they evict each other (a measured 10.1 s
         # reload against 0.49 s of inference), so running them concurrently is
