@@ -40,8 +40,10 @@ import torch
 from PIL import Image
 from tqdm import tqdm
 
+import instrument
 import pose
 from pose import detect_up_axis
+from instrument import stage
 
 def as_tensor(feat):
     return feat if isinstance(feat, torch.Tensor) else feat.pooler_output
@@ -310,16 +312,19 @@ def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None,
     sheet_path, when the arbiter runs at all, keeps that model's contact sheet
     beside its renders — the scratch copy in the cache dir is one fixed name
     every model overwrites, so it only ever shows the last file processed."""
-    geo_scores = pose.up_axis_scores(mesh)
-    geo_idx, ratio, best = pose.rank_up_scores(geo_scores)
+    with stage("pose-geometry"):
+        geo_scores = pose.up_axis_scores(mesh)
+        geo_idx, ratio, best = pose.rank_up_scores(geo_scores)
     up, source, margin = pose.UP_CANDIDATES[geo_idx], "heuristic", None
 
     sheet_tiles = None
     if score_upright is not None:
-        grid = render_up_candidate_grid(get_renderer(), mesh)
+        with stage("pose-render"):
+            grid = render_up_candidate_grid(get_renderer(), mesh)
         sheet_tiles = [row[0] for row in grid]           # the VLM still sees six
         flat = [im for row in grid for im in row]
-        sig = np.asarray(score_upright(flat)).reshape(len(grid), -1).mean(axis=1)
+        with stage("pose-embed"):
+            sig = np.asarray(score_upright(flat)).reshape(len(grid), -1).mean(axis=1)
         idx, margin = pose.combine_up(geo_scores, sig)
         if idx != geo_idx:
             up, source = pose.UP_CANDIDATES[idx], "ensemble"
@@ -330,7 +335,8 @@ def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None,
                 else pose.needs_arbiter(ratio, best, args.up_conf))
     if vlm_backend and escalate:
         if sheet_tiles is None:
-            sheet_tiles = render_up_candidate_tiles(get_renderer(), mesh)
+            with stage("pose-render"):
+                sheet_tiles = render_up_candidate_tiles(get_renderer(), mesh)
         call = lambda: pose.ask_vlm_up(
             sheet_tiles, vlm_backend, args.cache_dir or ".",
             args.pose_vlm_model or pose.DEFAULT_VLM_MODELS.get(vlm_backend),
@@ -342,7 +348,8 @@ def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None,
             # this file can be finished later. apply_arbiter closes the loop.
             defer(call)
             return up, ratio, source, margin
-        idx = call()
+        with stage("arbiter-inline"):
+            idx = call()
         if idx is not None and not np.allclose(pose.UP_CANDIDATES[idx], up):
             return pose.UP_CANDIDATES[idx], ratio, "vlm", margin
     return up, ratio, source, margin
@@ -620,13 +627,24 @@ def main():
                              "the SigLIP vote over the up-candidate tiles")
     parser.add_argument("--skip-embed", action="store_true",
                         help="skip embedding the generated images")
+    parser.add_argument("--instrument", nargs="?", const="instrument.json",
+                        default=None, metavar="PATH",
+                        help="record per-stage timings and CPU/NVIDIA/amdgpu "
+                             "utilization to PATH (default instrument.json), and "
+                             "print the breakdown at the end. Rendering runs on the "
+                             "amd iGPU and embedding on the nvidia card, so both "
+                             "are sampled")
     args = apply_run_params(parser)
     if not args.input:
         sys.exit("no input given, and no directory recorded in "
                  f"{Path(args.cache_dir or '.') / RUN_PARAMS_FILE}")
 
+    if args.instrument:
+        instrument.enable(args.instrument)
+
     inp = Path(args.input)
-    files = load_file_list(inp, args.cache_dir, args.rescan) if inp.is_dir() else [inp]
+    with stage("walk"):
+        files = load_file_list(inp, args.cache_dir, args.rescan) if inp.is_dir() else [inp]
     if not files:
         sys.exit(f"no STL files found under {inp}")
     n_views = total_views(args)
@@ -638,10 +656,12 @@ def main():
     from transformers import AutoModel, AutoProcessor
 
     print(f"loading {args.model} on {device} ...")
-    model = AutoModel.from_pretrained(args.model, torch_dtype=torch.float16).to(device).eval()
-    processor = AutoProcessor.from_pretrained(args.model)
+    with stage("model-load"):
+        model = AutoModel.from_pretrained(args.model, torch_dtype=torch.float16).to(device).eval()
+        processor = AutoProcessor.from_pretrained(args.model)
 
-    text_embeds = embed_texts(model, processor, categories, device)
+    with stage("text-embed"):
+        text_embeds = embed_texts(model, processor, categories, device)
     renderer = None  # created lazily on first render
 
     cache_dir = Path(args.cache_dir) if args.cache_dir else None
@@ -755,7 +775,10 @@ def main():
                         up, ratio, source, margin = apply_arbiter(idx, *resolved)
                     else:
                         try:
-                            mesh = prefetch.get(f)
+                            # blocking here is the loader failing to keep ahead,
+                            # which is exactly what loader_worker_count is for
+                            with stage("mesh-wait"):
+                                mesh = prefetch.get(f)
                         except Exception as e:
                             rows.append({"file": str(f), "top1": f"RENDER_ERROR: {e}"})
                             return
@@ -766,7 +789,11 @@ def main():
                                   if defer_arbiter else None)
                         if pending_box:
                             # arbiter running elsewhere — park this file and move on
-                            deferred.append((f, arbiter_pool.submit(pending_box.pop()),
+                            call = pending_box.pop()
+                            def timed(call=call):
+                                with instrument.arbiter_call():
+                                    return call()
+                            deferred.append((f, arbiter_pool.submit(timed),
                                              (up, ratio, source, margin)))
                             return
                     entry = {"up": [float(v) for v in up],
@@ -794,9 +821,11 @@ def main():
             if need_embeds or need_renders:
                 try:
                     if mesh is None:
-                        mesh = load_mesh(f)
-                    mesh.rotate(rotation_to_z_up(np.array(entry["up"])), center=(0, 0, 0))
-                    images = render_views(get_renderer(), mesh, angles)
+                        with stage("mesh-load"):
+                            mesh = load_mesh(f)
+                    with stage("view-render"):
+                        mesh.rotate(rotation_to_z_up(np.array(entry["up"])), center=(0, 0, 0))
+                        images = render_views(get_renderer(), mesh, angles)
                 except Exception as e:
                     rows.append({"file": str(f), "top1": f"RENDER_ERROR: {e}"})
                     return
@@ -804,33 +833,38 @@ def main():
                 # at 0.13 s it is cheaper than leaving a stale image on disk next
                 # to a fresh embedding
                 if rdir is not None:
-                    save_renders(rdir, f.stem, images, args.render_format)
+                    with stage("save-renders"):
+                        save_renders(rdir, f.stem, images, args.render_format)
                     redrawn += not need_embeds
 
             if cached and not args.skip_embed:
-                img_embeds = torch.from_numpy(np.load(cache_file)).to(device, dtype=text_embeds.dtype)
+                with stage("cache-load"):
+                    img_embeds = torch.from_numpy(np.load(cache_file)).to(device, dtype=text_embeds.dtype)
                 hits += 1
             elif need_embeds:
-                img_embeds = embed_images(model, processor, images, device,
-                                          batch=args.embed_batch)
+                with stage("embed"):
+                    img_embeds = embed_images(model, processor, images, device,
+                                              batch=args.embed_batch)
                 if cache_file:
-                    np.save(cache_file, img_embeds.float().cpu().numpy())
+                    with stage("cache-save"):
+                        np.save(cache_file, img_embeds.float().cpu().numpy())
 
             if not args.skip_embed:
-                view_np = img_embeds.float().cpu().numpy()
-                if "front_view" not in entry:
-                    entry["front_view"] = pose.front_view_index(view_np, front_T, back_T)
-                view_sims = (img_embeds @ text_embeds.T).float().cpu().numpy()  # (n_views, n_cats)
-                sims = torch.from_numpy(pool_sims(view_sims, args.pool))
-                order = sims.argsort(descending=True)
-                row = {"file": str(f), "up": pose.up_str(entry["up"]),
-                       "pose_conf": entry["confidence"], "pose_source": entry["source"],
-                       "front_view": entry["front_view"]}
-                for rank in range(min(3, len(categories))):
-                    idx = order[rank]
-                    row[f"top{rank + 1}"] = categories[idx]
-                    row[f"score{rank + 1}"] = round(sims[idx].item(), 4)
-                rows.append(row)
+                with stage("score"):
+                    view_np = img_embeds.float().cpu().numpy()
+                    if "front_view" not in entry:
+                        entry["front_view"] = pose.front_view_index(view_np, front_T, back_T)
+                    view_sims = (img_embeds @ text_embeds.T).float().cpu().numpy()  # (n_views, n_cats)
+                    sims = torch.from_numpy(pool_sims(view_sims, args.pool))
+                    order = sims.argsort(descending=True)
+                    row = {"file": str(f), "up": pose.up_str(entry["up"]),
+                           "pose_conf": entry["confidence"], "pose_source": entry["source"],
+                           "front_view": entry["front_view"]}
+                    for rank in range(min(3, len(categories))):
+                        idx = order[rank]
+                        row[f"top{rank + 1}"] = categories[idx]
+                        row[f"score{rank + 1}"] = round(sims[idx].item(), 4)
+                    rows.append(row)
 
         for f in tqdm(files, desc="classifying"):
             process(f)
@@ -843,7 +877,9 @@ def main():
             print(f"resolving {len(deferred)} deferred arbiter calls")
             for f, fut, resolved in tqdm(deferred, desc="arbiter"):
                 try:
-                    idx = fut.result()
+                    # the tail: how much of the arbiter did *not* overlap
+                    with stage("arbiter-wait"):
+                        idx = fut.result()
                 except Exception as e:              # one bad call must not sink the rest
                     print(f"  arbiter failed for {f.stem}: {e}")
                     idx = None                      # keep the ensemble's answer
@@ -870,6 +906,7 @@ def main():
     print(f"wrote {args.out} ({len(rows)} models, {hits} from embedding cache"
           + (f", {redrawn} re-rendered only to refresh --save-renders" if redrawn else "")
           + ")")
+    instrument.report()
 
 
 if __name__ == "__main__":
