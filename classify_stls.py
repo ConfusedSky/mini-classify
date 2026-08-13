@@ -719,6 +719,7 @@ def main():
         return renderer
 
     rows = []
+    arbiter_pool = None       # the finally below shuts it down; it must exist first
     try:
         prefetch = MeshPrefetcher(files, args.prefetch)
         # A network arbiter is worth overlapping; a local one is not — ollama
@@ -841,8 +842,19 @@ def main():
             # memory than the reload costs time, and only ~20% of files land here.
             print(f"resolving {len(deferred)} deferred arbiter calls")
             for f, fut, resolved in tqdm(deferred, desc="arbiter"):
-                process(f, deferred_answer=(fut.result(), resolved))
+                try:
+                    idx = fut.result()
+                except Exception as e:              # one bad call must not sink the rest
+                    print(f"  arbiter failed for {f.stem}: {e}")
+                    idx = None                      # keep the ensemble's answer
+                process(f, deferred_answer=(idx, resolved))
     finally:
+        # Drop queued arbiter calls rather than letting the interpreter join
+        # them at exit: they are non-daemon threads at ~24 s each, so a Ctrl-C
+        # with a full queue would otherwise hang for minutes with nothing to show
+        # for it. Their files simply keep the ensemble's pose.
+        if arbiter_pool is not None:
+            arbiter_pool.shutdown(wait=False, cancel_futures=True)
         # interrupted cold passes keep their (expensive) pose resolutions, and
         # still describe the cache they partly filled
         if args.up_axis == "auto":
