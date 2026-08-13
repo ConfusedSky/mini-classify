@@ -188,6 +188,34 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   it on its back; every Gemini model rescues it, as gemma and sonnet sometimes
   do. It remains the single model no geometric or embedding method in this
   project has solved.
+- **Would a much *smaller* tower do for the pose ensemble?** The backbone work
+  above asks whether a bigger tower helps. Pose is the place to ask the
+  opposite, and it is now the most expensive thing in the run. Instrumented
+  full-collection pass, 602 models at 384px: `pose-embed` is **29.3% of wall**
+  (1176 ms/model), and after the STL parser landed it is **41.7%** on a subset —
+  the single largest line item, costing 1.6× what embedding the actual
+  classification views costs. All of it is SigLIP over 24 up-candidate tiles
+  (6 candidates × `UP_TILE_AZIMUTHS`), on `so400m-patch14-384`: 1.1B params, the
+  same tower used for fine-grained category probes.
+
+  The tiles are near-silhouettes with no detail to resolve — LEARNINGS says so
+  explicitly when explaining why a *stronger* tower buys resolution invariance
+  rather than accuracy there. If that is right, a far smaller tower should cost
+  little or nothing on pose. `google/siglip-base-patch16-224` is already in the
+  HF cache, and `eval/backbone_sweep.py` crosses towers against the 44 labels
+  with probes and combination frozen, re-embedding identical pixels — so this is
+  a `--models` argument, not new code.
+
+  Two things to watch. The probes (`UPRIGHT_PROMPTS` / `TOPPLED_PROMPTS`) were
+  selected against `so400m`, so a weaker tower is being scored on prompts tuned
+  for a different text encoder — a loss may be the probes, not the tower.
+  And `MARGIN_THRESHOLD` gates arbiter escalation off the ensemble margin; a
+  different tower rescales margins, so the gate would need re-reading against
+  the labels rather than carried across.
+
+  The cheaper variant of the same question needs no backbone at all:
+  `UP_TILE_AZIMUTHS` is 4, so halving it halves `pose-embed` directly. Same
+  harness scores it.
 - **Does a better backbone help *category* classification?** The whole backbone
   comparison above is up-axis only, where the tiles are near-silhouettes with
   no detail to resolve. Categories are fine-grained text probes over detailed
