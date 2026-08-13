@@ -97,6 +97,16 @@ Not the lack of color — gray renders classify fine (the witch scored top-1
   silhouette). Use a camera-following headlight: per view,
   `sun_dir = normalize(center - eye) + [0, 0, -0.6]`, renormalized — every
   azimuth lit, shadows still fall consistently with "up".
+- **One `OffscreenRenderer` per process — a second one core-dumps.** Creating
+  it does not fail politely; Filament's resource manager throws
+  `Trying to destroy nonexistent resource ([VertexBuffer...])` from a
+  destructor and the interpreter aborts. Reproduced deliberately, and it is
+  also what killed an A/B that tried to compare two lighting configurations in
+  one process — the fix there was one config per process invocation.
+  This is the hard limit on parallelising the render stage: rendering cannot be
+  threaded *or* multi-instanced inside a run, only moved to separate processes
+  (which then contend for the same GPU). It is why the async work overlaps mesh
+  loading and the arbiter with rendering rather than rendering with itself.
 - **The sun is the only light Open3D actually gives you here.**
   `add_directional_light` / `add_point_light` / `add_spot_light` all return
   `True` and then contribute nothing — measured <0.1/255 mean change on a lit
