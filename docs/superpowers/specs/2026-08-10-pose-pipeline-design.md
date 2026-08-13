@@ -1,11 +1,24 @@
 # Canonical Pose Pipeline — Design
 
 **Date:** 2026-08-10
-**Status:** Approved — amended 2026-08-11 and 2026-08-12, see [Amendments](#amendments)
+**Status:** **Archived 2026-08-13.** Implemented and shipped. Kept as the record
+of why the pose pipeline is shaped the way it is — not as a description of what
+the code does now. Approved 2026-08-10, amended 2026-08-11 and 2026-08-12, see
+[Amendments](#amendments).
 **Goal:** Ensure every model renders upright and we know which view faces the
 camera — improving classification robustness, render-sheet readability, and
 giving each model a canonical "hero" view. Fixes known failures (symmetric
 objects like the barrel) by detecting ambiguity and escalating to a VLM.
+
+> **Known drift, found when archiving.**
+> [Tier 3](#tier-3-vlm-arbiter-low-confidence-uprights-only) lists
+> `--pose-vlm {auto, ollama, claude, off}` and defines `auto` as "try ollama; if
+> unreachable, warn and behave as `off`" — free and local. The shipped flag also
+> accepts `gemini`, and `auto` prefers Gemini on Vertex AI before falling back to
+> ollama (`classify_stls.py:737`), which bills per escalation (~$0.30 for a
+> 602-model run by the code's own estimate). The Gemini backend arrived after the
+> last amendment and was never folded in. `classify_stls.py --help` is the source
+> of truth for the CLI.
 
 ## Context
 
