@@ -91,8 +91,51 @@ def rotation_to_z_up(up):
     return o3d.geometry.get_rotation_matrix_from_axis_angle(axis * angle)
 
 
+# Binary STL: an 80-byte header, a uint32 triangle count, then this fixed
+# 50-byte record per triangle. The fixed stride is the whole trick.
+STL_RECORD = np.dtype([("normal", "<f4", 3), ("v", "<f4", (3, 3)), ("attr", "<u2")])
+
+
+def read_binary_stl(path):
+    """A binary STL read straight into arrays, or None if it is not one.
+
+    read_triangle_mesh dominates everything before the first pixel: ~3.9 s on an
+    800k-triangle collection mesh against ~120 ms here, where the upload it
+    feeds is 275 ms. Optimising the renderer was optimising the small half
+    (eval/load_path.py, docs/masa/renderer_alternatives.md).
+
+    The header cannot be trusted to say which format this is — plenty of binary
+    STLs start with "solid" — so the test is arithmetic: it is binary only if
+    the file is exactly the length the triangle count implies. Anything else
+    (ASCII, truncated, junk) returns None and takes the Open3D path.
+
+    The result is a triangle soup, three unshared vertices per triangle, which
+    is what an STL *is*. Open3D's reader welds a handful (108 of 2.4M on a real
+    mesh); we do not, and that difference shows up in the render."""
+    size = path.stat().st_size
+    if size < 84:
+        return None
+    with open(path, "rb") as fh:
+        n = int(np.frombuffer(fh.read(84)[80:84], "<u4")[0])
+        if n == 0 or size != 84 + 50 * n:
+            return None
+        # fromfile continues from the header rather than materialising the
+        # whole record block as bytes first — 200 MB on a 4M-triangle mesh
+        rec = np.fromfile(fh, dtype=STL_RECORD, count=n)
+    if len(rec) != n:                       # short read despite the size check
+        return None
+    return o3d.geometry.TriangleMesh(
+        o3d.utility.Vector3dVector(rec["v"].reshape(-1, 3).astype(np.float64)),
+        o3d.utility.Vector3iVector(np.arange(3 * n, dtype=np.int32).reshape(-1, 3)))
+
+
 def load_mesh(mesh_path):
-    mesh = o3d.io.read_triangle_mesh(str(mesh_path))
+    mesh_path = Path(mesh_path)
+    mesh = None
+    if mesh_path.suffix.lower() == ".stl":
+        mesh = read_binary_stl(mesh_path)
+    if mesh is None:
+        mesh = o3d.io.read_triangle_mesh(str(mesh_path))
     if not mesh.has_triangles():
         raise ValueError("no triangles")
     mesh.compute_vertex_normals()
