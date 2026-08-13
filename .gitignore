@@ -3,7 +3,7 @@ __pycache__/
 *.pyc
 
 # derived outputs — regenerable from the caches in seconds
-embed-cache/
+*embed-cache*/
 *.csv
 *renders*/
 
