@@ -374,7 +374,7 @@ def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None,
     stay "heuristic" so the embedding-cache key is unchanged — only an actual
     override becomes "ensemble" or "vlm".
 
-    score_upright(tiles) -> per-candidate SigLIP scores; None (--skip-embed)
+    score_upright(tiles) -> per-candidate SigLIP scores; None (--no-up-ensemble)
     falls back to geometry alone. The ensemble runs on *every* model rather
     than only low-confidence ones: geometry can be confidently wrong with a
     real-looking base (32mm_Gate_L scores a 0.43 ratio on the wrong face), and
@@ -693,14 +693,15 @@ def main():
                              "candidate leads the runner-up by less than this (0-2). "
                              "Lower = fewer VLM calls")
     parser.add_argument("--up-conf", type=float, default=0.6,
-                        help="fallback ambiguity threshold used only with --skip-embed, "
+                        help="fallback ambiguity threshold used only with --no-up-ensemble, "
                              "where there is no ensemble margin: runner-up/best flat-base "
                              "score ratio above this escalates to the pose VLM")
     parser.add_argument("--no-up-ensemble", dest="up_ensemble", action="store_false",
                         help="decide the up axis from flat-base geometry alone, without "
                              "the SigLIP vote over the up-candidate tiles")
     parser.add_argument("--skip-embed", action="store_true",
-                        help="skip embedding the generated images")
+                        help="skip embedding and scoring the classification views; pose "
+                             "resolution, including the SigLIP up-ensemble, still runs")
     parser.add_argument("--instrument", nargs="?", const="instrument.json",
                         default=None, metavar="PATH",
                         help="record per-stage timings and CPU/NVIDIA/amdgpu "
@@ -798,7 +799,7 @@ def main():
     back_T = embed_raw(model, processor, pose.BACK_PROMPTS, device).float().cpu().numpy()
 
     score_upright = None
-    if args.up_ensemble and not args.skip_embed:
+    if args.up_ensemble:
         up_T = embed_raw(model, processor, pose.UPRIGHT_PROMPTS, device).float().cpu().numpy()
         down_T = embed_raw(model, processor, pose.TOPPLED_PROMPTS, device).float().cpu().numpy()
 
@@ -817,9 +818,16 @@ def main():
     try:
         # Only a pose-cache miss ever calls prefetch.get(): a forced --up-axis
         # skips pose resolution altogether, and the render path below loads its
-        # own mesh. Anything else here is gigabytes read and thrown away.
+        # own mesh. Anything else here is gigabytes read and thrown away. The
+        # miss test must be the same one process() uses, or an upgraded file
+        # would reach prefetch.get() unannounced and retire the prefetcher.
         wanted = [] if args.up_axis in ("z", "y") else [
-            f for f in files if pose.file_identity(f) not in pose_cache]
+            f for f in files if not pose.pose_is_sufficient(
+                pose_cache.get(pose.file_identity(f)), score_upright is not None)]
+        stale = sum(1 for f in wanted if pose.file_identity(f) in pose_cache)
+        if stale:
+            print(f"pose cache: {stale} geometry-only poses (from a --no-up-ensemble "
+                  f"pass) will be re-resolved with the ensemble")
         prefetch = MeshPrefetcher(wanted, args.prefetch)
         # A network arbiter is worth overlapping; a local one is not — ollama
         # shares the GPU with SigLIP and they evict each other (a measured 10.1 s
@@ -849,7 +857,8 @@ def main():
                 entry = {"up": up, "confidence": 0.0, "source": "forced"}
             else:
                 entry = pose_cache.get(pose.file_identity(f))
-                if entry is None:
+                # a true miss, or a geometry-only pose this run can upgrade
+                if not pose.pose_is_sufficient(entry, score_upright is not None):
                     if deferred_answer is not None:
                         idx, resolved = deferred_answer
                         up, ratio, source, margin = apply_arbiter(idx, *resolved)

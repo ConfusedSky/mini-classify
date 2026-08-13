@@ -83,7 +83,7 @@ def detect_up_axis(mesh, n_samples=4000):
 def needs_arbiter(ratio, best_score, threshold=0.6):
     """Geometry's own doubt. Superseded by needs_arbiter_margin for the
     production gate — kept as the fallback when SigLIP is unavailable
-    (--skip-embed), where there is no ensemble margin to ask about."""
+    (--no-up-ensemble), where there is no ensemble margin to ask about."""
     return ratio > threshold or best_score < ABS_SCORE_FLOOR
 
 
@@ -128,6 +128,24 @@ def save_pose_cache(cache_dir, cache):
     p = Path(cache_dir) / "pose-cache.json"
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(cache))
+
+
+def pose_is_sufficient(entry, ensemble_available):
+    """Is this cached pose good enough for the current run, or a miss?
+
+    `margin` is None exactly when the SigLIP ensemble did not run — a
+    `--no-up-ensemble` pass resolves poses from geometry alone. Treating
+    those as hits would let one geometry-only pass pin every
+    model to its heuristic answer, and the ensemble — and the margin gate
+    behind it, so the arbiter too — would never run again. A run with the
+    ensemble available treats them as misses and upgrades them in place; a run
+    without it takes any cached answer, and a VLM answer outranks the ensemble
+    whichever gate escalated it."""
+    if entry is None:
+        return False
+    if not ensemble_available or entry["source"] == "vlm":
+        return True
+    return entry.get("margin") is not None
 
 
 def up_str(up):

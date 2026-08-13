@@ -129,6 +129,29 @@ def test_margin_gate_escalates_only_the_unsure():
     assert pose.needs_arbiter_margin(0.9, threshold=1.0)
 
 
+def test_geometry_only_pose_is_a_miss_for_an_ensemble_run():
+    # margin is None exactly when the ensemble did not run: one --no-up-ensemble
+    # pass must not pin the pose, so an ensemble run re-resolves the entry —
+    # while a second geometry-only run still gets its cache hit
+    geo = {"up": [0, 0, 1], "confidence": 0.4, "source": "heuristic", "margin": None}
+    assert not pose.pose_is_sufficient(geo, ensemble_available=True)
+    assert pose.pose_is_sufficient(geo, ensemble_available=False)
+
+
+def test_full_run_poses_stay_cached():
+    # heuristic-with-margin means the ensemble ran and agreed with geometry
+    assert pose.pose_is_sufficient({"source": "heuristic", "margin": 0.62}, True)
+    assert pose.pose_is_sufficient({"source": "ensemble", "margin": 0.51}, True)
+    # a VLM answer outranks the ensemble whichever gate escalated it, so a
+    # geometry-gated arbiter call from a --no-up-ensemble run is not re-bought
+    assert pose.pose_is_sufficient({"source": "vlm", "margin": None}, True)
+
+
+def test_no_entry_is_never_sufficient():
+    assert not pose.pose_is_sufficient(None, ensemble_available=False)
+    assert not pose.pose_is_sufficient(None, ensemble_available=True)
+
+
 def test_file_identity_changes_with_mtime_and_size(tmp_path):
     f = tmp_path / "a.stl"
     f.write_text("x")
