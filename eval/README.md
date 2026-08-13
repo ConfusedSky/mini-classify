@@ -32,6 +32,8 @@ which is gitignored. Set `EVAL_OUT` to keep runs apart.
 | `build_report.py` | Builds the standalone HTML failure report — truth tile beside each method's pick, grouped by failure mode. |
 | `gold_upright.py` | Renders every label in the orientation it asserts — `rotation_to_z_up(label)`, 3 azimuths — into one self-contained HTML page, so the ground truth itself can be eyeballed. This is how you check a new label before trusting a number measured against it. `--html` rebuilds the page from existing renders. |
 | `light_probe2.py`, `light_probe3.py` | Superseded. Compared fill-light strategies before `FILL_INTENSITY` landed; kept because they document how the indirect-light-as-fill decision was measured. |
+| `renderer_open3d.py` | What Filament will and will not do with GPU memory: whether a mesh can be staged before `add_geometry` (no), whether a scene can be cleared without evicting it (yes — `show_geometry`, ~11× cheaper than remove+re-add), and which card it runs on (the iGPU, so "resident" is host RAM). Feeds `docs/masa/renderer_alternatives.md`. |
+| `renderer_moderngl.py` | The alternative measured beside it. Selects the GPU by EGL device index — reaching the 4060, which Filament cannot — and checks the one that matters for the actor design: a second context in the same process, which Open3D core-dumps on. Needs its own venv, see the README header in the script. |
 
 ## Watch out
 
