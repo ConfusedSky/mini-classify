@@ -840,6 +840,9 @@ def main():
             arbiter all over again. Measured: that cost more than the overlap
             saved, and two independent calls disagreed on three models."""
             nonlocal hits, redrawn
+            # the guard around resolve_up leans on this: a leftover entry here
+            # would park this file against another file's arbiter call
+            assert not pending_box
             mesh = None
             pose_changed = False
             rkey = render_key(f) if rdir else None  # resolves the path; do it once
@@ -859,14 +862,19 @@ def main():
                             # which is exactly what loader_worker_count is for
                             with stage("mesh-wait"):
                                 mesh = prefetch.get(f)
+                            # guarded like the view renders below: resolve_up runs
+                            # 24 renders and their embeddings, and a degenerate
+                            # mesh that survived load_mesh (coincident vertices,
+                            # NaNs) raises out of Filament on its empty AABB —
+                            # one bad file must not end the run
+                            up, ratio, source, margin = resolve_up(
+                                mesh, args, get_renderer, vlm_backend, score_upright,
+                                sheet_path=rdir / f"{rkey}_pose.png" if rdir else None,
+                                defer=(lambda call: pending_box.append(call))
+                                      if defer_arbiter else None)
                         except Exception as e:
                             rows.append({"file": str(f), "top1": f"RENDER_ERROR: {e}"})
                             return
-                        up, ratio, source, margin = resolve_up(
-                            mesh, args, get_renderer, vlm_backend, score_upright,
-                            sheet_path=rdir / f"{rkey}_pose.png" if rdir else None,
-                            defer=(lambda call: pending_box.append(call))
-                                  if defer_arbiter else None)
                         if pending_box:
                             # arbiter running elsewhere — park this file and move on
                             call = pending_box.pop()
@@ -927,7 +935,13 @@ def main():
                                               batch=args.embed_batch)
                 if cache_file:
                     with stage("cache-save"):
-                        np.save(cache_file, img_embeds.float().cpu().numpy())
+                        try:
+                            np.save(cache_file, img_embeds.float().cpu().numpy())
+                        except BaseException:
+                            # a torn write (full disk, Ctrl-C) would read as a
+                            # cache hit next run and crash cache-load
+                            cache_file.unlink(missing_ok=True)
+                            raise
 
             if not args.skip_embed:
                 with stage("score"):
@@ -971,21 +985,35 @@ def main():
         # for it. Their files simply keep the ensemble's pose.
         if arbiter_pool is not None:
             arbiter_pool.shutdown(wait=False, cancel_futures=True)
-        # interrupted cold passes keep their (expensive) pose resolutions, and
-        # still describe the cache they partly filled
-        if args.up_axis == "auto":
-            pose.save_pose_cache(args.cache_dir, pose_cache)
-        save_run_params(args)
-
-    fields = ["file", "top1", "score1", "top2", "score2", "top3", "score3",
-              "up", "pose_conf", "pose_source", "front_view"]
-    with open(args.out, "w", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=fields)
-        writer.writeheader()
-        writer.writerows(rows)
-    print(f"wrote {args.out} ({len(rows)} models, {hits} from embedding cache"
-          + (f", {redrawn} re-rendered only to refresh --save-renders" if redrawn else "")
-          + ")")
+        # Three artifacts to save, each attempted even if another's write
+        # raises — on the full disk that killed the run, one failing write
+        # must not also cost the others. The nested finallys chain rather
+        # than swallow: the last failure re-raises after every write has had
+        # its try, with earlier failures and the run's own exception kept
+        # visible as __context__.
+        try:
+            # the pose cache first: it is the only artifact whose loss costs
+            # money — its VLM answers bill per gemini call — where rows and
+            # run-params only cost time to rebuild. Interrupted cold passes
+            # keep their (expensive) pose resolutions.
+            if args.up_axis == "auto":
+                pose.save_pose_cache(args.cache_dir, pose_cache)
+        finally:
+            try:
+                # an exception at file 900 of 1758 must not discard 899
+                # finished rows. It still propagates after.
+                fields = ["file", "top1", "score1", "top2", "score2", "top3", "score3",
+                          "up", "pose_conf", "pose_source", "front_view"]
+                with open(args.out, "w", newline="") as fh:
+                    writer = csv.DictWriter(fh, fieldnames=fields)
+                    writer.writeheader()
+                    writer.writerows(rows)
+                print(f"wrote {args.out} ({len(rows)} models, {hits} from embedding cache"
+                      + (f", {redrawn} re-rendered only to refresh --save-renders" if redrawn else "")
+                      + ")")
+            finally:
+                # still describes the cache a partial pass partly filled
+                save_run_params(args)
     instrument.report()
 
 
