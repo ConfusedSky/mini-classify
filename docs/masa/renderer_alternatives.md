@@ -122,9 +122,64 @@ Two consequences:
 
 * The residency cache is **worth more** than the Q2 numbers suggest, because the
   upload it avoids is the larger of the two figures.
-* Welding at load (`merge_close_vertices`, or trimesh's loader, which already
-  returned 2.2M verts for the same mesh) is worth measuring on its own — it may
-  buy most of the upload win without changing renderer at all. Untested.
+* Welding at load looked like it might buy most of the upload win without
+  changing renderer. It does not — see below.
+
+## Welding does not pay, and the upload was never the problem
+
+Measured by `eval/load_path.py` on a real collection mesh (`75mm_PitFiend_
+Complete.stl`, 800,236 tris, 2.4M verts at ratio 3.00 — real STLs confirm the
+soup finding above). Page cache warmed, parsers interleaved, since these files
+live on external storage.
+
+| stage | current | alternative | |
+|---|---|---|---|
+| parse | `read_triangle_mesh` **3883 ms** | numpy binary-STL **120 ms** | ~15–30× |
+| weld | — | `remove_duplicated_vertices` 928 ms | saves 230 ms of upload |
+| upload | 275 ms | 45 ms welded | |
+
+**Welding loses.** It costs 928 ms to save 230 ms — a net loss of ~700 ms, before
+counting that it changes the render. `merge_close_vertices` is worse at 3548 ms.
+Both collapse 2.4M verts to 400k (17%), so the *upload* saving is real and large;
+Open3D's welding is simply slower than the thing it saves. A numpy weld via
+`np.unique` was slower still (2803 ms), so this is not an Open3D-specific fix.
+
+**The parse is the real cost.** `read_triangle_mesh` is ~3.9 s where a numpy
+`frombuffer` over the fixed 50-byte binary-STL record is ~120 ms. Upload is
+**275 ms of a 4158 ms path — 6.6%**. Everything above this section optimises the
+small half.
+
+| whole path, load + upload | total | |
+|---|---|---|
+| o3d soup (current) | 4158 ms | |
+| **numpy soup** | **419 ms** | **9.9× faster** |
+| o3d welded | 4856 ms | 0.9×, a regression |
+
+## But the pixels move
+
+The renderer is not bit-exact, so a control matters: the same mesh rendered
+twice differs by 0.004% of pixels above 2/255. Against that floor:
+
+| | mean | max | pixels >2/255 |
+|---|---|---|---|
+| control (noise floor) | 0.448 | 5.0 | **0.004%** |
+| numpy soup | 0.665 | 27.0 | **4.477%** |
+| o3d welded | 0.732 | 44.0 | **4.957%** |
+
+Both are ~1000× the noise floor, so both are real changes, not jitter. The diff
+map is diffuse low-magnitude shading noise spread over the model surface rather
+than anything structural, and the numpy render is visually correct — but "looks
+the same" is not the bar. Embeddings move, so this needs `eval/tile_and_vlm.py`
+re-run against the labels before it ships.
+
+Two notes on the numpy parser. It is binary-STL only, so it needs an ASCII
+fallback (`read_triangle_mesh` handles both). And it produces 2,400,708 verts
+against Open3D's 2,400,600 — Open3D merges 108, which is likely part of why the
+pixels differ at all.
+
+**This is the cheapest large win available and it does not touch the renderer.**
+A ~10× cut to the pre-pixel path, for a parser and an eval re-run, against a
+renderer port that needs the same eval re-run and much more work.
 
 ## The row that matters most
 
@@ -201,11 +256,24 @@ That re-validation, not the port, is the thing to budget for.
 
 ## Recommendation
 
-Prototype ModernGL behind the existing `make_renderer` / `_upload` / `_shoot`
-seam, on the **iGPU** first so the device split is held constant and the only
-variable is the renderer. That isolates the multi-context win, which is the one
-that unblocks the actor design. Decide the 4060 move separately, on Spike 2
-numbers.
+**Swap the STL parser first.** It is ~10× on the pre-pixel path, it is a
+contained change, and it does not touch the renderer. Both it and any renderer
+port need the same eval re-run, so do the cheap one first and spend the
+validation budget once.
+
+Then prototype ModernGL behind the existing `make_renderer` / `_upload` /
+`_shoot` seam, on the **iGPU** first so the device split is held constant and
+the only variable is the renderer. That isolates the multi-context win, which is
+the one that unblocks the actor design. Decide the 4060 move separately, on
+Spike 2 numbers.
+
+Do **not** weld at load. It is a net regression on time and it changes the
+render.
+
+Note the ordering this implies for the actor design: if parse drops from 3.9 s
+to 0.1 s, `MeshPrefetcher` has far less to hide, and the balance between the
+loader and renderer stages shifts. Worth re-measuring the overlap after the
+parser lands rather than designing the actor graph around today's split.
 
 ## Reproducing
 
