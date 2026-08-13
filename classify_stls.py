@@ -97,7 +97,6 @@ def load_mesh(mesh_path):
     return mesh
 
 
-_UNSET = object()   # 'no deferred arbiter answer', distinct from a None answer
 DEFAULT_ELEVATIONS = [20.0]
 UP_TILE_ELEVATION = 20.0  # pose contact sheet: fixed, independent of --elevations
 UP_TILE_AZIMUTHS = 4      # views per up candidate for the ensemble; the sheet still gets one
@@ -604,6 +603,10 @@ def main():
                         help="concurrent pose-VLM calls for network backends. The call "
                              "averages 24s against 3-28s of local work per model, so "
                              "waiting inline leaves the run mostly idle")
+    parser.add_argument("--no-defer-arbiter", dest="defer_arbiter", action="store_false",
+                        help="wait for each pose-VLM answer inline instead of parking the "
+                             "file and revisiting it. Slower by design — kept so the "
+                             "overlap can be measured against the behaviour it replaced")
     parser.add_argument("--up-margin", type=float, default=pose.MARGIN_THRESHOLD,
                         help="escalate to the pose VLM when the ensemble's winning "
                              "candidate leads the runner-up by less than this (0-2). "
@@ -722,15 +725,21 @@ def main():
         # shares the GPU with SigLIP and they evict each other (a measured 10.1 s
         # reload against 0.49 s of inference), so running them concurrently is
         # slower than taking turns.
-        defer_arbiter = vlm_backend in ("gemini", "claude")
+        defer_arbiter = args.defer_arbiter and vlm_backend in ("gemini", "claude")
         arbiter_pool = ThreadPoolExecutor(max_workers=args.arbiter_workers) \
             if defer_arbiter else None
         deferred, pending_box = [], []
 
-        def process(f, deferred_idx=_UNSET):
-            """One file end to end. deferred_idx carries an arbiter answer that
-            arrived after the first visit, so the second visit repeats the work
-            with the final pose instead of re-asking."""
+        def process(f, deferred_answer=None):
+            """One file end to end.
+
+            deferred_answer is (arbiter_index, pose-as-resolved-without-it) for a
+            file parked on its first visit. Pose resolution is *not* repeated on
+            the revisit: the ensemble already decided, and re-running it would
+            redo the mesh load, the 24 candidate renders and their embeddings —
+            and, because the deferral hook is off the second time, ask the
+            arbiter all over again. Measured: that cost more than the overlap
+            saved, and two independent calls disagreed on three models."""
             nonlocal hits, redrawn
             mesh = None
             pose_changed = False
@@ -740,24 +749,25 @@ def main():
             else:
                 entry = pose_cache.get(pose.file_identity(f))
                 if entry is None:
-                    try:
-                        mesh = prefetch.get(f)
-                    except Exception as e:
-                        rows.append({"file": str(f), "top1": f"RENDER_ERROR: {e}"})
-                        return
-                    up, ratio, source, margin = resolve_up(
-                        mesh, args, get_renderer, vlm_backend, score_upright,
-                        sheet_path=rdir / f"{f.stem}_pose.png" if rdir else None,
-                        defer=(lambda call: pending_box.append(call)) if defer_arbiter
-                             and deferred_idx is _UNSET else None)
-                    if deferred_idx is not _UNSET:
-                        up, ratio, source, margin = apply_arbiter(
-                            deferred_idx, up, ratio, source, margin)
-                    elif pending_box:
-                        # arbiter running elsewhere — park this file and move on
-                        deferred.append((f, arbiter_pool.submit(pending_box.pop()),
-                                         (up, ratio, source, margin)))
-                        return
+                    if deferred_answer is not None:
+                        idx, resolved = deferred_answer
+                        up, ratio, source, margin = apply_arbiter(idx, *resolved)
+                    else:
+                        try:
+                            mesh = prefetch.get(f)
+                        except Exception as e:
+                            rows.append({"file": str(f), "top1": f"RENDER_ERROR: {e}"})
+                            return
+                        up, ratio, source, margin = resolve_up(
+                            mesh, args, get_renderer, vlm_backend, score_upright,
+                            sheet_path=rdir / f"{f.stem}_pose.png" if rdir else None,
+                            defer=(lambda call: pending_box.append(call))
+                                  if defer_arbiter else None)
+                        if pending_box:
+                            # arbiter running elsewhere — park this file and move on
+                            deferred.append((f, arbiter_pool.submit(pending_box.pop()),
+                                             (up, ratio, source, margin)))
+                            return
                     entry = {"up": [float(v) for v in up],
                              "confidence": round(ratio, 4), "source": source,
                              "margin": None if margin is None else round(margin, 4),
@@ -830,8 +840,8 @@ def main():
             # mesh is reloaded rather than held — a 4M-triangle mesh costs more
             # memory than the reload costs time, and only ~20% of files land here.
             print(f"resolving {len(deferred)} deferred arbiter calls")
-            for f, fut, _ in tqdm(deferred, desc="arbiter"):
-                process(f, deferred_idx=fut.result())
+            for f, fut, resolved in tqdm(deferred, desc="arbiter"):
+                process(f, deferred_answer=(fut.result(), resolved))
     finally:
         # interrupted cold passes keep their (expensive) pose resolutions, and
         # still describe the cache they partly filled
