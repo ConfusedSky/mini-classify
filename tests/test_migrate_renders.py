@@ -45,7 +45,8 @@ def test_deletes_the_images_of_a_shared_filename(tmp_path):
     tile(rdir / "sword_view0.jpg")
     renames, deletes, _, _ = plan(rdir, files, by_stem)
     assert not renames
-    assert [p.name for p in deletes] == ["sword_view0.jpg"]
+    assert [(p.name, why) for p, why in deletes] == \
+        [("sword_view0.jpg", "filename shared by 2 models")]
 
 
 def test_leaves_files_it_cannot_account_for(tmp_path):
@@ -72,9 +73,12 @@ def test_drops_an_old_file_whose_migrated_copy_exists(tmp_path):
     rdir = tmp_path / "renders"
     tile(rdir / "bunny_view0.jpg")
     tile(rdir / f"{render_key(files[0])}_view0.jpg")
-    renames, deletes, _, _ = plan(rdir, files, by_stem)
-    assert not renames
-    assert [p.name for p in deletes] == ["bunny_view0.jpg"]
+    renames, deletes, already, _ = plan(rdir, files, by_stem)
+    # one fate per file: the migrated copy is the 1 "already", and the old
+    # copy is a delete only — not also counted as migrated
+    assert not renames and already == 1
+    assert [(p.name, why) for p, why in deletes] == \
+        [("bunny_view0.jpg", "migrated copy already exists")]
 
 
 def test_a_stem_ending_in_view_digits_is_split_at_the_right_end(tmp_path):

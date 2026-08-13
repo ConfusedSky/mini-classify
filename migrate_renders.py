@@ -34,7 +34,8 @@ def plan_dir(rdir, by_stem, new_keys):
     """What to do with each image in one render config directory.
 
     Returns (renames, deletes, already, orphans): a list of (src, dst) pairs,
-    a list of paths to remove, and counts of files needing neither."""
+    a list of (path, reason) pairs to remove, and counts of files needing
+    neither."""
     renames, deletes, already, orphans = [], [], 0, 0
     for p in sorted(rdir.iterdir()):
         if not p.is_file():
@@ -51,12 +52,11 @@ def plan_dir(rdir, by_stem, new_keys):
         if len(files) == 1:
             dst = p.with_name(f"{render_key(files[0])}_{tail}{p.suffix}")
             if dst.exists():
-                already += 1  # migrated copy already there; the old one is dead weight
-                deletes.append(p)
+                deletes.append((p, "migrated copy already exists"))
             else:
                 renames.append((p, dst))
         elif len(files) > 1:
-            deletes.append(p)
+            deletes.append((p, f"filename shared by {len(files)} models"))
         else:
             orphans += 1  # no such STL under this root — someone else's file
     return renames, deletes, already, orphans
@@ -101,27 +101,27 @@ def main():
               + (f", {orphans} unrecognised (left alone)" if orphans else ""))
         for src, dst in renames[:3]:
             print(f"  rename {src.name} -> {dst.name}")
-        for p in deletes[:3]:
-            print(f"  delete {p.name} (filename shared by "
-                  f"{len(by_stem.get(SUFFIX.match(p.stem).group('stem'), []))} models)")
+        for p, why in deletes[:3]:
+            print(f"  delete {p.name} ({why})")
         if len(renames) + len(deletes) > 6:
             print(f"  ... {len(renames) + len(deletes) - 6} more")
         if args.apply:
             for src, dst in renames:
                 src.rename(dst)
-            for p in deletes:
+            for p, _ in deletes:
                 p.unlink()
         total["renamed"] += len(renames)
         total["deleted"] += len(deletes)
+        total["shared"] += sum(why.startswith("filename shared") for _, why in deletes)
 
     verb = "renamed" if args.apply else "would rename"
     print(f"\n{verb} {total['renamed']}, "
           f"{'deleted' if args.apply else 'would delete'} {total['deleted']}")
     if not args.apply:
         print("dry run — nothing changed; pass --apply to do it")
-    elif total["deleted"]:
-        print("deleted images belonged to models sharing a filename; rerun "
-              "classify_stls.py --save-renders to redraw them")
+    elif total["shared"]:
+        print(f"{total['shared']} deleted images belonged to models sharing a "
+              "filename; rerun classify_stls.py --save-renders to redraw them")
 
 
 if __name__ == "__main__":
