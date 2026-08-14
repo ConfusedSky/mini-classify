@@ -33,7 +33,7 @@ from classify_stls import (add_cache_args, apply_run_params, as_tensor, cache_ke
                            cache_root, embed_raw, embed_texts, embeds_dir,
                            load_file_list,
                            pool_sims, render_index, render_key, renders_dir,
-                           total_views, view_config)
+                           require_cache_version, total_views, view_config)
 
 
 def link(f, text):
@@ -131,6 +131,7 @@ def main():
 
     # the cache's anchor, which is also the display base
     root = cache_root(Path(args.input), args.cache_dir, confirm=False)
+    require_cache_version(args.cache_dir)
     # the walk follows the input, the keys follow the anchor: a run scoped to
     # one kit must list that kit, not the whole library it is cached against
     files = load_file_list(Path(args.input), args.cache_dir, args.rescan)

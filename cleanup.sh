@@ -4,7 +4,7 @@
 #
 # Everything a run derives lives under the cache directory now. By default this
 # clears only the two cheap-to-rebuild parts of it — <cache>/renders/ and
-# <cache>/embeds/ — and leaves the three files beside them alone:
+# <cache>/embeds/ — and leaves the files beside them alone:
 #
 #   pose-cache.json   the up-candidate renders + a SigLIP forward per model, and
 #                     any "vlm" entry also cost a paid arbiter call
@@ -12,6 +12,10 @@
 #                     media
 #   run-params.json   run_categories.sh passes no input path and reads the
 #                     collection root back from here
+#   cache-meta.json   which key scheme the cache uses. Deleting it would make
+#                     an already-migrated cache read as unmigrated, and the
+#                     next migration would compute old keys for files that no
+#                     longer have them — never delete it, even --clear-caches
 #
 # Pass one of the pose options to go further than the default.
 
@@ -28,13 +32,14 @@ usage() {
 usage: cleanup.sh [--clear-caches | --clear-non-vlm-poses] [-n]
 
 Deletes the saved renders and the embedding .npy files. Keeps pose-cache.json,
-walk-*.json and run-params.json unless told otherwise.
+walk-*.json, run-params.json and cache-meta.json unless told otherwise.
 
   --clear-caches         also delete pose-cache.json and the walk-*.json
                          collection scans, for a fully cold next run
+                         (cache-meta.json always stays)
   --clear-non-vlm-poses  keep only the pose entries a VLM arbiter produced
-                         (source: "vlm"), drop heuristic and ensemble ones.
-                         Leaves the walk scans alone
+                         (source: "vlm"), drop geometry and siglip ones
+                         (and their old spellings). Leaves the walk scans alone
   -n, --dry-run          report what would be deleted, delete nothing
   -h, --help             this message
 
@@ -103,7 +108,7 @@ with open(path) as fh:
 kept = {k: v for k, v in entries.items()
         if isinstance(v, dict) and v.get("source") == "vlm"}
 print(f"pose cache: keeping {len(kept)} vlm entries, "
-      f"dropping {len(entries) - len(kept)} heuristic/ensemble")
+      f"dropping {len(entries) - len(kept)} geometry/siglip")
 if not dry:
     tmp = path + ".tmp"
     with open(tmp, "w") as fh:

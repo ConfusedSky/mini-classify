@@ -127,7 +127,18 @@ def load_pose_cache(cache_dir):
     if len(fresh) < len(raw):
         print(f"pose cache: {len(raw) - len(fresh)} of {len(raw)} entries predate "
               f"v{POSE_CACHE_VERSION} and will be re-resolved")
+    for v in fresh.values():
+        # The 2026-08-14 rename (review P2.3-A): same poses, honest names —
+        # "geometry" = geometry's pick stood, "siglip" = SigLIP moved it off
+        # that pick. Mapped on load rather than behind a version bump: the
+        # poses themselves are unchanged, and a bump would re-resolve (and
+        # re-bill) every entry for a spelling.
+        if v.get("source") in RENAMED_SOURCES:
+            v["source"] = RENAMED_SOURCES[v["source"]]
     return fresh
+
+
+RENAMED_SOURCES = {"heuristic": "geometry", "ensemble": "siglip"}
 
 
 def save_pose_cache(cache_dir, cache):
@@ -144,7 +155,7 @@ def pose_is_sufficient(entry, ensemble_available):
     `margin` is None exactly when the SigLIP ensemble did not run — a
     `--no-up-ensemble` pass resolves poses from geometry alone. Treating
     those as hits would let one geometry-only pass pin every
-    model to its heuristic answer, and the ensemble — and the margin gate
+    model to its geometry answer, and the ensemble — and the margin gate
     behind it, so the arbiter too — would never run again. A run with the
     ensemble available treats them as misses and upgrades them in place; a run
     without it takes any cached answer, and a VLM answer outranks the ensemble
@@ -160,16 +171,25 @@ def up_str(up):
     return ",".join(f"{float(v):g}" for v in up)
 
 
-def embed_cache_token(entry, up_axis_arg):
-    """Embedding-cache key token for a file's resolved pose. Heuristic poses
-    are a deterministic function of the file, so the legacy token keeps
-    existing caches valid; only sources that *moved* the pose off the geometry
-    answer — a VLM override or an ensemble override — render differently and
-    get their own token."""
-    source = entry.get("source") if entry else None
-    if source in ("vlm", "ensemble"):
-        return f"{source}:" + up_str(entry["up"])
-    return up_axis_arg
+FORCED_UPS = {"z": (0.0, 0.0, 1.0), "y": (0.0, 1.0, 0.0)}
+
+
+def embed_cache_token(entry, up_axis_arg="auto"):
+    """The render identity of a pose: only `up` changes the pixels, so the
+    token is the up vector and nothing else (review P2.3-B).
+
+    `source` is not identity — it was only ever a proxy for determinism, and
+    the elision it used to drive ("deterministic poses keep the legacy
+    --up-axis string") filed identical pixels under two keys whenever a
+    forced axis and a geometry answer agreed on the same up. A forced
+    --up-axis needs no pose entry; its up is the flag. Caches keyed under
+    the old tokens are re-keyed by migrate_cache_keys.py — cache-meta.json
+    records which scheme a cache uses."""
+    if entry:
+        return up_str(entry["up"])
+    if up_axis_arg in FORCED_UPS:
+        return up_str(FORCED_UPS[up_axis_arg])
+    return "unresolved"     # no pose yet — nothing is cached under any key
 
 
 FRONT_PROMPTS = [
@@ -440,7 +460,7 @@ DEFAULT_VLM_MODELS = {"ollama": "gemma4:26b", "gemini": GEMINI_MODEL, "claude": 
 def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None,
                project=None):
     """Ask the VLM which candidate orientation is upright. One retry on a
-    bad/failed answer, then None — the caller keeps the heuristic guess.
+    bad/failed answer, then None — the caller keeps the geometry guess.
     The pipeline never hard-fails because of the VLM.
 
     save_to keeps a per-model copy of the sheet next to the saved renders. It

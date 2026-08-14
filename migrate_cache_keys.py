@@ -1,15 +1,25 @@
-"""Re-key and re-shape a cache written before the keys went relative.
+"""Re-key a cache written under an older key scheme.
 
 Usage:
   python migrate_cache_keys.py [/path/to/stls] --cache-dir embed-cache2 [--apply]
 
-Two things changed at once and this migrates both, because they touch the same
-entries and walking the collection twice would be silly:
+Which migrations apply is decided from the cache itself and all applicable
+ones run in a single --apply:
 
-* Keys named absolute paths and full-nanosecond mtimes; they now name a path
-  relative to the collection root and a whole-second mtime (identity.py).
-* The .npy files sat in the cache root and the renders in a directory of their
-  own; both now live under the cache, as embeds/ and renders/<camera config>/.
+* **Root migration** (no `collection_root` anchor, or anchored elsewhere):
+  keys named absolute paths and full-nanosecond mtimes; they now name a path
+  relative to the collection root and a whole-second mtime (identity.py). The
+  .npy files also move from the cache root into embeds/, and renders into
+  renders/<camera config>/.
+* **Token migration** (`cache-meta.json` absent or `cache_version` < 1): the
+  embedding key's up-token used to elide deterministic poses to the --up-axis
+  string; it is now the pose's up vector (`pose.embed_cache_token`, review
+  P2.3-B). A rename, not a re-embed — the .npy content only depends on the
+  up, which does not move. Poses and renders are untouched: pose identity is
+  rel|mtime|size and render keys never carried the token.
+
+`cache-meta.json` is stamped **last**, only after every move succeeded, so an
+interrupted run stays at the old version and stays re-runnable.
 
 Without this every entry misses and the next run re-renders, re-embeds and
 re-resolves the whole collection — hours, and real money once a pose entry is
@@ -39,9 +49,10 @@ from pathlib import Path
 
 import identity
 import pose
-from classify_stls import (DEFAULT_ELEVATIONS, EMBEDS_SUBDIR, RENDERS_SUBDIR,
-                           add_cache_args, apply_run_params, cache_key,
-                           load_file_list, load_run_params, render_key)
+from classify_stls import (CACHE_VERSION, DEFAULT_ELEVATIONS, EMBEDS_SUBDIR,
+                           RENDERS_SUBDIR, add_cache_args, apply_run_params,
+                           cache_key, cache_version, load_file_list,
+                           load_run_params, render_key, stamp_cache_version)
 
 # "<render key>_view3" / "<render key>_pose", split off the right-hand end
 # because the stem itself may contain anything.
@@ -89,6 +100,19 @@ def old_render_key(f, old_root, new_root, absolute):
     return f"{f.stem}_{digest[:6]}"
 
 
+def old_embed_cache_token(entry, up_axis_arg):
+    """pose.embed_cache_token before cache_version 1: deterministic poses
+    elided to the --up-axis string, and only sources that moved the pose off
+    geometry's answer spliced the up vector in. The on-disk source may carry
+    either spelling of the rename (heuristic/geometry, ensemble/siglip); old
+    keys were only ever written with the old ones."""
+    source = entry.get("source") if entry else None
+    if source in ("vlm", "ensemble", "siglip"):
+        old_name = "vlm" if source == "vlm" else "ensemble"
+        return f"{old_name}:" + pose.up_str(entry["up"])
+    return up_axis_arg
+
+
 # --- planning ---------------------------------------------------------------
 
 def plan_poses(files, cache_dir, old_root, new_root, absolute):
@@ -129,11 +153,11 @@ def plan_embeds(files, cache_dir, args, poses, old_root, new_root, absolute):
     dst_dir = cache_dir / EMBEDS_SUBDIR
     moves, already, missing, claimed = [], 0, 0, set()
     for f in files:
-        # the up-token comes from the entry, which migration does not change
-        token = pose.embed_cache_token(poses.get(pose.file_identity(f, new_root)),
-                                       args.up_axis)
-        src = cache_dir / f"{old_cache_key(f, args, token, old_root, new_root, absolute)}.npy"
-        dst = dst_dir / f"{cache_key(f, args, token, new_root)}.npy"
+        # src spells the token the old way, dst the new way — a root-era cache
+        # necessarily predates the up_str token, so one --apply lands both
+        entry = poses.get(pose.file_identity(f, new_root))
+        src = cache_dir / (f"{old_cache_key(f, args, old_embed_cache_token(entry, args.up_axis), old_root, new_root, absolute)}.npy")
+        dst = dst_dir / f"{cache_key(f, args, pose.embed_cache_token(entry, args.up_axis), new_root)}.npy"
         if dst.exists():
             # a part-applied run leaves the source behind; it is spoken for,
             # not unclaimed, and mislabelling it reads as data nothing wants
@@ -177,6 +201,28 @@ def plan_renders(files, old_renders, cache_dir, args, old_root, new_root, absolu
     return moves, already, orphans
 
 
+def plan_token_moves(files, cache_dir, args, poses, root):
+    """(moves, already, missing) within embeds/ for cache_version 0 -> 1.
+
+    `already` includes the deliberate collapse: a forced axis and a geometry
+    answer that agree used to hold two keys and now share one, so the second
+    source finds its destination occupied and is left in place, reported as
+    unclaimed rather than clobbering a file that is byte-identical anyway."""
+    dst_dir = Path(cache_dir) / EMBEDS_SUBDIR
+    moves, already, missing = [], 0, 0
+    for f in files:
+        entry = poses.get(pose.file_identity(f, root))
+        old = dst_dir / f"{cache_key(f, args, old_embed_cache_token(entry, args.up_axis), root)}.npy"
+        new = dst_dir / f"{cache_key(f, args, pose.embed_cache_token(entry, args.up_axis), root)}.npy"
+        if new.exists():
+            already += 1
+        elif old.exists():
+            moves.append((old, new))
+        else:
+            missing += 1
+    return moves, already, missing
+
+
 def move_all(moves):
     for src, dst in moves:
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -202,11 +248,38 @@ def main():
     anchored = params.get("collection_root")
     old_root = Path(anchored) if anchored else Path(params.get("input") or new_root)
     absolute = anchored is None       # no anchor recorded = keys name absolute paths
-    if anchored and Path(anchored) == new_root:
-        print(f"cache is already anchored at {new_root} — nothing to re-key")
+    need_root = not (anchored and Path(anchored) == new_root)
+    need_token = cache_version(args.cache_dir) < 1
+    if not need_root and not need_token:
+        print(f"cache is anchored at {new_root} and stamped "
+              f"v{CACHE_VERSION} — nothing to migrate")
         return
 
     print(f"cache      {args.cache_dir}")
+
+    if not need_root:
+        # Token-only (cache_version 0 -> 1): keys are already relative, only
+        # the embed token moved. Poses and renders stay put.
+        print(f"keys       relative to {new_root}; "
+              f"up-token scheme v0 -> v{CACHE_VERSION}")
+        files = load_file_list(Path(args.input), args.cache_dir, args.rescan)
+        print(f"collection {len(files)} models\n")
+        pose_path = Path(args.cache_dir) / "pose-cache.json"
+        poses = json.loads(pose_path.read_text()) if pose_path.exists() else {}
+        moves_t, already_t, missing_t = plan_token_moves(
+            files, args.cache_dir, args, poses, new_root)
+        print(f"embeds     {len(moves_t)} to re-key for the up-token change"
+              + (f", {already_t} already at their new key" if already_t else "")
+              + (f", {missing_t} models have no cached embedding" if missing_t else ""))
+        if not args.apply:
+            print("\ndry run — nothing changed; pass --apply to do it")
+            return
+        move_all(moves_t)
+        stamp_cache_version(args.cache_dir)   # last: an interrupted run re-runs
+        print(f"\nre-keyed {len(moves_t)} embeddings, "
+              f"stamped cache_version {CACHE_VERSION}")
+        return
+
     print(f"old keys   {'absolute paths' if absolute else f'relative to {old_root}'}")
     print(f"new keys   relative to {new_root}")
 
@@ -254,6 +327,9 @@ def main():
     params["collection_root"] = str(new_root)
     params.pop("renders_dir", None)      # the location is derived from the cache now
     (Path(args.cache_dir) / "run-params.json").write_text(json.dumps(params, indent=2))
+    # last, after every move succeeded: a root-era cache also predates the
+    # up_str token, and plan_embeds landed the moves at the new-token keys
+    stamp_cache_version(args.cache_dir)
 
     print(f"\nre-keyed {len(rekeyed)} poses, moved {len(moves_e)} embeddings and "
           f"{len(moves_r)} renders")

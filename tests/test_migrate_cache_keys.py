@@ -9,9 +9,13 @@ from PIL import Image
 
 import identity
 import pose
-from classify_stls import EMBEDS_SUBDIR, RENDERS_SUBDIR, cache_key, render_key
-from migrate_cache_keys import (old_cache_key, old_identity, old_render_key,
-                                plan_embeds, plan_poses, plan_renders, move_all)
+from classify_stls import (CACHE_VERSION, EMBEDS_SUBDIR, RENDERS_SUBDIR,
+                           cache_key, cache_version, render_key,
+                           require_cache_version)
+from migrate_cache_keys import (old_cache_key, old_embed_cache_token,
+                                old_identity, old_render_key, plan_embeds,
+                                plan_poses, plan_renders, plan_token_moves,
+                                move_all)
 
 CFG = "384px-8v-e20,-20"
 
@@ -42,7 +46,8 @@ def old_cache(tmp_path, files, root, a, *, absolute=True, source="ensemble"):
         entry = {"up": [0.0, 0.0, 1.0], "confidence": 0.1, "source": source,
                  "margin": 0.9, "v": pose.POSE_CACHE_VERSION, "front_view": 3}
         entries[old_identity(f, root, root, absolute)] = entry
-        token = pose.embed_cache_token(entry, a.up_axis)
+        # a root-era cache necessarily used the old, eliding token
+        token = old_embed_cache_token(entry, a.up_axis)
         np.save(cache / f"{old_cache_key(f, a, token, root, root, absolute)}.npy",
                 np.zeros((16, 4), dtype=np.float32))
         d = renders / CFG
@@ -207,3 +212,71 @@ def test_a_part_applied_rerun_does_not_call_the_leftover_unclaimed(tmp_path):
     shutil.copy(src, moves[0][1].parent.mkdir(parents=True, exist_ok=True) or moves[0][1])
     _, already, _, orphans = plan_embeds([f], cache, a, rekeyed, root, root, True)
     assert already == 1 and orphans == []   # the source is spoken for
+
+
+# --- the token migration (cache_version 0 -> 1) -----------------------------
+
+def token_era_cache(tmp_path, files, root, a, *, source="ensemble"):
+    """A cache in the post-root, pre-token shape: relative keys, embeds/ in
+    place, up-token still the old elision."""
+    cache = tmp_path / "cache"
+    (cache / EMBEDS_SUBDIR).mkdir(parents=True, exist_ok=True)
+    entries = {}
+    for f in files:
+        entry = {"up": [0.0, 0.0, 1.0], "confidence": 0.1, "source": source,
+                 "margin": 0.9, "v": pose.POSE_CACHE_VERSION}
+        entries[pose.file_identity(f, root)] = entry
+        token = old_embed_cache_token(entry, a.up_axis)
+        np.save(cache / EMBEDS_SUBDIR / f"{cache_key(f, a, token, root)}.npy",
+                np.zeros((16, 4), dtype=np.float32))
+    (cache / "pose-cache.json").write_text(json.dumps(entries))
+    return cache
+
+
+def test_token_migration_rekeys_within_embeds(tmp_path):
+    root = tmp_path / "STL"
+    f = model(root)
+    a = args()
+    cache = token_era_cache(tmp_path, [f], root, a)
+    poses = json.loads((cache / "pose-cache.json").read_text())
+    moves, already, missing = plan_token_moves([f], cache, a, poses, root)
+    assert (already, missing) == (0, 0) and len(moves) == 1
+    move_all(moves)
+    entry = poses[pose.file_identity(f, root)]
+    token = pose.embed_cache_token(entry, a.up_axis)
+    assert (cache / EMBEDS_SUBDIR / f"{cache_key(f, a, token, root)}.npy").exists()
+    # a re-run has nothing left to move
+    moves, already, _ = plan_token_moves([f], cache, a, poses, root)
+    assert moves == [] and already == 1
+
+
+def test_elided_token_also_moves(tmp_path):
+    # the elision case: a geometry-agreed pose keyed as the literal "auto"
+    root = tmp_path / "STL"
+    f = model(root)
+    a = args()
+    cache = token_era_cache(tmp_path, [f], root, a, source="heuristic")
+    old = cache / EMBEDS_SUBDIR / f"{cache_key(f, a, 'auto', root)}.npy"
+    assert old.exists()          # the fixture really used the elided token
+    poses = json.loads((cache / "pose-cache.json").read_text())
+    moves, _, _ = plan_token_moves([f], cache, a, poses, root)
+    assert moves and moves[0][0] == old
+    assert moves[0][1].name == f"{cache_key(f, a, '0,0,1', root)}.npy"
+
+
+# --- cache-meta -------------------------------------------------------------
+
+def test_unstamped_populated_cache_is_refused(tmp_path):
+    # a moved key scheme does not error on its own — every lookup just misses
+    # and the run silently re-embeds the collection; the stamp turns that into
+    # one line naming the migration
+    (tmp_path / "pose-cache.json").write_text("{}")
+    with pytest.raises(SystemExit, match="migrate_cache_keys"):
+        require_cache_version(tmp_path)
+
+
+def test_empty_cache_is_stamped_current(tmp_path):
+    d = tmp_path / "fresh"
+    require_cache_version(d)
+    assert cache_version(d) == CACHE_VERSION
+    require_cache_version(d)     # and idempotent thereafter

@@ -447,9 +447,11 @@ def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None,
     """Resolve the up axis for --up-axis auto, cheapest evidence first:
     geometry, then SigLIP over the up-candidate tiles, then the VLM.
 
-    Returns (up, ratio, source). Sources that leave the geometry answer alone
-    stay "heuristic" so the embedding-cache key is unchanged — only an actual
-    override becomes "ensemble" or "vlm".
+    Returns (up, ratio, source). `source` records which tier *moved* the
+    answer, not which ran (review P2.3-A): geometry's pick standing —
+    including when the ensemble ran and agreed — stays "geometry"; an
+    override becomes "siglip" or "vlm". Whether the ensemble ran at all is
+    `margin is not None`, which pose_is_sufficient already keys on.
 
     score_upright(tiles) -> per-candidate SigLIP scores; None (--no-up-ensemble)
     falls back to geometry alone. The ensemble runs on *every* model rather
@@ -463,7 +465,7 @@ def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None,
     with stage("pose-geometry"):
         geo_scores = pose.up_axis_scores(mesh)
         geo_idx, ratio, best = pose.rank_up_scores(geo_scores)
-    up, source, margin = pose.UP_CANDIDATES[geo_idx], "heuristic", None
+    up, source, margin = pose.UP_CANDIDATES[geo_idx], "geometry", None
 
     sheet_tiles = None
     if score_upright is not None:
@@ -475,7 +477,7 @@ def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None,
             sig = np.asarray(score_upright(flat)).reshape(len(grid), -1).mean(axis=1)
         idx, margin = pose.combine_up(geo_scores, sig)
         if idx != geo_idx:
-            up, source = pose.UP_CANDIDATES[idx], "ensemble"
+            up, source = pose.UP_CANDIDATES[idx], "siglip"
 
     # Escalate on the ensemble's own doubt. Without SigLIP there is no ensemble
     # and no margin, so fall back to geometry's confidence.
@@ -600,6 +602,9 @@ def load_file_list(inp, cache_dir, rescan=False):
     return files
 
 
+EMBED_CACHE_VERSION = 1
+
+
 def cache_key(f, args, up_token, root):
     stat = f.stat()
     # A single 20° ring appends nothing, so keys written before --elevations
@@ -611,11 +616,19 @@ def cache_key(f, args, up_token, root):
     # and "vlm:<x,y,z>" when a VLM override changed the render.
     # The path is relative to the collection root (identity.py) so the library
     # can change drives without re-embedding everything.
+    # Versions the *derivation* of an embedding from its file: bump when
+    # load_mesh -> up_axis_scores -> rank_up_scores changes its answer for
+    # unchanged bytes, the way POSE_CACHE_VERSION already re-resolves poses.
+    # The numpy-parser swap was the near-miss (it passed only because triangle
+    # counts and bounding boxes came out exact). Appended only when bumped, so
+    # every key from before it existed survives its introduction.
+    ver = "" if EMBED_CACHE_VERSION == 1 else f"|ev{EMBED_CACHE_VERSION}"
     # torch.compile's kernels drift ~1e-03 from eager, so the two regimes are
     # different numbers under the same pixels; like elev, the token appears
-    # only when non-default so every pre---compile key stays byte-identical.
+    # only when non-default, so every key from before the flag existed stays
+    # byte-identical.
     comp = "|compiled" if getattr(args, "compile", False) else ""
-    raw = f"{identity.rel_path(f, root)}|{identity.mtime_key(stat)}|{stat.st_size}|{args.views}|{args.render_size}|{up_token}|{args.model}|pv{elev}{comp}"
+    raw = f"{identity.rel_path(f, root)}|{identity.mtime_key(stat)}|{stat.st_size}|{args.views}|{args.render_size}|{up_token}|{args.model}|pv{elev}{comp}{ver}"
     return hashlib.sha1(raw.encode()).hexdigest()
 
 
@@ -681,6 +694,56 @@ RUN_PARAMS_FILE = "run-params.json"
 RUN_PARAMS_KEYS = ("input", "views", "elevations", "render_size", "model",
                    "compile", "up_axis", "categories", "render_format",
                    "collection_root")
+
+CACHE_META_FILE = "cache-meta.json"
+# Bumped only when the *key scheme* changes incompatibly — never for
+# byte-compatible additions like |compiled or |e:, which are designed to
+# leave existing keys alone. That is why this is a hand-set integer and not a
+# hash of the key format: an auto-derived stamp would fire on exactly the
+# changes this repo makes carefully so it does not have to.
+#   0 = unstamped (every cache from before the stamp existed): the up-token
+#       elision, where deterministic poses keyed as the --up-axis string
+#   1 = the up_str token (pose.embed_cache_token, review P2.3-B)
+CACHE_VERSION = 1
+
+
+def cache_version(cache_dir):
+    """0 for any cache written before the stamp — i.e. every unstamped one."""
+    p = Path(cache_dir) / CACHE_META_FILE
+    return json.loads(p.read_text())["cache_version"] if p.exists() else 0
+
+
+def stamp_cache_version(cache_dir):
+    d = Path(cache_dir)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / CACHE_META_FILE).write_text(json.dumps({
+        "cache_version": CACHE_VERSION,
+        # informational only, never compared — see the CACHE_VERSION note
+        "cache_key_format": "sha1(rel|mtime|size|views|render_size|up_token"
+                            "|model|pv[|e:...][|compiled])",
+    }, indent=2))
+
+
+def require_cache_version(cache_dir):
+    """Refuse a cache whose key scheme this code cannot read.
+
+    A moved scheme does not error on its own — every lookup just misses, and
+    the run silently re-renders and re-embeds the whole collection: hours,
+    and real money once a pose entry is VLM-sourced. The stamp turns that
+    into one line naming the fix. An empty cache is simply stamped current."""
+    if not cache_dir:
+        return
+    v = cache_version(cache_dir)
+    if v == CACHE_VERSION:
+        return
+    d = Path(cache_dir)
+    if (d / "pose-cache.json").exists() or (d / EMBEDS_SUBDIR).exists():
+        raise SystemExit(
+            f"{cache_dir}: cache_version {v}, this code expects {CACHE_VERSION} — "
+            f"every key would miss and the collection would re-embed from "
+            f"scratch.\n  run: .venv/bin/python migrate_cache_keys.py "
+            f"--cache-dir {cache_dir} --apply")
+    stamp_cache_version(cache_dir)
 
 
 def cache_root(inp, cache_dir, confirm=True, reanchor=False):
@@ -860,6 +923,7 @@ def main():
 
     inp = Path(args.input)
     root = cache_root(inp, args.cache_dir, reanchor=args.reanchor)
+    require_cache_version(args.cache_dir)
     # sticky, and only a directory run may set it: a loose file describes no
     # collection, and save_run_params drops None rather than overwriting
     args.collection_root = str(root) if inp.is_dir() else None
@@ -923,7 +987,7 @@ def main():
             print(f"pose VLM: gemini unavailable ({e}); "
                   + ("falling back to ollama" if vlm_backend
                      else "ollama not reachable either — ambiguous poses keep the "
-                          "heuristic guess"))
+                          "geometry guess"))
     elif vlm_backend == "off":
         vlm_backend = None
     vlm_model = args.pose_vlm_model or pose.DEFAULT_VLM_MODELS.get(vlm_backend)
@@ -1058,7 +1122,7 @@ def main():
                     # Saved renders predate a fresh override, so they show the old
                     # pose. Only the debug files are at stake now — the embedding
                     # re-keys on its own, because the override moves up_token.
-                    pose_changed = source in ("vlm", "ensemble")
+                    pose_changed = source in ("vlm", "siglip")
 
             token = pose.embed_cache_token(entry, args.up_axis)
             cache_file = cache_dir / f"{cache_key(f, args, token, root)}.npy" if cache_dir else None

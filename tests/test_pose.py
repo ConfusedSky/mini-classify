@@ -41,7 +41,7 @@ def test_cylinder_is_ambiguous():
 
 def test_pose_cache_roundtrip(tmp_path):
     cache = {"some|identity": {"up": [0.0, 0.0, 1.0], "front_view": 2,
-                               "confidence": 0.15, "source": "heuristic",
+                               "confidence": 0.15, "source": "geometry",
                                "v": pose.POSE_CACHE_VERSION}}
     pose.save_pose_cache(tmp_path, cache)
     assert pose.load_pose_cache(tmp_path) == cache
@@ -100,7 +100,7 @@ def test_gemini_backend_is_dispatched_and_degrades(monkeypatch, tmp_path):
                            project="proj-x") == 3
     assert seen == {"model": "gemini-3.5-flash", "project": "proj-x", "n_tiles": 6}
 
-    # an arbiter that fails must never fail the run — the heuristic guess stands
+    # an arbiter that fails must never fail the run — the geometry guess stands
     def boom(*a, **k):
         raise RuntimeError("HTTP 403")
 
@@ -133,15 +133,15 @@ def test_geometry_only_pose_is_a_miss_for_an_ensemble_run():
     # margin is None exactly when the ensemble did not run: one --no-up-ensemble
     # pass must not pin the pose, so an ensemble run re-resolves the entry —
     # while a second geometry-only run still gets its cache hit
-    geo = {"up": [0, 0, 1], "confidence": 0.4, "source": "heuristic", "margin": None}
+    geo = {"up": [0, 0, 1], "confidence": 0.4, "source": "geometry", "margin": None}
     assert not pose.pose_is_sufficient(geo, ensemble_available=True)
     assert pose.pose_is_sufficient(geo, ensemble_available=False)
 
 
 def test_full_run_poses_stay_cached():
-    # heuristic-with-margin means the ensemble ran and agreed with geometry
-    assert pose.pose_is_sufficient({"source": "heuristic", "margin": 0.62}, True)
-    assert pose.pose_is_sufficient({"source": "ensemble", "margin": 0.51}, True)
+    # geometry-with-margin means the ensemble ran and agreed with geometry
+    assert pose.pose_is_sufficient({"source": "geometry", "margin": 0.62}, True)
+    assert pose.pose_is_sufficient({"source": "siglip", "margin": 0.51}, True)
     # a VLM answer outranks the ensemble whichever gate escalated it, so a
     # geometry-gated arbiter call from a --no-up-ensemble run is not re-bought
     assert pose.pose_is_sufficient({"source": "vlm", "margin": None}, True)
@@ -161,13 +161,31 @@ def test_file_identity_changes_with_mtime_and_size(tmp_path):
     assert pose.file_identity(f, tmp_path) != first
 
 
-def test_embed_cache_token_keeps_legacy_key_for_heuristic():
-    heur = {"up": [0.0, 0.0, 1.0], "source": "heuristic"}
-    vlm = {"up": [0.0, 1.0, 0.0], "source": "vlm"}
-    assert pose.embed_cache_token(heur, "auto") == "auto"
-    assert pose.embed_cache_token(None, "auto") == "auto"
-    assert pose.embed_cache_token({"up": [0, 0, 1], "source": "forced"}, "z") == "z"
-    assert pose.embed_cache_token(vlm, "auto") == "vlm:0,1,0"
+def test_embed_cache_token_is_the_up_vector():
+    # review P2.3-B: only `up` changes the pixels, so `up` IS the token —
+    # source is not render identity
+    assert pose.embed_cache_token(
+        {"up": [0.0, 0.0, 1.0], "source": "geometry"}, "auto") == "0,0,1"
+    assert pose.embed_cache_token(
+        {"up": [0.0, 1.0, 0.0], "source": "vlm"}, "auto") == "0,1,0"
+    # a forced axis and a geometry answer that agree render identical pixels;
+    # the old elision filed them under two keys, now they share one
+    assert pose.embed_cache_token(None, "z") == \
+        pose.embed_cache_token({"up": [0.0, 0.0, 1.0], "source": "geometry"}, "auto")
+    assert pose.embed_cache_token(None, "y") == "0,1,0"
+    # no pose yet under auto: nothing is cached under any key
+    assert pose.embed_cache_token(None, "auto") == "unresolved"
+
+
+def test_pose_cache_renames_legacy_sources(tmp_path):
+    # the P2.3-A rename maps on load — no version bump, because the poses
+    # themselves are unchanged and a bump would re-resolve (and re-bill) them
+    pose.save_pose_cache(tmp_path, {
+        "a": {"up": [0, 0, 1], "source": "heuristic", "v": pose.POSE_CACHE_VERSION},
+        "b": {"up": [0, 0, 1], "source": "ensemble", "v": pose.POSE_CACHE_VERSION},
+        "c": {"up": [0, 0, 1], "source": "vlm", "v": pose.POSE_CACHE_VERSION}})
+    got = pose.load_pose_cache(tmp_path)
+    assert [got[k]["source"] for k in "abc"] == ["geometry", "siglip", "vlm"]
 
 
 def test_front_view_is_keyed_by_view_config():
