@@ -11,7 +11,21 @@ never pool `hard` into an accuracy.
 
 Moved out of this file; the measurements are in `LEARNINGS.md`.
 
-- **Gemini as a third arbiter** — done via Vertex ADC, no API key needed.
+- **Does overlapping render and embed saturate the 4060?** — measured, yes and
+  no. A renderer child process feeding SigLIP through a bounded queue takes the
+  card from ~57% to ~94% busy, but wall-clock gains only **1.17–1.21×** against
+  the Amdahl prediction of 1.45×: saturating the card drops it into thermal
+  slowdown and the same embed work runs 1.4–1.6× slower per image. The
+  boundary is worth adopting (it is also the actor proposal's one load-bearing
+  process split); more threading beyond it buys nothing the fan doesn't take
+  back. `eval/overlap_spike.py`, LEARNINGS "Overlap and the thermal ceiling".
+- **Is there headroom inside SigLIP itself?** — measured, effectively no.
+  Throughput is flat across batch sizes 1–128 (power/thermal-clamped, never
+  VRAM-limited), `torch.compile`'s 1.10× is disqualified because its drift is
+  the size of the closest top-1 margin and would seed the permanent `.npy`
+  cache inconsistently, and threaded preprocessing is a measured 1.044× —
+  available, minor. Cutting `pose-embed`'s tile count (below) is the remaining
+  software lever. `eval/siglip_bench.py`.
   gemini-3.5-flash scores 43/44 standalone (21/21 on the holdout), beating the
   ensemble outright; net +4 as an arbiter tier, pipeline 42/44.
   `eval/gemini_vlm.py`.
@@ -216,6 +230,11 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   The cheaper variant of the same question needs no backbone at all:
   `UP_TILE_AZIMUTHS` is 4, so halving it halves `pose-embed` directly. Same
   harness scores it.
+
+  Standing since the overlap spike (LEARNINGS 2026-08-13): with the render
+  overlap captured and SigLIP itself clamped, this is the **largest remaining
+  software lever** in the run — everything else on the table is either ≤5% or
+  a hardware change.
 - **Does a better backbone help *category* classification?** The whole backbone
   comparison above is up-axis only, where the tiles are near-silhouettes with
   no detail to resolve. Categories are fine-grained text probes over detailed
@@ -259,6 +278,12 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
 
 ## Performance work not done
 
+- **Raise the thermal ceiling — hardware, not code.** The 4060 is an 80 W
+  laptop part that enters SW thermal slowdown within seconds of sustained load
+  (2250 → ~1400 MHz, ambient 66–71 °C at idle), which is what capped the
+  overlap win at ~1.2×. A cooling or power-limit change is worth up to ~1.5×
+  of embed throughput — more than every remaining software option combined.
+  Check what the machine's power profile allows before optimising further.
 - **Thread the render writes.** Largely obsolete: the default is `jpg` now, at
   0.13 s/model against PNG's 23 s. Still ~4 s of single-threaded CPU per model
   if someone runs `--render-format png`, and PIL releases the GIL during encode.

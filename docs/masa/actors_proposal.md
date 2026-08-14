@@ -356,13 +356,16 @@ Four things fell out of it:
   for rendering, and `pose-embed` alone costs 1.6× what embedding the
   classification views costs.
 
-### Spike 2: the device split
+### Spike 2: the device split — LARGELY ANSWERED
 
-### Spike 2: the device split
-
-Coresidency is mostly answered — the two stages are on different GPUs and do not
-contend. What is left is whether the current split is the right one, at the real
-run config (`--render-size 2048 --views 8 --elevations 20,-20`):
+Coresidency is answered — the two stages are on different GPUs and do not
+contend — and the overlap spike (`eval/overlap_spike.py`, LEARNINGS
+2026-08-13) answered the half that mattered: keep the split. Overlapping the
+two devices is worth a real 1.17–1.21×, and consolidating onto the 4060 would
+now be doubly wrong — it reintroduces the contention we don't have *and* the
+card is thermally clamped with no headroom to absorb a second workload. What
+is left, if ever needed, is render throughput iGPU-vs-4060 at the real run
+config (`--render-size 2048 --views 8 --elevations 20,-20`):
 
 * Render throughput on the Phoenix1 iGPU versus the RTX 4060, if Filament can be
   reached on the 4060 at all (Vulkan backend, or our own renderer).
@@ -433,8 +436,11 @@ Three findings were converging on it: the GIL result above, the
 one-`OffscreenRenderer`-per-process abort, and the fact that pose tiles at 384
 cannot coexist with 2048 view renders in one process. ModernGL answers the first
 two — several contexts per process, and 3–5× less GIL — which turns a forced
-architectural move into a budgeting question. That matters, because a process
-boundary means shipping 12.6 MB per view across it.
+architectural move into a budgeting question. The budgeting then resolved in
+the boundary's favour: 12.6 MB per view was a 2048 px number, and at the
+production 384 px a view is ~440 KB — the overlap spike measured the parent
+waiting on the queue just 6–8 s in a ~2-minute run, so the boundary is nearly
+free.
 
 **What did not change:** nothing is saturated, so overlap still has room
 everywhere. But the target moved. The proposal was written against a run where
@@ -443,6 +449,23 @@ rendering and loading dominated; after the parser it is 68.5% SigLIP on the
 1.1B-param tower over near-silhouettes — is an eval question rather than an
 architecture one (`OPEN_QUESTIONS.md`). Fix that first and the pipeline this
 document describes is arranging a much smaller amount of work.
+
+**The overlap was then measured, and it caps this document** (2026-08-13,
+`eval/overlap_spike.py` + `eval/siglip_bench.py`, LEARNINGS "Overlap and the
+thermal ceiling"). One renderer child process feeding SigLIP through a bounded
+queue — the minimal version of the Renderer boundary proposed here — takes the
+4060 from ~57% to ~94% busy and delivers a true 1.17–1.21× on cold-run
+wall-clock. The gap to the Amdahl 1.45× is thermal, not architectural: the
+80 W card trades clocks for duty cycle (2250 → ~1400 MHz saturated), so the
+same embed work runs 1.4–1.6× slower once it is back-to-back. SigLIP itself
+has no software headroom (batch-size-flat, `torch.compile` disqualified by
+drift against the closest decision margin). The consequence for this proposal:
+**the one process boundary captures essentially everything the nine-actor
+version could reach for throughput.** The remaining levers are cutting
+`pose-embed`'s tile count (an eval question) and cooling/power (a hardware
+question). The structural case in [Fallback](#fallback) — modules, message
+types, a sequential driver, plus exactly this render boundary — is now the
+whole recommendation rather than the consolation prize.
 
 ## Fallback
 
