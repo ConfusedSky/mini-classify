@@ -167,8 +167,11 @@ def divert_collisions(zips):
     so fifteen different models all resolve to j4roid/ — and extracting them
     under the one-destination rule would leave whichever ran last. Colliding
     zips are each diverted to a directory named after the zip itself. The
-    shared name is returned so the caller can warn when a directory already
-    written under the old rule is still on disk.
+    shared names are returned so the caller can warn when a directory written
+    under the old one-destination rule is still on disk — but only names that
+    are *nobody's final home*: a contested destination that equals some zip's
+    own stem is that zip's live, correct destination, and advising a human to
+    delete it would destroy a good extraction (review V1).
 
     Membership deliberately ignores the skip tags: where a zip extracts must
     depend only on the files on disk, never on this run's flags — or the same
@@ -201,7 +204,13 @@ def divert_collisions(zips):
                     moved = True
         if not moved:
             break
-    return overrides, shared
+    final = set(effective.values())
+    seen, stale = set(), []
+    for d, group in shared:
+        if d not in final and d not in seen:
+            seen.add(d)
+            stale.append((d, group))
+    return overrides, stale
 
 
 def plan_zip(zpath, unpack_all=False, cache=None, dest=None, check_elsewhere=True):

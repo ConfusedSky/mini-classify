@@ -156,13 +156,27 @@ def test_a_diversion_target_colliding_with_a_derived_dest_also_diverts(tmp_path)
     a = make_zip(tmp_path / "war" / "snek.zip", {"j4roid/snek.stl": "s\n"})
     b = make_zip(tmp_path / "war" / "deer.zip", {"j4roid/deer.stl": "d\n"})
     c = make_zip(tmp_path / "war" / "third.zip", {"snek/third.stl": "x\n"})
-    overrides, _ = unpack_models.divert_collisions([a, b, c])
+    overrides, shared = unpack_models.divert_collisions([a, b, c])
     assert overrides == {a: tmp_path / "war" / "snek",
                          b: tmp_path / "war" / "deer",
                          c: tmp_path / "war" / "third"}
+    # review V1: snek/ was contested mid-diversion but ends as snek.zip's live
+    # home — only j4roid/, nobody's final destination, is a stale leftover
+    assert [d.name for d, _ in shared] == ["j4roid"]
     for z in (a, b, c):
         extract(z, overrides[z])
         assert plan_zip(z, dest=overrides[z])[0] == "done"
+
+
+def test_a_zips_live_home_is_never_reported_as_a_stale_leftover(tmp_path):
+    # review V1: snek.zip's root IS its own stem, so it never moves and snek/
+    # is its correct destination — the advisory must not send a human to
+    # delete a good extraction
+    a = make_zip(tmp_path / "war" / "snek.zip", {"snek/a.stl": "solid a\n"})
+    b = make_zip(tmp_path / "war" / "other.zip", {"snek/b.stl": "solid b\n"})
+    overrides, shared = unpack_models.divert_collisions([a, b])
+    assert overrides == {b: tmp_path / "war" / "other"}
+    assert shared == []
 
 
 def test_ignore_elsewhere_is_the_override(tmp_path):

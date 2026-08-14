@@ -73,6 +73,8 @@ removed the only override the redundancy check had. Fixes to destructive
 tools breed follow-on findings in exactly the code they touch, and the pass
 after a fix is worth as much as the pass that found the original.
 
-Commits: `e224267`, `d2e6f0a`, `512c864`, `6928ab1`, `33649bf`; tests grew
-from 12 to 30 for this module alone, each new test naming the review finding
-it pins.
+Commits: `e224267`, `d2e6f0a`, `512c864`, `6928ab1`, `33649bf`, plus a seventh
+pass (V1: a contested destination that is some zip's own stem is that zip's
+live home, and the stale-leftover advisory must never point a human at it);
+tests grew from 12 to 34 for this module alone, each new test naming the
+review finding it pins.
