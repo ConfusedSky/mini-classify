@@ -239,9 +239,9 @@ def test_token_migration_rekeys_within_embeds(tmp_path):
     a = args()
     cache = token_era_cache(tmp_path, [f], root, a)
     poses = json.loads((cache / "pose-cache.json").read_text())
-    moves, already, missing, collapsed, unclaimed = \
+    moves, already, missing, superseded, unclaimed = \
         plan_token_moves([f], cache, a, poses, root)
-    assert (already, missing, collapsed, unclaimed) == (0, 0, [], [])
+    assert (already, missing, superseded, unclaimed) == (0, 0, [], [])
     assert len(moves) == 1
     move_all(moves)
     entry = poses[pose.file_identity(f, root)]
@@ -297,9 +297,10 @@ def test_token_migration_reaches_entries_outside_the_walk(tmp_path):
     assert len(moves) == 1 and unclaimed == []
 
 
-def test_collapse_is_reported_not_clobbered(tmp_path):
-    # S4: a destination occupied by the forced/geometry collapse names the
-    # superseded source instead of silently filing it under "already"
+def test_superseded_source_is_reported_not_clobbered(tmp_path):
+    # S4/T1: a destination occupied by a newer write names the superseded
+    # source instead of silently filing it under "already" — the cross-axis
+    # forced/geometry duplicate, by contrast, surfaces in `unclaimed`
     root = tmp_path / "STL"
     f = model(root)
     a = args()
@@ -310,9 +311,9 @@ def test_collapse_is_reported_not_clobbered(tmp_path):
         ident, a, pose.embed_cache_token(poses[ident], a.up_axis))
     np.save(cache / EMBEDS_SUBDIR / f"{new_key}.npy",
             np.ones((16, 4), dtype=np.float32))
-    moves, already, _, collapsed, _ = plan_token_moves([f], cache, a, poses, root)
+    moves, already, _, superseded, _ = plan_token_moves([f], cache, a, poses, root)
     assert moves == [] and already == 0
-    assert len(collapsed) == 1 and collapsed[0].exists()
+    assert len(superseded) == 1 and superseded[0].exists()
 
 
 def test_pre_layout_cache_is_refused_not_stamped(tmp_path):

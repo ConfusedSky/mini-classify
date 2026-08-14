@@ -213,18 +213,21 @@ def plan_token_moves(files, cache_dir, args, poses, root):
     `files` is consulted only for a forced --up-axis cache, which writes no
     pose entries; there the walk is all there is.
 
-    `collapsed` (S4) are the deliberate duplicates: a forced axis and a
-    geometry answer that agree used to hold two keys and now share one, so
-    the second source finds its destination occupied and is left in place —
-    byte-identical dead weight, named so it can be deleted deliberately.
-    `unclaimed` are .npy claimed by neither scheme — reported, never touched,
-    per the module contract."""
+    `superseded` (S4, reworded per T1) are sources whose destination already
+    exists — a new-code run re-embedded under the new key before this
+    migration ran, so the old-key file is dead weight; named so it can be
+    deleted deliberately, never touched here. Note the forced/geometry
+    cross-axis duplicate ("z" and "auto" keys for one identity) is *not*
+    detectable from one run's `args.up_axis` — only one old token per
+    identity is computed — so that case surfaces in `unclaimed` instead.
+    `unclaimed` are .npy claimed by neither computed scheme — reported,
+    never touched, per the module contract."""
     dst_dir = Path(cache_dir) / EMBEDS_SUBDIR
     idents = dict(poses)
     if args.up_axis in ("z", "y"):
         for f in files:
             idents.setdefault(pose.file_identity(f, root), None)
-    moves, already, missing, collapsed = [], 0, 0, []
+    moves, already, missing, superseded = [], 0, 0, []
     claimed = set()
     for ident, entry in idents.items():
         old = dst_dir / (f"{cache_key_from_identity(ident, args, old_embed_cache_token(entry, args.up_axis))}.npy")
@@ -232,7 +235,7 @@ def plan_token_moves(files, cache_dir, args, poses, root):
         claimed.update((old, new))
         if new.exists():
             if old.exists() and old != new:
-                collapsed.append(old)
+                superseded.append(old)
             else:
                 already += 1
         elif old.exists():
@@ -241,7 +244,7 @@ def plan_token_moves(files, cache_dir, args, poses, root):
             missing += 1
     unclaimed = [p for p in sorted(dst_dir.glob("*.npy"))
                  if p not in claimed] if dst_dir.is_dir() else []
-    return moves, already, missing, collapsed, unclaimed
+    return moves, already, missing, superseded, unclaimed
 
 
 def move_all(moves):
@@ -283,14 +286,14 @@ def main():
         files = load_file_list(Path(args.input), args.cache_dir, args.rescan)
         pose_path = Path(args.cache_dir) / "pose-cache.json"
         poses = json.loads(pose_path.read_text()) if pose_path.exists() else {}
-        moves_t, already_t, missing_t, collapsed_t, unclaimed_t = \
+        moves_t, already_t, missing_t, superseded_t, unclaimed_t = \
             plan_token_moves(files, args.cache_dir, args, poses, new_root)
         if v >= CACHE_VERSION and not moves_t:
             print(f"anchored at {new_root}, stamped v{v}, no old-token "
                   f"embeddings — nothing to migrate")
-            if collapsed_t:
-                print(f"{len(collapsed_t)} .npy superseded by the "
-                      f"forced/geometry key collapse — check, then delete")
+            if superseded_t:
+                print(f"{len(superseded_t)} old-key .npy superseded by a newer "
+                      f"write at the new key — check, then delete")
             if unclaimed_t:
                 print(f"{len(unclaimed_t)} .npy under {EMBEDS_SUBDIR}/ claimed "
                       f"by no pose entry — check them, then delete")
@@ -301,8 +304,8 @@ def main():
         print(f"collection {len(files)} models, {len(poses)} pose entries\n")
         print(f"embeds     {len(moves_t)} to re-key for the up-token change"
               + (f", {already_t} already at their new key" if already_t else "")
-              + (f", {len(collapsed_t)} superseded by the forced/geometry "
-                 f"collapse (left in place)" if collapsed_t else "")
+              + (f", {len(superseded_t)} superseded by a newer write at the "
+                 f"new key (left in place)" if superseded_t else "")
               + (f", {missing_t} pose entries have no cached embedding" if missing_t else "")
               + (f", {len(unclaimed_t)} claimed by no pose entry (left alone)" if unclaimed_t else ""))
         if not args.apply:
