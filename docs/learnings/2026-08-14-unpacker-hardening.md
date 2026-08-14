@@ -72,9 +72,11 @@ directory).
 ### The review loop itself
 
 The reviewer worked in an artifact updated per pass; every substantive
-finding carried a reproduction, and three times the landed fix was stronger
-than the suggested one (adopting the written root; CRC over path-tails;
-restore-then-stop). The
+finding carried a reproduction, and twice the landed fix was stronger than the
+suggested one (adopting the written root, against an assertion that the
+predicted one existed; restore-then-stop, against prune-and-sweep). A third,
+CRC over path-tails, was picking the strongest of three options the review had
+already listed — worth doing, not worth crediting to the fix. The
 compounding pattern is the lesson: the swap fix created the hard-kill orphan,
 the staging guard exposed the destination bug, the `--all` redefinition
 removed the only override the redundancy check had. Fixes to destructive
@@ -85,6 +87,6 @@ One more advisory principle from the seventh pass (V1): a warning that directs
 a human to delete something must be provably about something nobody owns — a
 contested destination that is some zip's own stem is that zip's live home.
 
-Commits: `e224267`, `d2e6f0a`, `4feb365`, `512c864`, `6928ab1`, `33649bf`,
+Commits: `e224267`, `d2e6f0a`, `512c864`, `4feb365`, `6928ab1`, `33649bf`,
 `4676b4a`; tests grew from 15 at the review's start (11 at the module's birth)
 to 34 for this module alone, each new test naming the review finding it pins.
