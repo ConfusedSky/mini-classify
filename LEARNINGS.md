@@ -47,6 +47,11 @@ notes at the bottom are amended in place. Open work is tracked separately in
   a swap with no zero-copy moment, CRC-verified redundancy with an override,
   flag-independent destinations, collision diversion to a fixed point — and
   four corrections to this write-up's own first draft.
+- [2026-08-14 — data structures, and the queue's transport tax](docs/learnings/2026-08-14-ipc-transport.md)
+  — the actor refactor's shapes fixed in `docs/actor-refactor/data_structures.md`;
+  the render-child queue's cost isolated from render-wait: the pipe is the tax,
+  not pickle, shm is 4–5× — and still only ~0.5% of a cold run, so v1 ships on
+  `mp.Queue` behind a transport interface.
 
 ## Evergreen notes
 
