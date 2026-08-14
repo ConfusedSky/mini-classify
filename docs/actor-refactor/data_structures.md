@@ -57,8 +57,10 @@ by and what the Supervisor counts — the identity, everywhere.
 
 An earlier draft had two field-identical task pairs (`PoseTask`/`EmbedTask`
 upstream of `PoseRenderTask`/`EmbedRenderTask`); with the Loader inside the
-child there is no edge between them, so the pair is collapsed (D12) — the
-Cache Checker sends render tasks directly.
+child there is no *wire* edge between them, so the duplicate pair is
+collapsed (D12) — the Cache Checker sends render tasks directly. The Loader
+keeps a module seam inside the child regardless; see
+[the Loader/Renderer seam](#inside-the-child-the-loaderrenderer-seam).
 
 ### Parent → child
 
@@ -124,7 +126,9 @@ class EmbedTilesRequest:           # Poser → Embedder
 class TileEmbeds:                  # Embedder → Poser (back-edge)
     file: Path
     index: int
-    embeds: np.ndarray
+    embeds: np.ndarray             # numpy, not a tensor: the consumer is
+                                   # pose.py's ensemble math, which is
+                                   # torch-free by design
 ```
 
 ### Into `Done` — D5
@@ -142,7 +146,8 @@ class Embedded:                    # Embedder → Done: fresh embeddings to scor
     file: Path
     index: int
     pose: Pose
-    embeds: torch.Tensor
+    embeds: torch.Tensor           # stays on device: Done's scoring matmul
+                                   # against the text embeddings runs on the GPU
 
 @dataclass(frozen=True)
 class Failure:                     # any stage → Done; becomes a RENDER_ERROR row
@@ -154,6 +159,13 @@ class Failure:                     # any stage → Done; becomes a RENDER_ERROR 
 `Done` holds the category text embeddings (computed once by the Embedder at
 startup, read-only thereafter) and does the scoring — `pool_sims`, top-3,
 `front_view` resolution.
+
+The `np.ndarray`/`torch.Tensor` asymmetry between `TileEmbeds` and `Embedded`
+is deliberate, typed by consumer: `pose.py` imports no torch (checked — zero),
+so the Embedder does the one `.float().cpu().numpy()` before handing tiles to
+the ensemble, while `Done`'s `img_embeds @ text_embeds.T` wants the tensor
+still on the device. Both messages live entirely in the parent process, so
+neither type is ever pickled and transport plays no part in the choice.
 
 `Failure` is load-bearing, not a convenience: the Supervisor's
 `admitted − retired` counter only reaches zero if errors *retire* files
@@ -171,6 +183,30 @@ cheaper build, and the v1 reality. The Arbiter module is a windowed,
 rate-limited pool the Poser holds; the back-edge rule in [Queues](#queues)
 does not apply to it.
 
+## Inside the child: the Loader/Renderer seam
+
+Same process, still a module boundary. `src/loader.py` and `src/renderer.py`
+are separate modules with a typed seam between them, even though v1 crosses
+it with a plain function call:
+
+```python
+@dataclass
+class LoadedMesh:
+    file: Path
+    mesh: o3d.geometry.TriangleMesh
+    nbytes: int                    # feeds ResidentMesh accounting
+
+# loader.get(file) -> LoadedMesh   (prefetch, if any, hidden behind it)
+# renderer consumes LoadedMesh and owns upload, framing, residency
+```
+
+Collapsing the duplicate *message* pair (D12) removed a dead wire format, not
+this seam. Keeping the seam is what stays cheap now and pays later: multiple
+loader workers attach behind `get()` without the renderer noticing, and a
+second live renderer (at another size, say — possible now that the abort is
+known to be teardown-only) attaches beside the first without touching the
+Loader. Removing it would lock the child into exactly one of each.
+
 ## `Pose`
 
 A **frozen** dataclass in `pose.py`, replacing the raw cache-entry dict in
@@ -185,7 +221,7 @@ nothing the boundary was not already costing.
 class Pose:
     up: tuple[float, float, float]
     confidence: float
-    source: str                    # "forced" | "heuristic" | "ensemble" | "vlm"
+    source: str                    # "forced" | "geometry" | "ensemble" | "vlm"
     v: int                         # no default: from_cache carries it through,
                                    # fresh resolutions pass POSE_CACHE_VERSION
                                    # explicitly (D10)
@@ -197,11 +233,20 @@ class Pose:
     def to_cache(self) -> dict: ...
 ```
 
-* The `source` literals are the ones the code writes: `resolve_up` initialises
-  `"heuristic"` and moves it to `"ensemble"` or `"vlm"`; the forced path
-  writes `"forced"` (D1 — an earlier draft listed a `"geometry"` value that
-  appears in neither cache on disk, and would have made `from_cache` reject
-  every entry).
+* **`"geometry"` replaces today's `"heuristic"` — deliberately this time.**
+  D1 caught an earlier draft listing `"geometry"` by accident, against caches
+  holding only `"heuristic"`; the refactor now adopts it on purpose because
+  it reads better, with the migration living where legacy shapes already go:
+  `from_cache` maps `"heuristic"` → `"geometry"`, `to_cache` writes
+  `"geometry"`, and the disk converges on the first load+save cycle — no
+  migration script. Safe because nothing keys on the string:
+  `pose_is_sufficient` tests `"vlm"` (`pose.py:154`), `embed_cache_token`
+  tests `"vlm"`/`"ensemble"` (`pose.py:170`), so cache keys do not move.
+  Remaining blast radius: the write site (`classify_stls.py:466`) and its
+  comments, the tests asserting `"heuristic"` (`tests/test_pose.py`,
+  `tests/test_migrate_cache_keys.py`), and the `pose_source` CSV column's
+  value. D1's actual lesson — `from_cache` must never reject real entries —
+  is preserved by the explicit mapping.
 * **`from_cache` absorbs legacy shapes, not versions.** The shapes are real on
   disk: `embed-cache3` holds bare-int `front_view: 0` entries beside
   per-config dicts — today merged at the *write* site
