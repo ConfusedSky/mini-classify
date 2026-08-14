@@ -108,8 +108,21 @@ def read_binary_stl(path):
 
     The header cannot be trusted to say which format this is — plenty of binary
     STLs start with "solid" — so the test is arithmetic: it is binary only if
-    the file is exactly the length the triangle count implies. Anything else
+    the file is exactly the length a triangle count implies. Anything else
     (ASCII, truncated, junk) returns None and takes the Open3D path.
+
+    Which count, though, is not always the one in the header. Materialise
+    Magics writes a `COLOR=... MATERIAL=...` header and a triangle count that
+    can be wrong by anything from 8 triangles to 1.5 million, while the data
+    itself fills the file exactly. Open3D refuses those outright ("Failed to
+    determine STL storage representation") though the meshes are sound, so when
+    the header disagrees and the remaining bytes are a whole number of records,
+    the file wins and says so out loud.
+
+    That is a real loosening: a file truncated at an exact 50-byte boundary is
+    now read short rather than refused. Two things keep it narrow — an ASCII
+    STL is detected and rejected before the arithmetic can coincide, and a
+    derived read must parse to finite coordinates.
 
     The result is a triangle soup, three unshared vertices per triangle, which
     is what an STL *is*. Open3D's reader welds a handful (108 of 2.4M on a real
@@ -118,14 +131,37 @@ def read_binary_stl(path):
     if size < 84:
         return None
     with open(path, "rb") as fh:
-        n = int(np.frombuffer(fh.read(84)[80:84], "<u4")[0])
-        if n == 0 or size != 84 + 50 * n:
+        head = fh.read(84)
+        n = int(np.frombuffer(head[80:84], "<u4")[0])
+        derived = False
+        if size != 84 + 50 * n:
+            if (size - 84) % 50:
+                return None
+            # an ASCII STL's bytes 80:84 are text, so its implied count is
+            # nonsense — and one file in fifty would pass the arithmetic by
+            # coincidence. Read the real marker instead of gambling on it.
+            if b"facet" in head + fh.read(448):
+                return None
+            fh.seek(84)
+            n, derived = (size - 84) // 50, True
+        if n == 0:
             return None
         # fromfile continues from the header rather than materialising the
         # whole record block as bytes first — 200 MB on a 4M-triangle mesh
         rec = np.fromfile(fh, dtype=STL_RECORD, count=n)
     if len(rec) != n:                       # short read despite the size check
         return None
+    if derived:
+        # Coordinates are millimetres. Finite alone is too weak a test — junk
+        # decodes to huge-but-finite floats as readily as to NaN (0x7f7f7f7f is
+        # 3.4e38) — so bound the magnitude too: a thousand kilometres is not a
+        # miniature, and no real mesh comes close to the limit.
+        v = rec["v"]
+        if not (np.isfinite(v).all() and np.abs(v).max() < 1e9):
+            return None                     # not triangles, whatever it is
+        print(f"  {path.name}: header claims "
+              f"{int(np.frombuffer(head[80:84], '<u4')[0]):,} triangles, file holds "
+              f"{n:,} — trusting the file")
     return o3d.geometry.TriangleMesh(
         o3d.utility.Vector3dVector(rec["v"].reshape(-1, 3).astype(np.float64)),
         o3d.utility.Vector3iVector(np.arange(3 * n, dtype=np.int32).reshape(-1, 3)))
