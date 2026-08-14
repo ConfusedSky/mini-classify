@@ -43,9 +43,10 @@ notes at the bottom are amended in place. Open work is tracked separately in
   49/49; parser_gate gets its A/A control and passes; the reorg's six orphaned
   labels recovered, hard 5/5 at its true n=5.
 - [2026-08-14 — hardening the unpacker](docs/learnings/2026-08-14-unpacker-hardening.md)
-  — six review passes, twenty reproduced findings: Deflate64/cp437 archives,
+  — eight review passes, twenty-eight findings: Deflate64/cp437 archives,
   a swap with no zero-copy moment, CRC-verified redundancy with an override,
-  flag-independent destinations, and collision diversion to a fixed point.
+  flag-independent destinations, collision diversion to a fixed point — and
+  four corrections to this write-up's own first draft.
 
 ## Evergreen notes
 

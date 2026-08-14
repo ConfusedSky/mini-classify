@@ -1,11 +1,14 @@
 ## Hardening the unpacker (2026-08-14)
 
-Six adversarial review passes over `unpack_models.py` — twenty findings, every
-one reproduced by the reviewer rather than asserted, each batch of fixes
-breeding the next batch of findings. The arc ended with the collection fully
-zip-independent: 453 archives, converged under both selection modes, ~24 GB of
-models extracted that were previously locked in zips or destined to destroy
-each other.
+Seven adversarial review passes over `unpack_models.py` — twenty-four code
+findings — plus an eighth pass that audited this document's first draft (wrong
+counts, an overstated rigor claim, a false invariant, and one of the
+reviewer's own phrasings repeated; all corrected in place). Every substantive
+finding carried a reproduction — eleven of the twenty-four; the rest were read
+off the code — and each batch of fixes bred the next batch of findings. The
+arc ended with the collection fully zip-independent: 453 archives, converged
+under both selection modes, ~24 GB of models extracted that were previously
+locked in zips or destined to destroy each other.
 
 ### What the passes found, mechanism by mechanism
 
@@ -15,8 +18,11 @@ each other.
 the UTF-8 name flag, so zipfile decodes entry names as cp437 while 7z writes
 UTF-8: the staged root can carry a name `destination()` never predicted. The
 fix is adoption, not detection — take whatever single root was actually
-written. The two conditions arrive together, always: Deflate64 forces the 7z
-route and the missing flag breaks the name.
+written. The two conditions co-occur in Explorer-authored archives — but
+co-occurrence is not a rule: pure-ASCII names decode identically under cp437
+and UTF-8, and nothing stops a Deflate64 writer from setting the flag. Which
+is the real argument for adoption over prediction: neither condition can be
+detected from the other.
 
 **A destructive swap must have no statement where zero copies exist.** The
 repair swap moves the original aside, renames the replacement in, and only
@@ -41,7 +47,8 @@ prefix.
 basename and size" declared unrelated zips redundant — and a false positive
 here means a zip silently never extracts, the exact failure the tool exists to
 fix. All entries name+size, plus a spread sample CRC-verified against the
-archive's own table (which rides a read the check already needed). Still a
+archive's own table — a bounded *extra* read, at most five files, and only for
+zips that already matched every entry by name and size. Still a
 heuristic: `--ignore-elsewhere` is the explicit way past it, named in the very
 advisory that reports the skip.
 
@@ -64,17 +71,20 @@ directory).
 
 ### The review loop itself
 
-The reviewer worked in an artifact updated per pass; every finding carried a
-reproduction, and three times the landed fix was stronger than the suggested
-one (adopting the written root; CRC over path-tails; restore-then-stop). The
+The reviewer worked in an artifact updated per pass; every substantive
+finding carried a reproduction, and three times the landed fix was stronger
+than the suggested one (adopting the written root; CRC over path-tails;
+restore-then-stop). The
 compounding pattern is the lesson: the swap fix created the hard-kill orphan,
 the staging guard exposed the destination bug, the `--all` redefinition
 removed the only override the redundancy check had. Fixes to destructive
 tools breed follow-on findings in exactly the code they touch, and the pass
 after a fix is worth as much as the pass that found the original.
 
-Commits: `e224267`, `d2e6f0a`, `512c864`, `6928ab1`, `33649bf`, plus a seventh
-pass (V1: a contested destination that is some zip's own stem is that zip's
-live home, and the stale-leftover advisory must never point a human at it);
-tests grew from 12 to 34 for this module alone, each new test naming the
-review finding it pins.
+One more advisory principle from the seventh pass (V1): a warning that directs
+a human to delete something must be provably about something nobody owns — a
+contested destination that is some zip's own stem is that zip's live home.
+
+Commits: `e224267`, `d2e6f0a`, `4feb365`, `512c864`, `6928ab1`, `33649bf`,
+`4676b4a`; tests grew from 15 at the review's start (11 at the module's birth)
+to 34 for this module alone, each new test naming the review finding it pins.
