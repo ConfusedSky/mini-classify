@@ -103,6 +103,39 @@ def test_a_failed_repair_leaves_the_damaged_copy_in_place(tmp_path):
     assert not list(z.parent.glob("*.partial"))
 
 
+def test_zips_sharing_a_root_get_their_own_destinations(tmp_path):
+    # fifteen thingiverse zips all carry the author's name as their root; the
+    # one-destination rule would keep only whichever extracted last. Diverted,
+    # every one extracts and a re-run finds them all done.
+    a = make_zip(tmp_path / "war" / "snek.zip", {"j4roid/snek.stl": "solid snek\n"})
+    b = make_zip(tmp_path / "war" / "deer.zip", {"j4roid/deer.stl": "solid deer\n"})
+    overrides, shared = unpack_models.divert_collisions([a, b])
+    assert overrides == {a: tmp_path / "war" / "snek", b: tmp_path / "war" / "deer"}
+    [(d, group)] = shared
+    assert d.name == "j4roid" and set(group) == {a, b}
+    for z in (a, b):
+        action, dest, _ = plan_zip(z, dest=overrides[z])
+        assert action == "extract"
+        extract(z, dest)
+    assert (tmp_path / "war" / "snek" / "snek.stl").read_text() == "solid snek\n"
+    assert (tmp_path / "war" / "deer" / "deer.stl").read_text() == "solid deer\n"
+    assert plan_zip(a, dest=overrides[a])[0] == "done"
+    assert plan_zip(b, dest=overrides[b])[0] == "done"
+
+
+def test_a_diverted_zip_ignores_the_shared_leftover(tmp_path):
+    # the shared dir holds one group member's content from the old rule —
+    # byte-identical, so 'elsewhere' would wrongly declare that zip redundant
+    # and it would never reach its own directory
+    a = make_zip(tmp_path / "war" / "snek.zip", {"j4roid/snek.stl": "solid snek\n"})
+    b = make_zip(tmp_path / "war" / "deer.zip", {"j4roid/deer.stl": "solid deer\n"})
+    leftover = tmp_path / "war" / "j4roid"
+    leftover.mkdir()
+    (leftover / "snek.stl").write_text("solid snek\n")   # a's content, old rule
+    overrides, _ = unpack_models.divert_collisions([a, b])
+    assert plan_zip(a, dest=overrides[a])[0] == "extract"
+
+
 def test_an_existing_destination_is_never_replaced_without_authorization(tmp_path):
     # the j4roid case: fifteen thingiverse zips share their author's name as
     # the root dir, so a root-level --apply would have each one destroy its

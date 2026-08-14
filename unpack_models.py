@@ -141,13 +141,53 @@ def content_elsewhere(z, zpath, cache):
                for i in ents[::step][:5])
 
 
-def plan_zip(zpath, unpack_all=False, cache=None):
+def default_dest(zpath):
+    """The destination plan_zip derives absent any collision, or None for a
+    zip that cannot be read."""
+    try:
+        with zipfile.ZipFile(zpath) as z:
+            return destination(z.namelist(), zpath)[0]
+    except (zipfile.BadZipFile, OSError):
+        return None
+
+
+def divert_collisions(zips, unpack_all=False):
+    """({zip: its own dest}, [(shared dest, zips)]) for archives that claim
+    one destination between them.
+
+    Thingiverse-style zips carry the *author's* name as their root directory,
+    so fifteen different models all resolve to j4roid/ — and extracting them
+    under the one-destination rule would leave whichever ran last. Colliding
+    zips are each diverted to a directory named after the zip itself; the
+    diversion is a pure function of the zips present, so a re-run recomputes
+    the same destinations and finds them done. The shared name is returned so
+    the caller can warn when a directory already written under the old rule
+    is still on disk."""
+    claims = defaultdict(list)
+    for p in zips:
+        if not unpack_all and naming.skip(p.stem):
+            continue
+        d = default_dest(p)
+        if d is not None:
+            claims[d].append(p)
+    overrides, shared = {}, []
+    for d, group in claims.items():
+        if len(group) > 1:
+            shared.append((d, group))
+            for p in group:
+                overrides[p] = p.parent / p.stem
+    return overrides, shared
+
+
+def plan_zip(zpath, unpack_all=False, cache=None, dest=None):
     """(action, destination, bytes) for one zip. action is one of
     skip-tagged / done / elsewhere / repair / unsafe / unreadable / extract.
 
     `cache` (optional) carries the parent-tree index between calls in one
     planning pass; omit it and every call re-reads the tree, which is correct
-    but slow across many zips in one directory."""
+    but slow across many zips in one directory. `dest` (optional) overrides
+    the derived destination — divert_collisions computes these for zips whose
+    archives share a root name."""
     if not unpack_all and naming.skip(zpath.stem):
         return "skip-tagged", None, 0
     try:
@@ -156,11 +196,17 @@ def plan_zip(zpath, unpack_all=False, cache=None):
             size = sum(i.file_size for i in z.infolist())
             if entries_escaping(names):
                 return "unsafe", None, 0
-            dest, owns_root = destination(names, zpath)
+            derived, owns_root = destination(names, zpath)
+            diverted = dest is not None and dest != derived
+            dest = dest if dest is not None else derived
             if dest.is_dir() and any(dest.iterdir()):
                 return ("repair" if damaged(z, dest, owns_root) else "done"), dest, size
-            # not under --all, which promises to unpack everything regardless
-            if not unpack_all and content_elsewhere(z, zpath, {} if cache is None else cache):
+            # elsewhere is skipped for diverted zips: their content sitting at
+            # the shared root dir is one group member's leftover from the old
+            # rule, not curation — and it must not stop this zip extracting.
+            # Also not under --all, which promises to unpack everything.
+            if not unpack_all and not diverted \
+                    and content_elsewhere(z, zpath, {} if cache is None else cache):
                 return "elsewhere", dest, size
     except (zipfile.BadZipFile, OSError) as e:
         return f"unreadable ({e})", None, 0
@@ -309,8 +355,15 @@ def main():
 
     todo, held, redundant, problems = [], [], [], []
     counts, total, cache = Counter(), 0, {}
+    overrides, shared = divert_collisions(zips, args.unpack_all)
+    for d, group in shared:
+        if d.is_dir():
+            problems.append((group[0], f"{d.name}/ holds one of {len(group)} "
+                             f"colliding zips' content from the old shared-"
+                             f"destination rule — verify, then delete it; each "
+                             f"zip now extracts to its own directory"))
     for p in zips:
-        action, dest, size = plan_zip(p, args.unpack_all, cache)
+        action, dest, size = plan_zip(p, args.unpack_all, cache, overrides.get(p))
         if dest and dest.with_name(dest.name + ".replaced").exists():
             # an interrupted swap's aside copy; extract() sweeps it when it
             # visits, but a zip planning 'done' is never visited again
