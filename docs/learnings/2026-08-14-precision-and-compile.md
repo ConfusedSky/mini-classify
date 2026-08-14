@@ -102,16 +102,37 @@ margin. The exposure is not a wrong category but the escalation gate: a
 margin crossing `MARGIN_THRESHOLD` changes whether a *paid* arbiter call
 happens, and `compile_flips.py` measured category flips, not pose flips.
 
-**Now measured** (`eval/compile_pose_flips.py`): 180 models — the 60 tightest
-cached margins, the 60 nearest the 0.45 gate, 60 controls — through the
-production ensemble path with identical tiles into both towers. **1 up flip**
-(a ramp plank at eager margin 2.2e-03, z to −z — a symmetric coin toss) and
-**0 gate flips**, including the 4 models whose eager margins sat within the
-maximum observed delta of the gate (two only ~4e-03 away). One number worth
-keeping: pose-side margin deltas run ~20× the category-side sim deltas
-(median 1.2e-03, max 1.1e-02) because `combine_up_scores`' min-max
-normalisation amplifies small score shifts — and flips *still* confine to
-ties. The acceptance below stands, now on measurement rather than argument.
+**Now measured — twice, the second time bounded**
+(`eval/compile_pose_flips.py`). The first round targeted by *cached* margin:
+180 models, 1 up flip (a ramp plank at eager margin 2.2e-03, z to −z), 0
+gate flips — but review T2 showed the gate result rested on n=4, because
+cached margins are not live margins (54 cached-in-band collapsed to 4
+live-in-band). The re-run selects on the margins the towers actually
+contest: an eager census over all 2799 pose-cached models, then
+compile-vs-eager on the 197 whose live margins sat within 0.022 of either
+exposure point. Result: **0 gate flips in the 49 still in the gate band at
+compare time** — a rule-of-three bound of ≈6% per in-band model, against
+~107 in-band collection-wide — and **4 up flips**, every one at an eager
+margin ≤ 4.1e-03: ties. Margin deltas median 1.5e-03, max 1.5e-02,
+consistent with round one, and the ~20× pose-vs-category amplification
+(`combine_up_scores`' min-max) stands. The acceptance below now rests on a
+bounded measurement.
+
+The census bought two observations bigger than the bound it ran for:
+
+* **Cached margins have drifted median 0.119 (p90 0.354, max 1.13) from
+  live ones** under the deliberately unbumped `POSE_CACHE_VERSION` — the
+  `UP_TILE_AZIMUTHS` 4→2 change plus state noise, now measured
+  collection-wide. The non-bump's argument was that *decisions* are stable,
+  and it said nothing about margins; T2's 54→4 collapse was the first
+  symptom and this is the full-scale number. Any analysis that keys on
+  cached margins must re-derive them live first.
+* **Live-vs-live is noisy too**: between the census pass and the compare
+  pass — same code, same config — the ±0.022 gate band kept only 49 of 107
+  models, the up band 30 of 90. A same-config re-render moves margins
+  across a 2e-02 boundary about half the time: the `parser_gate` A/A lesson
+  at collection scale, and the honest reason "in band at compare time" is
+  the denominator quoted above.
 
 **Accepted, as a decision rather than an omission**: poses are resolved only
 on cold and upgrade files, and a mixed pose cache sits inside the state noise
