@@ -48,7 +48,7 @@
    "stem": "32mm_Torch",
    "set": "orig",
    "up": "+Y",
-   "path": "Loot Studios/A Light In the Shadow/All_Objects/Torch/No Supports/32mm_Torch.stl"
+   "path": "Loot Studios/A Light In the Shadow/All_32mm/Environments_32mm_NoSupports/Torch_32mm_NoSupports/32mm_Torch.stl"
   },
   {
    "stem": "Pressurized_Container_2",
@@ -120,7 +120,7 @@
    "stem": "32mm_Cavalrobot",
    "set": "orig",
    "up": "+Y",
-   "path": "Loot Studios/Fear the Eternal Embrace/Cavalrobot/32mm/No Supports/32mm_Cavalrobot.stl"
+   "path": "Loot Studios/Fear the Eternal Embrace/DownloadAll_32mm/2- Enemies/Enemies_32mm_NoSupports/Cavalrobot_32mm_NoSupports/32mm_Cavalrobot.stl"
   },
   {
    "stem": "nsr-9j4",
@@ -132,7 +132,7 @@
    "stem": "32mm_Gate_L",
    "set": "orig",
    "up": "+Y",
-   "path": "Loot Studios/Panshaw Under Siege/GateWall/No Supports/32mm_Gate_L.stl"
+   "path": "Loot Studios/Panshaw Under Siege/DownloadAll_32mm/3 - Environment/GateWall/GateWall_NoSupports/32mm_Gate_L.stl"
   },
   {
    "stem": "32mm_Goro",
@@ -204,7 +204,7 @@
    "stem": "32mm_TatteredTrooper2",
    "set": "holdout",
    "up": "+Y",
-   "path": "Loot Studios/Fear the Eternal Embrace/TatteredTrooper2/32mm/No Supports/32mm_TatteredTrooper2.stl"
+   "path": "Loot Studios/Fear the Eternal Embrace/DownloadAll_32mm/2- Enemies/Enemies_32mm_NoSupports/TatteredTrooper2_32mm_NoSupports/32mm_TatteredTrooper2.stl"
   },
   {
    "stem": "75_Unsupported_Aimar_BodyNoMask",
@@ -282,7 +282,7 @@
    "stem": "32mm_PitFiend",
    "set": "hard",
    "up": "+Z",
-   "path": "Loot Studios/A Light In the Shadow/Pit Fiend/32mm/No Supports/32mm_PitFiend.stl"
+   "path": "Loot Studios/A Light In the Shadow/All_32mm/Enemies_32mm_NoSupports/PitFiend_32mm_NoSupports/32mm_PitFiend.stl"
   },
   {
    "stem": "32mm_Orguss_OnePiece",
@@ -300,7 +300,7 @@
    "stem": "PitFiend_Bust",
    "set": "hard",
    "up": "+Z",
-   "path": "Loot Studios/A Light In the Shadow/Pit Fiend/Bust/No Supports/PitFiend_Bust.stl"
+   "path": "Loot Studios/A Light In the Shadow/All_Busts/PitFiendBust_NoSupports/PitFiend_Bust.stl"
   },
   {
    "stem": "32mm_Orguss_Head",
@@ -309,6 +309,6 @@
    "path": "Loot Studios/Orconspiracy/Enemies/Orguss the Tall - Green Dragon/32mm/No Supports/32mm_Orguss_Head.stl"
   }
  ],
- "collection_root": "/run/media/masa/Files and S/STL",
+ "collection_root": "/run/media/masa/STLLibrary",
  "note_on_paths": "`path` is relative to collection_root; the root is recorded only so the set can be relocated. Match on path, not on sample index."
 }

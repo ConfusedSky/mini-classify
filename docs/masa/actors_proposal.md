@@ -467,6 +467,14 @@ question). The structural case in [Fallback](#fallback) — modules, message
 types, a sequential driver, plus exactly this render boundary — is now the
 whole recommendation rather than the consolation prize.
 
+The remaining unknown — the pose → embed cycle across the boundary — was then
+measured (`--modes roundtrip`, LEARNINGS 2026-08-13): 1.11× against overlap's
+1.21× in the all-cold worst case, 88% busy, with the Loader/Poser residency
+question resolving to a three-mesh dict in the child and the unbounded
+back-edge deadlocking nothing. Warm runs skip the cycle for every pose-cached
+file, so the real number sits between the two. Nothing architectural remains
+to de-risk.
+
 ## Fallback
 
 If wall-clock comes back flat, the structural win is still worth having, in a

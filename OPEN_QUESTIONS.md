@@ -110,6 +110,15 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   (3.74 s at 2048 px vs 3.33 s at 384 px on 1.8M triangles). Move the camera
   instead.
 
+- **Set `UP_TILE_AZIMUTHS = 2`.** Measured on all 49 labels at production
+  pixels: zero ensemble pick changes, per-set accuracy identical (21/23,
+  18/21, 5/5), escalation up by exactly one call — for half of the run's
+  largest GPU item. Replaying ten recorded arbiters, the pipeline never loses
+  and usually gains. One constant in `classify_stls.py`; margins compress, so
+  **re-read `MARGIN_THRESHOLD` against the labels after adopting** rather than
+  assuming 0.45 still sits right. Escalation counts carry ±2–3 models of
+  pixel-source noise. `eval/tile_count.py`, LEARNINGS 2026-08-13.
+
 ## Open questions — genuinely unknown
 
 - **Does the ensemble actually help?** Pooled over 44 models geometry and the
@@ -227,14 +236,12 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   different tower rescales margins, so the gate would need re-reading against
   the labels rather than carried across.
 
-  The cheaper variant of the same question needs no backbone at all:
-  `UP_TILE_AZIMUTHS` is 4, so halving it halves `pose-embed` directly. Same
-  harness scores it.
-
-  Standing since the overlap spike (LEARNINGS 2026-08-13): with the render
-  overlap captured and SigLIP itself clamped, this is the **largest remaining
-  software lever** in the run — everything else on the table is either ≤5% or
-  a hardware change.
+  The cheaper variant of the same question needs no backbone at all, and it is
+  now **measured** (`eval/tile_count.py`, LEARNINGS 2026-08-13): halving
+  `UP_TILE_AZIMUTHS` to 2 flips zero ensemble picks on all 49 labels and costs
+  one extra escalation (8 → 9 of 49), for half of `pose-embed` — see the
+  ready-to-do entry. n_az=1 breaks three models and doubles the calls. The
+  backbone half of this question stays open.
 - **Does a better backbone help *category* classification?** The whole backbone
   comparison above is up-axis only, where the tiles are near-silhouettes with
   no detail to resolve. Categories are fine-grained text probes over detailed

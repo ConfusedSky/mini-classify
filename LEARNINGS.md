@@ -37,6 +37,11 @@ notes at the bottom are amended in place. Open work is tracked separately in
   — a renderer child process takes the 4060 from ~57% to ~94% busy for a true
   1.2×; the 80 W card trades clocks for duty cycle; better cooling moves the
   ceiling; the ascending-sweep benchmark trap.
+- [2026-08-13 — the round trip, half the tiles, and the full label set](docs/learnings/2026-08-13-roundtrip-tiles-and-the-full-label-set.md)
+  — the pose→embed cycle keeps 1.11× of the overlap's 1.21× in the all-cold
+  worst case, clearing the modularization; UP_TILE_AZIMUTHS=2 flips nothing on
+  49/49; parser_gate gets its A/A control and passes; the reorg's six orphaned
+  labels recovered, hard 5/5 at its true n=5.
 
 ## Evergreen notes
 
