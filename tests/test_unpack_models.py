@@ -138,6 +138,42 @@ def test_zips_sharing_a_root_get_their_own_destinations(tmp_path):
     assert plan_zip(b, dest=overrides[b])[0] == "done"
 
 
+def test_destinations_do_not_depend_on_the_runs_flags(tmp_path):
+    # review T1: a skip-tagged variant sharing the author root must divert the
+    # group identically whether or not --all selects it — or the same zip
+    # extracts to j4roid/ on one run and snek/ on the next, and both copies
+    # then report done under their respective flags
+    a = make_zip(tmp_path / "war" / "snek.zip", {"j4roid/snek.stl": "s\n"})
+    b = make_zip(tmp_path / "war" / "snek_supported.zip", {"j4roid/snek_s.stl": "t\n"})
+    overrides, _ = unpack_models.divert_collisions([a, b])
+    assert overrides == {a: tmp_path / "war" / "snek",
+                         b: tmp_path / "war" / "snek_supported"}
+
+
+def test_a_diversion_target_colliding_with_a_derived_dest_also_diverts(tmp_path):
+    # review T2: third.zip's own root IS snek/, snek.zip's diversion target —
+    # without the fixed point it refused with a misleading repair message
+    a = make_zip(tmp_path / "war" / "snek.zip", {"j4roid/snek.stl": "s\n"})
+    b = make_zip(tmp_path / "war" / "deer.zip", {"j4roid/deer.stl": "d\n"})
+    c = make_zip(tmp_path / "war" / "third.zip", {"snek/third.stl": "x\n"})
+    overrides, _ = unpack_models.divert_collisions([a, b, c])
+    assert overrides == {a: tmp_path / "war" / "snek",
+                         b: tmp_path / "war" / "deer",
+                         c: tmp_path / "war" / "third"}
+    for z in (a, b, c):
+        extract(z, overrides[z])
+        assert plan_zip(z, dest=overrides[z])[0] == "done"
+
+
+def test_ignore_elsewhere_is_the_override(tmp_path):
+    # review U1: the redundancy check is a strong heuristic, not proof — a
+    # deliberate backup copy makes real zips look redundant, so there must be
+    # a way past the check that is not "edit the module"
+    z = curated(tmp_path)
+    assert plan_zip(z)[0] == "elsewhere"
+    assert plan_zip(z, check_elsewhere=False)[0] == "extract"
+
+
 def test_a_diverted_zip_ignores_the_shared_leftover(tmp_path):
     # the shared dir holds one group member's content from the old rule —
     # byte-identical, so 'elsewhere' would wrongly declare that zip redundant
@@ -199,9 +235,11 @@ def test_a_name_and_size_coincidence_is_not_elsewhere(tmp_path):
     assert plan_zip(curated(tmp_path, text="SOLID\n"))[0] == "extract"
 
 
-def test_all_still_unpacks_a_redundant_zip(tmp_path):
-    # review N3: --all promises to unpack everything regardless
-    assert plan_zip(curated(tmp_path), unpack_all=True)[0] == "extract"
+def test_all_widens_selection_but_keeps_the_redundancy_check(tmp_path):
+    # --all means "include the skip-tagged variants", not "re-extract 19 GB
+    # of content that is verifiably already on disk". The safety checks are
+    # not what the flag bypasses.
+    assert plan_zip(curated(tmp_path), unpack_all=True)[0] == "elsewhere"
 
 
 def test_an_extractor_decoding_names_differently_still_lands(tmp_path, monkeypatch):

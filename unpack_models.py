@@ -12,7 +12,7 @@ unzip: it contributes exactly one STL, so it looks present in every count while
 ~106 models are missing.
 
 Usage: python unpack_models.py <dir> [--all] [--apply] [--repair PATH ...]
-                                [--list-all]
+                                [--ignore-elsewhere] [--list-all]
 
 Windows-authored archives often use Deflate64, which Python's zipfile cannot
 decompress; those are handed to 7z (7zz/7za also work), so it is an optional
@@ -30,7 +30,9 @@ By default this extracts only the archives whose contents the collection walk
 would keep, using the same `naming.skip` the walk itself uses: the supported,
 LYCHEE, CHITUBOX, hollow and 75mm variants are left packed, since unpacking them
 costs disk for models that are then filtered out anyway (3.14 GB against 0.70 GB
-on one set). --all unpacks everything regardless.
+on one set). --all widens that selection to every variant — it does not
+override the safety checks: content verified on disk still reports as
+`elsewhere`, and replacing an existing directory still needs --repair.
 """
 import argparse
 import os
@@ -157,35 +159,52 @@ def default_dest(zpath):
         return None
 
 
-def divert_collisions(zips, unpack_all=False):
+def divert_collisions(zips):
     """({zip: its own dest}, [(shared dest, zips)]) for archives that claim
     one destination between them.
 
     Thingiverse-style zips carry the *author's* name as their root directory,
     so fifteen different models all resolve to j4roid/ — and extracting them
     under the one-destination rule would leave whichever ran last. Colliding
-    zips are each diverted to a directory named after the zip itself; the
-    diversion is a pure function of the zips present, so a re-run recomputes
-    the same destinations and finds them done. The shared name is returned so
-    the caller can warn when a directory already written under the old rule
-    is still on disk."""
-    claims = defaultdict(list)
+    zips are each diverted to a directory named after the zip itself. The
+    shared name is returned so the caller can warn when a directory already
+    written under the old rule is still on disk.
+
+    Membership deliberately ignores the skip tags: where a zip extracts must
+    depend only on the files on disk, never on this run's flags — or the same
+    zip lands in different places under --all and not, and both copies then
+    report done (review T1). The skip tags keep deciding *whether* a zip is
+    unpacked, in plan_zip, not *where*. And because a diversion target can
+    itself collide with another zip's derived destination, diversion iterates
+    to a fixed point (review T2); it terminates because a diverted zip sits at
+    its own stem and two zips in one directory cannot share a stem."""
+    effective = {}
     for p in zips:
-        if not unpack_all and naming.skip(p.stem):
-            continue
         d = default_dest(p)
         if d is not None:
-            claims[d].append(p)
+            effective[p] = d
     overrides, shared = {}, []
-    for d, group in claims.items():
-        if len(group) > 1:
-            shared.append((d, group))
+    while True:
+        groups = defaultdict(list)
+        for p, d in effective.items():
+            groups[d].append(p)
+        moved = False
+        for d, group in groups.items():
+            if len(group) < 2:
+                continue
+            shared.append((d, sorted(group)))
             for p in group:
-                overrides[p] = p.parent / p.stem
+                stem = p.parent / p.stem
+                if effective[p] != stem:
+                    effective[p] = stem
+                    overrides[p] = stem
+                    moved = True
+        if not moved:
+            break
     return overrides, shared
 
 
-def plan_zip(zpath, unpack_all=False, cache=None, dest=None):
+def plan_zip(zpath, unpack_all=False, cache=None, dest=None, check_elsewhere=True):
     """(action, destination, bytes) for one zip. action is one of
     skip-tagged / done / elsewhere / repair / unsafe / unreadable / extract.
 
@@ -193,7 +212,9 @@ def plan_zip(zpath, unpack_all=False, cache=None, dest=None):
     planning pass; omit it and every call re-reads the tree, which is correct
     but slow across many zips in one directory. `dest` (optional) overrides
     the derived destination — divert_collisions computes these for zips whose
-    archives share a root name."""
+    archives share a root name. check_elsewhere=False (--ignore-elsewhere)
+    skips the redundancy check: it is a strong heuristic, not proof, and it
+    needs an override the moment it is wrong (review U1)."""
     if not unpack_all and naming.skip(zpath.stem):
         return "skip-tagged", None, 0
     try:
@@ -210,8 +231,9 @@ def plan_zip(zpath, unpack_all=False, cache=None, dest=None):
             # elsewhere is skipped for diverted zips: their content sitting at
             # the shared root dir is one group member's leftover from the old
             # rule, not curation — and it must not stop this zip extracting.
-            # Also not under --all, which promises to unpack everything.
-            if not unpack_all and not diverted \
+            # It is NOT skipped under --all: that flag widens the selection
+            # past the skip tags, it does not override the safety checks.
+            if check_elsewhere and not diverted \
                     and content_elsewhere(z, zpath, {} if cache is None else cache):
                 return "elsewhere", dest, size
     except (zipfile.BadZipFile, OSError) as e:
@@ -342,15 +364,22 @@ def main():
     parser.add_argument("root", help="directory to search, e.g. a set folder or "
                                      "the whole collection")
     parser.add_argument("--all", dest="unpack_all", action="store_true",
-                        help="unpack every archive, including the supported, LYCHEE, "
-                             "CHITUBOX, hollow and 75mm variants the collection walk "
-                             f"filters out anyway (tags: {', '.join(naming.SKIP_TAGS)})")
+                        help="widen the selection to every variant the collection walk "
+                             "filters out anyway — supported, LYCHEE, CHITUBOX, hollow, "
+                             f"75mm (tags: {', '.join(naming.SKIP_TAGS)}). Does not "
+                             "override the safety checks: verified-redundant zips still "
+                             "skip, and replacing a directory still needs --repair")
     parser.add_argument("--apply", action="store_true",
                         help="actually extract; without it this only reports")
     parser.add_argument("--repair", action="append", default=[], metavar="PATH",
                         help="authorize repairs (replacing an existing destination) "
                              "for this zip or anything under this directory; "
                              "repeatable. Without it repairs are reported, never run")
+    parser.add_argument("--ignore-elsewhere", action="store_true",
+                        help="extract zips whose content was verified to already exist "
+                             "under another layout. The check is a strong heuristic, "
+                             "not proof — a backup copy under the same tree makes real "
+                             "zips look redundant")
     parser.add_argument("--list-all", action="store_true",
                         help="list every planned zip instead of the first five")
     args = parser.parse_args()
@@ -365,7 +394,7 @@ def main():
 
     todo, held, redundant, problems = [], [], [], []
     counts, total, cache = Counter(), 0, {}
-    overrides, shared = divert_collisions(zips, args.unpack_all)
+    overrides, shared = divert_collisions(zips)
     for d, group in shared:
         if d.is_dir():
             problems.append((group[0], f"{d.name}/ holds one of {len(group)} "
@@ -373,7 +402,8 @@ def main():
                              f"destination rule — verify, then delete it; each "
                              f"zip now extracts to its own directory"))
     for p in zips:
-        action, dest, size = plan_zip(p, args.unpack_all, cache, overrides.get(p))
+        action, dest, size = plan_zip(p, args.unpack_all, cache, overrides.get(p),
+                                      check_elsewhere=not args.ignore_elsewhere)
         if dest and dest.with_name(dest.name + ".replaced").exists():
             # an interrupted swap's aside copy. With dest intact it is a
             # superseded duplicate extract() never revisits; with dest gone
@@ -407,7 +437,7 @@ def main():
     shown_r = redundant if args.list_all else redundant[:5]
     for p in shown_r:
         print(f"  = {p.relative_to(root)}: content already on disk under "
-              f"another layout — zip is redundant")
+              f"another layout — zip is redundant (--ignore-elsewhere overrides)")
     if len(redundant) > len(shown_r):
         print(f"  ... {len(redundant) - len(shown_r)} more redundant "
               f"(--list-all shows them)")
