@@ -129,9 +129,9 @@ def main():
         sys.exit("no input given, and no directory recorded by classify_stls.py — "
                  "pass the STL directory explicitly")
 
+    require_cache_version(args.cache_dir)   # before any prompt (S5)
     # the cache's anchor, which is also the display base
     root = cache_root(Path(args.input), args.cache_dir, confirm=False)
-    require_cache_version(args.cache_dir)
     # the walk follows the input, the keys follow the anchor: a run scoped to
     # one kit must list that kit, not the whole library it is cached against
     files = load_file_list(Path(args.input), args.cache_dir, args.rescan)

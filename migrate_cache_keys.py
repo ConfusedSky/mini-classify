@@ -51,8 +51,9 @@ import identity
 import pose
 from classify_stls import (CACHE_VERSION, DEFAULT_ELEVATIONS, EMBEDS_SUBDIR,
                            RENDERS_SUBDIR, add_cache_args, apply_run_params,
-                           cache_key, cache_version, load_file_list,
-                           load_run_params, render_key, stamp_cache_version)
+                           cache_key, cache_key_from_identity, cache_version,
+                           load_file_list, load_run_params, render_key,
+                           stamp_cache_version)
 
 # "<render key>_view3" / "<render key>_pose", split off the right-hand end
 # because the stem itself may contain anything.
@@ -202,25 +203,45 @@ def plan_renders(files, old_renders, cache_dir, args, old_root, new_root, absolu
 
 
 def plan_token_moves(files, cache_dir, args, poses, root):
-    """(moves, already, missing) within embeds/ for cache_version 0 -> 1.
+    """(moves, already, missing, collapsed, unclaimed) within embeds/ for the
+    up-token change (cache_version 0 -> 1).
 
-    `already` includes the deliberate collapse: a forced axis and a geometry
-    answer that agree used to hold two keys and now share one, so the second
-    source finds its destination occupied and is left in place, reported as
-    unclaimed rather than clobbering a file that is byte-identical anyway."""
+    Driven from the pose cache, not the walk (S1): both keys are computable
+    from file_identity alone (cache_key_from_identity), so no file is
+    stat()ed and entries whose models are unmounted or deleted are still
+    re-keyed — a half-mounted collection cannot leave embeddings behind.
+    `files` is consulted only for a forced --up-axis cache, which writes no
+    pose entries; there the walk is all there is.
+
+    `collapsed` (S4) are the deliberate duplicates: a forced axis and a
+    geometry answer that agree used to hold two keys and now share one, so
+    the second source finds its destination occupied and is left in place —
+    byte-identical dead weight, named so it can be deleted deliberately.
+    `unclaimed` are .npy claimed by neither scheme — reported, never touched,
+    per the module contract."""
     dst_dir = Path(cache_dir) / EMBEDS_SUBDIR
-    moves, already, missing = [], 0, 0
-    for f in files:
-        entry = poses.get(pose.file_identity(f, root))
-        old = dst_dir / f"{cache_key(f, args, old_embed_cache_token(entry, args.up_axis), root)}.npy"
-        new = dst_dir / f"{cache_key(f, args, pose.embed_cache_token(entry, args.up_axis), root)}.npy"
+    idents = dict(poses)
+    if args.up_axis in ("z", "y"):
+        for f in files:
+            idents.setdefault(pose.file_identity(f, root), None)
+    moves, already, missing, collapsed = [], 0, 0, []
+    claimed = set()
+    for ident, entry in idents.items():
+        old = dst_dir / (f"{cache_key_from_identity(ident, args, old_embed_cache_token(entry, args.up_axis))}.npy")
+        new = dst_dir / (f"{cache_key_from_identity(ident, args, pose.embed_cache_token(entry, args.up_axis))}.npy")
+        claimed.update((old, new))
         if new.exists():
-            already += 1
+            if old.exists() and old != new:
+                collapsed.append(old)
+            else:
+                already += 1
         elif old.exists():
             moves.append((old, new))
         else:
             missing += 1
-    return moves, already, missing
+    unclaimed = [p for p in sorted(dst_dir.glob("*.npy"))
+                 if p not in claimed] if dst_dir.is_dir() else []
+    return moves, already, missing, collapsed, unclaimed
 
 
 def move_all(moves):
@@ -249,28 +270,41 @@ def main():
     old_root = Path(anchored) if anchored else Path(params.get("input") or new_root)
     absolute = anchored is None       # no anchor recorded = keys name absolute paths
     need_root = not (anchored and Path(anchored) == new_root)
-    need_token = cache_version(args.cache_dir) < 1
-    if not need_root and not need_token:
-        print(f"cache is anchored at {new_root} and stamped "
-              f"v{CACHE_VERSION} — nothing to migrate")
-        return
 
     print(f"cache      {args.cache_dir}")
 
     if not need_root:
-        # Token-only (cache_version 0 -> 1): keys are already relative, only
-        # the embed token moved. Poses and renders stay put.
-        print(f"keys       relative to {new_root}; "
-              f"up-token scheme v0 -> v{CACHE_VERSION}")
+        # Anchored: only the up-token can be stale. Probe regardless of the
+        # stamp (S1): the plan is computed from the pose cache with no
+        # filesystem stat, so a stamped cache holding old-key strays — the
+        # walk was partial when it migrated, files restored since — is
+        # re-opened here rather than by hand-editing cache-meta.json.
+        v = cache_version(args.cache_dir)
         files = load_file_list(Path(args.input), args.cache_dir, args.rescan)
-        print(f"collection {len(files)} models\n")
         pose_path = Path(args.cache_dir) / "pose-cache.json"
         poses = json.loads(pose_path.read_text()) if pose_path.exists() else {}
-        moves_t, already_t, missing_t = plan_token_moves(
-            files, args.cache_dir, args, poses, new_root)
+        moves_t, already_t, missing_t, collapsed_t, unclaimed_t = \
+            plan_token_moves(files, args.cache_dir, args, poses, new_root)
+        if v >= CACHE_VERSION and not moves_t:
+            print(f"anchored at {new_root}, stamped v{v}, no old-token "
+                  f"embeddings — nothing to migrate")
+            if collapsed_t:
+                print(f"{len(collapsed_t)} .npy superseded by the "
+                      f"forced/geometry key collapse — check, then delete")
+            if unclaimed_t:
+                print(f"{len(unclaimed_t)} .npy under {EMBEDS_SUBDIR}/ claimed "
+                      f"by no pose entry — check them, then delete")
+            return
+        print(f"keys       relative to {new_root}; up-token scheme "
+              + (f"v{v} -> v{CACHE_VERSION}" if v < CACHE_VERSION
+                 else f"stamped v{v}, with old-token strays"))
+        print(f"collection {len(files)} models, {len(poses)} pose entries\n")
         print(f"embeds     {len(moves_t)} to re-key for the up-token change"
               + (f", {already_t} already at their new key" if already_t else "")
-              + (f", {missing_t} models have no cached embedding" if missing_t else ""))
+              + (f", {len(collapsed_t)} superseded by the forced/geometry "
+                 f"collapse (left in place)" if collapsed_t else "")
+              + (f", {missing_t} pose entries have no cached embedding" if missing_t else "")
+              + (f", {len(unclaimed_t)} claimed by no pose entry (left alone)" if unclaimed_t else ""))
         if not args.apply:
             print("\ndry run — nothing changed; pass --apply to do it")
             return

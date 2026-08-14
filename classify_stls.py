@@ -605,17 +605,21 @@ def load_file_list(inp, cache_dir, rescan=False):
 EMBED_CACHE_VERSION = 1
 
 
-def cache_key(f, args, up_token, root):
-    stat = f.stat()
+def cache_key_from_identity(ident, args, up_token):
+    """The embedding key for a file already reduced to its identity string.
+
+    `ident` is byte-identical to pose.file_identity — rel|mtime|size — which
+    is what makes every embedding key reconstructible from pose-cache.json
+    plus run-params.json alone, with no filesystem access (review §P3.1).
+    migrate_cache_keys drives the token migration through here so a
+    half-mounted collection cannot leave entries behind (S1)."""
     # A single 20° ring appends nothing, so keys written before --elevations
     # existed stay byte-identical and those (expensive) caches survive.
     elev = "" if args.elevations == DEFAULT_ELEVATIONS else \
         "|e:" + ",".join(f"{e:g}" for e in args.elevations)
     # "pv" = per-view cache format: (n_views, dim) instead of one pooled vector.
-    # up_token is "auto"/"z"/"y" for deterministic poses (legacy-compatible)
-    # and "vlm:<x,y,z>" when a VLM override changed the render.
-    # The path is relative to the collection root (identity.py) so the library
-    # can change drives without re-embedding everything.
+    # up_token is the pose's up vector ("0,0,1"), the only pose input that
+    # changes the pixels — pose.embed_cache_token.
     # Versions the *derivation* of an embedding from its file: bump when
     # load_mesh -> up_axis_scores -> rank_up_scores changes its answer for
     # unchanged bytes, the way POSE_CACHE_VERSION already re-resolves poses.
@@ -628,8 +632,17 @@ def cache_key(f, args, up_token, root):
     # only when non-default, so every key from before the flag existed stays
     # byte-identical.
     comp = "|compiled" if getattr(args, "compile", False) else ""
-    raw = f"{identity.rel_path(f, root)}|{identity.mtime_key(stat)}|{stat.st_size}|{args.views}|{args.render_size}|{up_token}|{args.model}|pv{elev}{comp}{ver}"
+    raw = f"{ident}|{args.views}|{args.render_size}|{up_token}|{args.model}|pv{elev}{comp}{ver}"
     return hashlib.sha1(raw.encode()).hexdigest()
+
+
+def cache_key(f, args, up_token, root):
+    # The path is relative to the collection root (identity.py) so the library
+    # can change drives without re-embedding everything.
+    stat = f.stat()
+    return cache_key_from_identity(
+        f"{identity.rel_path(f, root)}|{identity.mtime_key(stat)}|{stat.st_size}",
+        args, up_token)
 
 
 def total_views(args):
@@ -720,7 +733,7 @@ def stamp_cache_version(cache_dir):
         "cache_version": CACHE_VERSION,
         # informational only, never compared — see the CACHE_VERSION note
         "cache_key_format": "sha1(rel|mtime|size|views|render_size|up_token"
-                            "|model|pv[|e:...][|compiled])",
+                            "|model|pv[|e:...][|compiled][|evN])",
     }, indent=2))
 
 
@@ -737,7 +750,13 @@ def require_cache_version(cache_dir):
     if v == CACHE_VERSION:
         return
     d = Path(cache_dir)
-    if (d / "pose-cache.json").exists() or (d / EMBEDS_SUBDIR).exists():
+    # "populated" must include the pre-layout shape — root-level .npy with no
+    # pose-cache.json or embeds/ (a forced --up-axis cache writes no pose
+    # cache at all). Treating that as empty would stamp a genuinely
+    # unmigrated cache as current, which is the exact failure this guard
+    # exists to prevent (S2).
+    if ((d / "pose-cache.json").exists() or (d / EMBEDS_SUBDIR).exists()
+            or (d / RENDERS_SUBDIR).exists() or any(d.glob("*.npy"))):
         raise SystemExit(
             f"{cache_dir}: cache_version {v}, this code expects {CACHE_VERSION} — "
             f"every key would miss and the collection would re-embed from "
@@ -922,8 +941,10 @@ def main():
         instrument.enable(args.instrument)
 
     inp = Path(args.input)
-    root = cache_root(inp, args.cache_dir, reanchor=args.reanchor)
+    # before cache_root: an unreadable cache should be one line of output,
+    # not a re-anchor prompt followed by a refusal (S5)
     require_cache_version(args.cache_dir)
+    root = cache_root(inp, args.cache_dir, reanchor=args.reanchor)
     # sticky, and only a directory run may set it: a loose file describes no
     # collection, and save_run_params drops None rather than overwriting
     args.collection_root = str(root) if inp.is_dir() else None

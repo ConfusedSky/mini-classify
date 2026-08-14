@@ -10,8 +10,8 @@ from PIL import Image
 import identity
 import pose
 from classify_stls import (CACHE_VERSION, EMBEDS_SUBDIR, RENDERS_SUBDIR,
-                           cache_key, cache_version, render_key,
-                           require_cache_version)
+                           cache_key, cache_key_from_identity, cache_version,
+                           render_key, require_cache_version)
 from migrate_cache_keys import (old_cache_key, old_embed_cache_token,
                                 old_identity, old_render_key, plan_embeds,
                                 plan_poses, plan_renders, plan_token_moves,
@@ -239,14 +239,16 @@ def test_token_migration_rekeys_within_embeds(tmp_path):
     a = args()
     cache = token_era_cache(tmp_path, [f], root, a)
     poses = json.loads((cache / "pose-cache.json").read_text())
-    moves, already, missing = plan_token_moves([f], cache, a, poses, root)
-    assert (already, missing) == (0, 0) and len(moves) == 1
+    moves, already, missing, collapsed, unclaimed = \
+        plan_token_moves([f], cache, a, poses, root)
+    assert (already, missing, collapsed, unclaimed) == (0, 0, [], [])
+    assert len(moves) == 1
     move_all(moves)
     entry = poses[pose.file_identity(f, root)]
     token = pose.embed_cache_token(entry, a.up_axis)
     assert (cache / EMBEDS_SUBDIR / f"{cache_key(f, a, token, root)}.npy").exists()
     # a re-run has nothing left to move
-    moves, already, _ = plan_token_moves([f], cache, a, poses, root)
+    moves, already, _, _, _ = plan_token_moves([f], cache, a, poses, root)
     assert moves == [] and already == 1
 
 
@@ -259,7 +261,7 @@ def test_elided_token_also_moves(tmp_path):
     old = cache / EMBEDS_SUBDIR / f"{cache_key(f, a, 'auto', root)}.npy"
     assert old.exists()          # the fixture really used the elided token
     poses = json.loads((cache / "pose-cache.json").read_text())
-    moves, _, _ = plan_token_moves([f], cache, a, poses, root)
+    moves, *_ = plan_token_moves([f], cache, a, poses, root)
     assert moves and moves[0][0] == old
     assert moves[0][1].name == f"{cache_key(f, a, '0,0,1', root)}.npy"
 
@@ -280,3 +282,53 @@ def test_empty_cache_is_stamped_current(tmp_path):
     require_cache_version(d)
     assert cache_version(d) == CACHE_VERSION
     require_cache_version(d)     # and idempotent thereafter
+
+
+def test_token_migration_reaches_entries_outside_the_walk(tmp_path):
+    # S1: driven from the pose cache with no stat() — a half-mounted
+    # collection cannot leave embeddings behind
+    root = tmp_path / "STL"
+    f = model(root)
+    a = args()
+    cache = token_era_cache(tmp_path, [f], root, a)
+    poses = json.loads((cache / "pose-cache.json").read_text())
+    f.unlink()                      # the model is gone from the walk entirely
+    moves, _, _, _, unclaimed = plan_token_moves([], cache, a, poses, root)
+    assert len(moves) == 1 and unclaimed == []
+
+
+def test_collapse_is_reported_not_clobbered(tmp_path):
+    # S4: a destination occupied by the forced/geometry collapse names the
+    # superseded source instead of silently filing it under "already"
+    root = tmp_path / "STL"
+    f = model(root)
+    a = args()
+    cache = token_era_cache(tmp_path, [f], root, a, source="heuristic")
+    ident = pose.file_identity(f, root)
+    poses = json.loads((cache / "pose-cache.json").read_text())
+    new_key = cache_key_from_identity(
+        ident, a, pose.embed_cache_token(poses[ident], a.up_axis))
+    np.save(cache / EMBEDS_SUBDIR / f"{new_key}.npy",
+            np.ones((16, 4), dtype=np.float32))
+    moves, already, _, collapsed, _ = plan_token_moves([f], cache, a, poses, root)
+    assert moves == [] and already == 0
+    assert len(collapsed) == 1 and collapsed[0].exists()
+
+
+def test_pre_layout_cache_is_refused_not_stamped(tmp_path):
+    # S2: root-level .npy with no pose-cache.json or embeds/ is still a
+    # populated cache — stamping it current would shut the guard forever
+    np.save(tmp_path / "deadbeef.npy", np.zeros(3))
+    with pytest.raises(SystemExit, match="migrate_cache_keys"):
+        require_cache_version(tmp_path)
+    assert cache_version(tmp_path) == 0      # and it was not stamped
+
+
+def test_cache_key_first_fields_are_file_identity(tmp_path):
+    # the coupling §P3.1 verified and plan_token_moves now leans on:
+    # file_identity is byte-identical to cache_key's first three fields
+    root = tmp_path / "STL"
+    f = model(root)
+    a = args()
+    assert cache_key(f, a, "0,0,1", root) == \
+        cache_key_from_identity(pose.file_identity(f, root), a, "0,0,1")
