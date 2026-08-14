@@ -59,9 +59,15 @@ def destination(names, zpath):
     The leaf zips carry a single top-level folder named after themselves
     ("Barrier_NoSupports/32mm_Barrier.stl"), so they extract beside the zip.
     Anything without one common root gets a folder named after the zip instead,
-    so two archives in the same directory cannot interleave."""
+    so two archives in the same directory cannot interleave.
+
+    A single top-level name only counts as a root when it actually is a
+    directory prefix: a flat zip holding one file at its root has one top too,
+    and treating the *file* as owns_root misnested it under a directory named
+    after itself (review S1 — broken in a different way in every revision
+    before this one)."""
     tops = {n.split("/")[0] for n in names if n.strip("/")}
-    if len(tops) == 1:
+    if len(tops) == 1 and all("/" in n for n in names if n.strip("/")):
         return zpath.parent / tops.pop(), True
     return zpath.parent / zpath.stem, False
 
@@ -271,8 +277,12 @@ def extract(zpath, dest, replace=False):
             shutil.rmtree(aside, ignore_errors=True)
         else:
             # a hard kill mid-swap: put the original back and stop, because
-            # the plan that led here was made against a tree without it
+            # the plan that led here was made against a tree without it. The
+            # interrupted run's staging is untrustworthy — sweep it now, since
+            # the rerun will plan 'done' and never visit this zip again.
             aside.rename(dest)
+            shutil.rmtree(dest.with_name(dest.name + ".partial"),
+                          ignore_errors=True)
             raise RuntimeError(f"{dest.name}/ restored from an interrupted "
                                f"swap — rerun to re-plan this zip")
     if dest.exists() and not replace:
@@ -365,11 +375,15 @@ def main():
     for p in zips:
         action, dest, size = plan_zip(p, args.unpack_all, cache, overrides.get(p))
         if dest and dest.with_name(dest.name + ".replaced").exists():
-            # an interrupted swap's aside copy; extract() sweeps it when it
-            # visits, but a zip planning 'done' is never visited again
+            # an interrupted swap's aside copy. With dest intact it is a
+            # superseded duplicate extract() never revisits; with dest gone
+            # it is the original, which extract() restores on this run.
             problems.append((p, f"stray {dest.name}.replaced/ from an "
-                                f"interrupted swap — verify {dest.name}/ "
-                                f"then delete it"))
+                                f"interrupted swap — "
+                                + (f"verify {dest.name}/ then delete it"
+                                   if dest.exists() else
+                                   "the original; restored when this zip "
+                                   "next extracts")))
         if action == "repair" and not repair_authorized(p, args.repair):
             counts["repair-held"] += 1
             held.append(p)

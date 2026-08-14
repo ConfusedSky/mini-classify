@@ -103,6 +103,21 @@ def test_a_failed_repair_leaves_the_damaged_copy_in_place(tmp_path):
     assert not list(z.parent.glob("*.partial"))
 
 
+def test_a_flat_zip_with_one_file_extracts_into_a_stem_dir(tmp_path):
+    # review S1: one top-level entry that is a FILE is not a root. Treating it
+    # as one misnested the model under a directory named after itself in one
+    # revision and refused to extract in the next — broken differently in
+    # every revision until now.
+    z = make_zip(tmp_path / "Ranger.zip", {"32mm_Ranger.stl": "solid ranger\n"})
+    dest, owns_root = destination(zipfile.ZipFile(z).namelist(), z)
+    assert (dest.name, owns_root) == ("Ranger", False)
+    action, dest, _ = plan_zip(z)
+    assert action == "extract"
+    extract(z, dest)
+    assert (tmp_path / "Ranger" / "32mm_Ranger.stl").read_text() == "solid ranger\n"
+    assert plan_zip(z)[0] == "done"      # not 'extract' forever
+
+
 def test_zips_sharing_a_root_get_their_own_destinations(tmp_path):
     # fifteen thingiverse zips all carry the author's name as their root; the
     # one-destination rule would keep only whichever extracted last. Diverted,
@@ -225,10 +240,14 @@ def test_extract_restores_an_interrupted_swap_before_anything_else(tmp_path):
     extract(z, dest)
     (dest / "32mm_Barrier.stl").write_bytes(b"the original")
     dest.rename(dest.with_name(dest.name + ".replaced"))
+    dest.with_name(dest.name + ".partial").mkdir()   # the killed run's staging
     with pytest.raises(RuntimeError, match="interrupted swap"):
         extract(z, dest)
     assert (dest / "32mm_Barrier.stl").read_bytes() == b"the original"
     assert not list(z.parent.glob("*.replaced"))
+    # review S2: the rerun plans 'done' and never visits again, so the
+    # untrustworthy staging must be swept now, not left on the drive forever
+    assert not list(z.parent.glob("*.partial"))
 
 
 def test_unexpected_staging_contents_raise_rather_than_misnest(tmp_path, monkeypatch):
