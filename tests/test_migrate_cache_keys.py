@@ -136,8 +136,9 @@ def test_renders_move_under_the_cache_keeping_their_config(tmp_path):
 
 
 def test_renders_nothing_claims_are_left_where_they_are(tmp_path):
-    # the interim hash-of-absolute names are what migrate_renders.py called
-    # orphans; here anything unmatched is reported, never deleted
+    # a render this collection does not account for — an older key scheme, or
+    # a model since deleted. Reported, never deleted: a half-mounted collection
+    # looks exactly like one that shrank.
     root = tmp_path / "STL"
     f = model(root)
     a = args()
