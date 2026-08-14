@@ -13,7 +13,9 @@ the classifier uses, which is what makes a bare noun behave. Raw mode
 (--raw-queries, or :raw in the loop) embeds the text verbatim instead, for
 phrasings the templates mangle — "holding two swords" reads as "a 3D render of
 a holding two swords miniature" otherwise. Classification always stays
-templated, so <enter> means the same thing as a classify_stls.py run.
+templated, so <enter> asks the same question as a classify_stls.py run —
+though scored with this tool's own pooling (softmax unless --pool is given),
+so it matches the CSV exactly only when the classify run pooled the same way.
 
 Requires classify_stls.py to have been run first (it builds the caches);
 files without cached embeddings are skipped with a warning.
@@ -31,7 +33,7 @@ from classify_stls import (add_cache_args, apply_run_params, as_tensor, cache_ke
                            cache_root, embed_raw, embed_texts, embeds_dir,
                            load_file_list,
                            pool_sims, render_index, render_key, renders_dir,
-                           total_views)
+                           total_views, view_config)
 
 
 def link(f, text):
@@ -90,8 +92,9 @@ def show_query(sims_1d, names, top=10, min_score=None):
     order = np.argsort(-sims_1d)
     # 2.0 catches only unambiguous noise: measured on real queries, correct
     # matches ran z 2.4+ while semantic near-misses ran up to 3.7 — a higher
-    # cutoff would suppress good results without stopping near-misses. Raw
-    # scores < min_score (default 0.1) filter the middle ground instead.
+    # cutoff would suppress good results without stopping near-misses. It
+    # stands alone by default; --min-score / :min opts into filtering the
+    # middle ground by raw score when a query wants an exhaustive listing.
     if z[order[0]] < 2.0:
         print(f"  WEAK QUERY (best z {z[order[0]]:.1f}) — nothing stands out; "
               f"probably not represented in the collection")
@@ -113,10 +116,10 @@ def main():
     # cache-identity params default to the last classify_stls.py run
     add_cache_args(parser, "STL directory (defaults to the last classify_stls.py run)")
     parser.add_argument("--categories", default="categories.txt")
-    parser.add_argument("--pool", choices=["mean", "max", "softmax"], default="mean")
-    parser.add_argument("--min-score", type=float, default=0.1,
-                        help="queries list every model scoring at least this instead of a "
-                             "top-10 (default 0.1; pass -1 or use :min off for top-10 mode)")
+    parser.add_argument("--pool", choices=["mean", "max", "softmax"], default="softmax")
+    parser.add_argument("--min-score", type=float, default=-1,
+                        help="list every model scoring at least this instead of the "
+                             "top-10 (off by default; :min in the loop adjusts it live)")
     parser.add_argument("--raw-queries", action="store_true",
                         help="embed query text verbatim instead of through the "
                              "'a 3D render of a {} miniature' templates (:raw toggles it); "
@@ -137,6 +140,7 @@ def main():
     rdir = renders_dir(args.cache_dir, args)
     renders = render_index(rdir) if rdir and rdir.is_dir() else {}
     poses = pose.load_pose_cache(args.cache_dir)
+    view_cfg = view_config(args)  # front_view entries are keyed per view config
 
     # display name: path relative to the input root, minus filler dirs.
     # Links open the front ("hero") render when it exists, any other saved
@@ -145,7 +149,8 @@ def main():
     names = []
     for f in files:
         rel = str(f.relative_to(root)) if f.is_relative_to(root) else str(f)
-        front = poses.get(pose.file_identity(f, root), {}).get("front_view", 0)
+        fv = pose.front_view(poses.get(pose.file_identity(f, root)), view_cfg)
+        front = 0 if fv is None else fv
         order = [front] + [v for v in range(total_views(args)) if v != front]
         rkey = render_key(f, root)
         found = next((renders[k] for v in order if (k := f"{rkey}_view{v}") in renders), None)

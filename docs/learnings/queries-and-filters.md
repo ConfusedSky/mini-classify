@@ -10,9 +10,11 @@
   near-misses.** Correct "skeleton" → TatteredTroopers at z 2.4–2.7;
   wrong-but-nearest "witch on a broomstick" → AurochRider (a mounted rider)
   at z 3.7. Layer the defenses instead: z < 2.0 = whole query is noise,
-  suppress output entirely; raw score < 0.1 (default --min-score) trims weak
-  individual matches; displayed z + clickable render link covers the
-  judgment calls no threshold can make.
+  suppress output entirely; displayed z + clickable render link covers the
+  judgment calls no threshold can make. A raw-score floor (`--min-score` /
+  `:min`) trims weak individual matches, but it is opt-in — the top-10 cut
+  already hides most of what it would catch, so it earns its keep only on
+  exhaustive listings.
 - Near-misses are often *semantically legitimate* ("wizard with a staff" →
   OrcShaman, who carries a staff) — treat threshold tuning as UX, not truth.
 

@@ -170,6 +170,22 @@ def test_embed_cache_token_keeps_legacy_key_for_heuristic():
     assert pose.embed_cache_token(vlm, "auto") == "vlm:0,1,0"
 
 
+def test_front_view_is_keyed_by_view_config():
+    # an index cached at 8 views is out of range at 4, and silently wrong at
+    # the same count with different elevations — so a config miss is a miss
+    entry = {"front_view": {"8v-e20,-20": 6}}
+    assert pose.front_view(entry, "8v-e20,-20") == 6
+    assert pose.front_view(entry, "4v-e20") is None
+
+
+def test_legacy_front_view_int_is_treated_as_absent():
+    # pre-keying entries carry no record of the config that produced them; a
+    # warm classify pass regenerates them from cached embeddings
+    assert pose.front_view({"front_view": 6}, "8v-e20,-20") is None
+    assert pose.front_view({}, "8v-e20,-20") is None
+    assert pose.front_view(None, "8v-e20,-20") is None
+
+
 def test_front_view_index_picks_frontmost():
     front = np.array([[1.0, 0.0]])
     back = np.array([[0.0, 1.0]])

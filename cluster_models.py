@@ -20,12 +20,13 @@ from sklearn.cluster import KMeans
 
 import pose
 from classify_stls import (add_cache_args, apply_run_params, cache_root,
-                           load_file_list, render_index, render_key, renders_dir)
+                           load_file_list, render_index, render_key, renders_dir,
+                           view_config)
 from test_categories import load_embedding_matrix
 
 
-def contact_sheet(members, renders, out_base, root, thumb=160, cols=6, per_sheet=36,
-                  poses=None):
+def contact_sheet(members, renders, out_base, root, cfg, thumb=160, cols=6,
+                  per_sheet=36, poses=None):
     """Lay every member out on as many sheets as it takes.
 
     One sheet lands on `out_base.png`; several become `out_base-1.png`,
@@ -35,7 +36,8 @@ def contact_sheet(members, renders, out_base, root, thumb=160, cols=6, per_sheet
     """
     tiles, no_front, no_render = [], 0, 0
     for f in members:
-        front = (poses or {}).get(pose.file_identity(f, root), {}).get("front_view", 0)
+        fv = pose.front_view((poses or {}).get(pose.file_identity(f, root)), cfg)
+        front = 0 if fv is None else fv
         key = render_key(f, root)
         img_path = renders.get(f"{key}_view{front}")
         if img_path is None:
@@ -116,6 +118,7 @@ def main():
         if renders is not None:
             sheets = contact_sheet([files[i] for i in members], renders,
                                    sheets_dir / f"cluster_{c:02d}", root,
+                                   view_config(args),
                                    per_sheet=args.per_sheet, poses=poses)
             if len(sheets) > 1:
                 print(f"  {len(sheets)} sheets: {sheets_dir}/cluster_{c:02d}"

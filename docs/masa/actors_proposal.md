@@ -221,6 +221,13 @@ Owns SigLIP and the category text embeddings, which it computes once at startup.
 
 ### Done
 
+*Altitude note (2026-08-13): in practice the pipeline's product is the caches
+— querying happens interactively in `test_categories.py`, and the CSV scoring
+here is an afterthought. The `src/` split should treat scoring as one thin
+consumer beside `test_categories`, not as logic that lives inside a
+first-class pipeline stage; `Done`'s load-bearing jobs are the cache writes,
+row collection and shutdown flush.*
+
 * Scores the embeddings against the category text embeddings (`pool_sims`,
   top-3), resolves `front_view`, and builds the row
 * Saves the embedding to the `.npy` cache and the resolved pose to the pose cache

@@ -297,16 +297,25 @@ RENDER_FORMATS = {
 }
 
 
+def view_config(args):
+    """The token for anything that indexes into this run's view list.
+
+    front_view is such an index, and an index cached at 8 views is meaningless
+    at 4 — or silently wrong at the same count with different elevations — so
+    the pose cache stores it per view config. Same elevation formatting as
+    cache_key, so the two never disagree about what one config is."""
+    elev = ",".join(f"{e:g}" for e in args.elevations)
+    return f"{args.views}v-e{elev}"
+
+
 def render_subdir(args):
     """Renders live under the camera config that produced them.
 
     A filename carries only stem and view index, but cache_key covers render
     size, views and elevations — so without this a rerun at a different size
     leaves the previous config's images in place and the contact sheets stop
-    describing what was actually classified. Same elevation formatting as
-    cache_key, so the two never disagree about what one config is."""
-    elev = ",".join(f"{e:g}" for e in args.elevations)
-    return f"{args.render_size}px-{args.views}v-e{elev}"
+    describing what was actually classified."""
+    return f"{args.render_size}px-{view_config(args)}"
 
 
 def render_key(f, root):
@@ -655,8 +664,12 @@ def add_cache_args(parser, input_help):
 RUN_PARAMS_FILE = "run-params.json"
 # What a classify run records for the tools that read its cache. Keys are
 # argparse dests; anything not declared by a given tool's parser is ignored.
+# "pool" is deliberately absent: it is a scoring-time choice, not cache
+# identity, and letting the classifier's afterthought default leak into
+# test_categories overrode the REPL's own deliberate softmax default —
+# querying happens there, so its default wins there.
 RUN_PARAMS_KEYS = ("input", "views", "elevations", "render_size", "model",
-                   "up_axis", "pool", "categories", "render_format",
+                   "up_axis", "categories", "render_format",
                    "collection_root")
 
 
@@ -736,7 +749,10 @@ def apply_run_params(parser):
     known, _ = parser.parse_known_args()
     params = load_run_params(getattr(known, "cache_dir", None))
     dests = {a.dest for a in parser._actions}
-    applied = {k: v for k, v in params.items() if k in dests}
+    # RUN_PARAMS_KEYS gates the read as well as the write: a key dropped from
+    # the manifest must stop flowing even from run-params.json files that
+    # recorded it back when it was one
+    applied = {k: v for k, v in params.items() if k in dests and k in RUN_PARAMS_KEYS}
     parser.set_defaults(**applied)
     args = parser.parse_args()
     if applied:
@@ -768,7 +784,7 @@ def main():
                              "cache was built against, re-keying every entry. Right after "
                              "the library moves, wrong when the cache belongs to another "
                              "collection")
-    parser.add_argument("--pool", choices=["mean", "max", "softmax"], default="mean",
+    parser.add_argument("--pool", choices=["mean", "max", "softmax"], default="softmax",
                         help="how per-view scores combine: mean = whole-object consensus, "
                              "max = single-view features decide, softmax = in between")
     parser.add_argument("--pose-vlm", choices=["auto", "ollama", "claude", "gemini", "off"],
@@ -870,6 +886,7 @@ def main():
     saved_renders = render_index(rdir)
     redrawn = 0  # rendered only to refresh --save-renders, embedding already cached
     angles = view_angles(args.views, args.elevations)
+    view_cfg = view_config(args)  # keys front_view entries in the pose cache
 
     pose_cache = pose.load_pose_cache(args.cache_dir)
     vlm_backend = args.pose_vlm
@@ -1077,14 +1094,19 @@ def main():
             if not args.skip_embed:
                 with stage("score"):
                     view_np = img_embeds.float().cpu().numpy()
-                    if "front_view" not in entry:
-                        entry["front_view"] = pose.front_view_index(view_np, front_T, back_T)
+                    fv = pose.front_view(entry, view_cfg)
+                    if fv is None:
+                        fv = pose.front_view_index(view_np, front_T, back_T)
+                        old = entry.get("front_view")
+                        # legacy int: no record of which config produced it
+                        entry["front_view"] = \
+                            {**(old if isinstance(old, dict) else {}), view_cfg: fv}
                     view_sims = (img_embeds @ text_embeds.T).float().cpu().numpy()  # (n_views, n_cats)
                     sims = torch.from_numpy(pool_sims(view_sims, args.pool))
                     order = sims.argsort(descending=True)
                     row = {"file": str(f), "up": pose.up_str(entry["up"]),
                            "pose_conf": entry["confidence"], "pose_source": entry["source"],
-                           "front_view": entry["front_view"]}
+                           "front_view": fv}
                     for rank in range(min(3, len(categories))):
                         idx = order[rank]
                         row[f"top{rank + 1}"] = categories[idx]

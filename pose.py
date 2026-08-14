@@ -182,6 +182,20 @@ BACK_PROMPTS = [
 ]
 
 
+def front_view(entry, cfg):
+    """The cached front ("hero") view index for one view configuration.
+
+    front_view indexes into a specific run's view list, so it is stored as a
+    dict keyed by classify_stls.view_config — an index cached at 8 views is
+    out of range at 4 and silently wrong under different elevations. Legacy
+    integer entries carry no record of the config that produced them and are
+    treated as absent; a warm classify pass regenerates them from cached
+    embeddings, and consumers fall back to view 0 (a real render, just not
+    necessarily the front) until it does."""
+    fv = (entry or {}).get("front_view")
+    return fv.get(cfg) if isinstance(fv, dict) else None
+
+
 def front_view_index(view_embeds, front_embeds, back_embeds):
     """Index of the view that best faces the camera. Front is metadata: this
     never triggers a re-render, it just names one of the existing views."""

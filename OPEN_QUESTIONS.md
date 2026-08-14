@@ -263,8 +263,14 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   prerequisite is hand-labelling a category set (602 models), but if the real
   use is search, precision@k over a dozen queries needs only the top ~20 results
   per query judged — ~200 judgements, scoring the thing that is actually used.
+
+  The real use **is** search (2026-08-13): the collection is queried
+  interactively through `test_categories.py`, and the classifier's CSV is an
+  afterthought. So the precision@k variant is not the cheap alternative — it
+  is the question, and hand-labelling 602 models to validate CSV top-3
+  columns is not worth doing at all. The harness for it mostly exists:
   `test_categories.py` already produces those ranked lists from cached
-  embeddings, so the harness mostly exists.
+  embeddings.
 - **Category classification is render-size sensitive; pose is not.** First data
   on the asymmetry the entry above predicts. Same 8 models, cold, `--views 8
   --elevations 20,-20`, 2048px against 384px:
