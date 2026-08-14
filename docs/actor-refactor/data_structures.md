@@ -126,9 +126,7 @@ class EmbedTilesRequest:           # Poser → Embedder
 class TileEmbeds:                  # Embedder → Poser (back-edge)
     file: Path
     index: int
-    embeds: np.ndarray             # numpy, not a tensor: the consumer is
-                                   # pose.py's ensemble math, which is
-                                   # torch-free by design
+    embeds: torch.Tensor           # on device; the Poser pulls it off the GPU
 ```
 
 ### Into `Done` — D5
@@ -160,12 +158,16 @@ class Failure:                     # any stage → Done; becomes a RENDER_ERROR 
 startup, read-only thereafter) and does the scoring — `pool_sims`, top-3,
 `front_view` resolution.
 
-The `np.ndarray`/`torch.Tensor` asymmetry between `TileEmbeds` and `Embedded`
-is deliberate, typed by consumer: `pose.py` imports no torch (checked — zero),
-so the Embedder does the one `.float().cpu().numpy()` before handing tiles to
-the ensemble, while `Done`'s `img_embeds @ text_embeds.T` wants the tensor
-still on the device. Both messages live entirely in the parent process, so
-neither type is ever pickled and transport plays no part in the choice.
+**The Embedder always returns `torch.Tensor`.** An earlier revision typed the
+two messages by consumer (`TileEmbeds` as numpy, `Embedded` as tensor); the
+uniform contract won: the Embedder returns what it computes, and conversion
+is the consumer's business. `Done` keeps the tensor on device for its
+`img_embeds @ text_embeds.T`; the **Poser** does the one
+`.float().cpu().numpy()` before handing tiles to the ensemble math. The torch
+import that requires lives in the Poser module under `src/` — `pose.py`
+itself stays torch-free, receiving plain arrays as it always has. Both
+messages live entirely in the parent process, so nothing here is ever
+pickled and transport plays no part in the choice.
 
 `Failure` is load-bearing, not a convenience: the Supervisor's
 `admitted − retired` counter only reaches zero if errors *retire* files
