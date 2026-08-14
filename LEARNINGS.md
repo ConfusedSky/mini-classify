@@ -52,6 +52,11 @@ notes at the bottom are amended in place. Open work is tracked separately in
   the render-child queue's cost isolated from render-wait: the pipe is the tax,
   not pickle, shm is 4–5× — and still only ~0.5% of a cold run, so v1 ships on
   `mp.Queue` behind a transport interface.
+- [2026-08-14 — precision, and what it actually flips](docs/learnings/2026-08-14-precision-and-compile.md)
+  — the fp16 scoring cast flips 1 of 2943, compile flips 1 of 341, both at
+  coin-toss margins; jpeg dilution and the compiled-tower-that-wasn't canary;
+  max-autotune is GEMM-gated off this card; `--compile` ships with the
+  numeric regime keyed into the embedding cache.
 
 ## Evergreen notes
 
