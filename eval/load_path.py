@@ -2,7 +2,7 @@
 
 Started as "does welding STL vertices at load pay for itself?" — an STL is a
 triangle soup at 3.00 verts per triangle, Filament's buffer build is O(verts),
-so welding should cut upload sharply (docs/masa/renderer_alternatives.md).
+so welding should cut upload sharply (docs/actor-refactor/renderer_alternatives.md).
 
 It does, and it still loses: Open3D's weld costs more than the upload it saves,
 and it changes the render, because a soup vertex belongs to one triangle and

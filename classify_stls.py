@@ -104,7 +104,7 @@ def read_binary_stl(path):
     read_triangle_mesh dominates everything before the first pixel: ~3.9 s on an
     800k-triangle collection mesh against ~120 ms here, where the upload it
     feeds is 275 ms. Optimising the renderer was optimising the small half
-    (eval/load_path.py, docs/masa/renderer_alternatives.md).
+    (eval/load_path.py, docs/actor-refactor/renderer_alternatives.md).
 
     The header cannot be trusted to say which format this is — plenty of binary
     STLs start with "solid" — so the test is arithmetic: it is binary only if

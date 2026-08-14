@@ -289,9 +289,10 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   the Remorhaz flip is arguably an improvement. A no-label sensitivity run
   bounds the risk without resolving correctness: at 2.7 s/model a full 602-model
   pass at 384 is ~27 minutes, which counts how many models change answer.
-  Note this decoupling is currently blocked anyway — one `OffscreenRenderer` per
-  process, fixed size at construction, so pose tiles at 384 and views at 2048
-  cannot coexist in one process (see `docs/masa/actors_proposal.md`).
+  ~~Note this decoupling is currently blocked anyway~~ — it is not: the
+  one-renderer-per-process limit was refuted (four coexisted in one process;
+  the abort is teardown-only, `docs/reviews/2026-08-13.md` §3.1), so the
+  decoupling needs only a second renderer kept alive for the process lifetime.
 
 ## Performance work not done
 
@@ -343,14 +344,14 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   beat filled 21/21 to 20/21. Worth a second measurement before adopting, and
   worth deciding against `--render-size` rather than in isolation.
 - **Can pose-tile render size be decoupled from `--render-size` at all?** Three
-  separate wanted changes now collide with one `OffscreenRenderer` per process:
-  rendering pose tiles at a fixed 384 for speed (LEARNINGS says neither tower
-  gains above a 384 source), rendering them at ≥512 so the Gemini arbiter is not
-  starved, and rendering classification views at 2048 for detail. Any two of
-  those need two live renderers at different sizes, which aborts the
-  interpreter. ModernGL holds several contexts per process and would dissolve
-  this — see `docs/masa/renderer_alternatives.md`. Until then `--render-size` is
-  one knob serving three consumers with different optima.
+  separate wanted changes want three different sizes: pose tiles at a fixed 384
+  for speed (LEARNINGS says neither tower gains above a 384 source), tiles at
+  ≥512 so the Gemini arbiter is not starved, and classification views at 2048
+  for detail. ~~Any two of those need two live renderers, which aborts the
+  interpreter~~ — refuted by the review (`docs/reviews/2026-08-13.md` §3.1:
+  four renderers coexisted; only teardown aborts), so decoupling needs only a
+  second renderer kept alive for the process lifetime. `--render-size` is
+  still one knob serving three consumers with different optima.
 - **Does `MARGIN_THRESHOLD` want re-reading after the parser swap?** The numpy
   parser shifts ensemble margins by a mean of 0.024, which walks models across
   the 0.45 gate. `Concrete Chunk (2)` stops escalating at both render sizes and

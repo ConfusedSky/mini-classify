@@ -3,7 +3,7 @@
 A binary STL is a triangle soup and `read_triangle_mesh` welds a handful of its
 vertices where the numpy parser does not, so the two produce different vertex
 normals and therefore different pixels — measured at 4.5% of pixels above 2/255
-against a 0.004% noise floor (docs/masa/renderer_alternatives.md). That is well
+against a 0.004% noise floor (docs/actor-refactor/renderer_alternatives.md). That is well
 above jitter, so it has to be scored against labels before it ships.
 
 Each arm runs the production pose path (`classify_stls.resolve_up`, arbiter off)

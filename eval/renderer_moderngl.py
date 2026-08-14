@@ -13,7 +13,7 @@ Needs its own venv; moderngl and trimesh are deliberately not project deps:
 
 The shading here is a hand-written Lambert pass, NOT Filament's defaultLit with
 IBL, so the frame time is not directly comparable to renderer_open3d.py. Upload
-and residency numbers are. See docs/masa/renderer_alternatives.md.
+and residency numbers are. See docs/actor-refactor/renderer_alternatives.md.
 """
 import subprocess
 import sys

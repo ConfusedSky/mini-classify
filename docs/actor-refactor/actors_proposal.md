@@ -93,10 +93,12 @@ render index.
   * **Device tier** — up to [loader_device_cache=2GiB] of meshes already uploaded
     to the renderer, kept resident by name and hidden rather than destroyed.
 
-The device tier is the interesting half. `_upload` is recorded as the single
-largest per-model cost, and it sits squarely on the Renderer's critical path —
-though how large is itself in question now (see
-[Spike 3](#spike-3-mesh-ownership-and-the-two-tier-loader)).
+The device tier is the interesting half — though its premise shrank after this
+was written. "`_upload` is recorded as the single largest per-model cost"
+rested on a 15 s figure that `19e5033` corrected to 275 ms, fifteen minutes
+after this document's last edit (`_upload` was never a separately instrumented
+stage). What survives is the 34 ms re-show against 369 ms remove+re-add below —
+real, but a much smaller prize than the one this section was designed around.
 
 **It is expressible against Open3D**, which is a correction to an earlier draft
 of this document. `show_geometry(name, False)` hides *without* freeing —
@@ -120,13 +122,12 @@ one, where a cached pose sends the file straight through as `"kind": "embed"` in
 a single pass. Worth being honest about the population rather than quoting 11×
 against the whole run.
 
-Loading is 33% of a median model and 55% of a p99 one (0.83 s / 15.4 s), it is
-disk+CPU while everything after it is GPU, and Open3D's reader releases the GIL.
-`MeshPrefetcher` already overlaps it — but with a *single* thread at depth 2. On
-a median model that hides the load completely (0.83 s against ~1.7 s of
-downstream work); on a p99 model the 15.4 s load exceeds the ~12.6 s behind it,
-so a run of heavy meshes outruns one loader. That tail is what
-`loader_worker_count` is for, not a claim that disk is an unmeasured bottleneck.
+An earlier draft argued the loader tail from "33% of a median model and 55% of
+a p99 one (0.83 s / 15.4 s)" — the exact sentence `19e5033` deleted from
+`MeshPrefetcher`'s docstring as wrong in both directions. With the numpy parser
+a mesh loads in 11–66 ms and `mesh-wait` is 0.4% of wall, so the
+`loader_worker_count` case is dead; see
+[What the spikes changed](#what-the-spikes-changed).
 
 **The rotation is the blocker, and it is now the whole design risk.** Hiding and
 re-showing only helps if the resident geometry is reusable *as-is*, and today it
@@ -169,12 +170,14 @@ Two things remain unresolved and gate on
 * Pose renders are then sent to `Poser` and embed renders are sent to `Embedder`.
 
 Single thread, single `OffscreenRenderer`, created on the Renderer's own thread
-rather than lazily on main. This is not a style choice: **one
-`OffscreenRenderer` per process** is a hard limit — a second one does not fail
-politely, Filament's resource manager throws from a destructor and the
-interpreter aborts (LEARNINGS). Rendering cannot be threaded *or*
-multi-instanced within a run, only split across processes. So the render stage
-is a serial resource by construction, and everything else is arranged around it.
+rather than lazily on main. An earlier draft called one renderer per process a
+hard limit; the review measured otherwise (`docs/reviews/2026-08-13.md` §3.1):
+four renderers at four sizes were created and used correctly in one process,
+and the abort is **teardown only** — Filament throws from a destructor when a
+renderer is destroyed, which is why `eval/tile_and_vlm.py` keeps its four
+alive deliberately. So the render stage is serial by *choice* — one renderer,
+kept for the process lifetime, never destroyed — not by construction, and
+mixed render sizes in one process only need a second live renderer.
 
 The Renderer owns the device-tier LRU, since the resident names live in its
 scene. The Loader decides what should be resident; the Renderer is what holds it.
@@ -234,8 +237,10 @@ row collection and shutdown flush.*
 * Receives error messages from any stage and turns them into `RENDER_ERROR` rows
 * Sorts rows by `index` and writes `results.csv`
 
-Sorting is required: today rows come out in file order, and eight concurrent
-actors would otherwise produce an arbitrary order run to run.
+Sorting is required — and is a fix, not just parity: with deferral on (the
+default) the ~20% of files that hit the arbiter are processed after the main
+loop, so their rows already land out of file order at the end of today's CSV.
+Eight concurrent actors would merely make the disorder total.
 
 ### Supervisor
 
@@ -261,11 +266,15 @@ counter that detects quiescence.
 
 There are **two** GPUs here, and the pipeline already straddles both:
 
-| stage      | device                          | memory                    |
-|------------|---------------------------------|---------------------------|
-| Renderer   | AMD Phoenix1 iGPU (`renderD129`)| shared system RAM         |
-| Embedder   | RTX 4060 (`renderD128`)         | ~2.2 GiB of 8 GiB VRAM    |
-| Arbiter    | network                         | —                         |
+| stage      | device                          | memory                       |
+|------------|---------------------------------|------------------------------|
+| Renderer   | AMD Phoenix1 iGPU (`renderD129`)| shared system RAM            |
+| Embedder   | RTX 4060 (CUDA)                 | 2.5 GB peak of 7.8 GB VRAM   |
+| Arbiter    | network                         | —                            |
+
+(The 4060 is also `renderD128`, which is how the EGL probe identified the
+cards — but the Embedder reaches it through CUDA (`/dev/nvidia*`), not the DRM
+render node. 2.2 GiB is the weights alone; 2.5 GB is measured peak allocated.)
 
 Consequences:
 
@@ -394,12 +403,10 @@ The named-LRU device tier, on real STLs rather than a synthetic mesh. Measure:
   meshes — that would quietly undo the win, and it is a ten-minute measurement.
 * **Bytes per mesh** across the collection's size distribution, host-side and
   resident, to confirm what 4GiB and 2GiB actually hold.
-* **Re-measure `_upload`.** The 15 s figure for a 4M-triangle mesh does not
-  survive a first look: a 159k-triangle sphere uploads in 0.01 s and renders in
-  8 ms/view at 512 px, which extrapolates to ~0.25 s rather than 15 s. One
-  synthetic mesh is not enough to overturn a recorded measurement, but the gap is
-  wide enough that the real number has to be established before anything is
-  designed around it.
+* **Re-measure `_upload` — DONE, same session.** The 15 s figure did not
+  survive: `19e5033` measured 275 ms on a real collection mesh, in line with
+  what the 159k-triangle sphere extrapolated (0.01 s upload, 8 ms/view at
+  512 px → ~0.25 s). Nothing should be designed around upload cost.
 * **Peak RSS** holding N meshes at 4 workers, and the hold-vs-reload tradeoff
   across the pose round trip now that re-showing is 34 ms.
 
@@ -425,7 +432,7 @@ per model of held GIL.
 
 ModernGL holds it too, ~3–5× less (~4–9 ms per view against ~21–26 ms), so
 "several contexts per process" is **not** parallel rendering — see
-`docs/masa/renderer_alternatives.md`.
+`docs/actor-refactor/renderer_alternatives.md`.
 
 ## What the spikes changed
 
@@ -439,11 +446,11 @@ LRU, which targets `_upload`, not the parse — but the host tier is now a memor
 bound with little left to buy.
 
 **"The Renderer must be its own process" became optional rather than forced.**
-Three findings were converging on it: the GIL result above, the
-one-`OffscreenRenderer`-per-process abort, and the fact that pose tiles at 384
-cannot coexist with 2048 view renders in one process. ModernGL answers the first
-two — several contexts per process, and 3–5× less GIL — which turns a forced
-architectural move into a budgeting question. The budgeting then resolved in
+Three findings were converging on it; the review then voided two — the
+one-renderer-per-process abort is teardown-only, and 384 pose tiles *can*
+coexist with 2048 view renders via a second live renderer (§3.1) — leaving the
+GIL result as the one that stands. ModernGL loosens that too (3–5× less GIL),
+which turns a forced architectural move into a budgeting question. The budgeting then resolved in
 the boundary's favour: 12.6 MB per view was a 2048 px number, and at the
 production 384 px a view is ~440 KB — the overlap spike measured the parent
 waiting on the queue just 6–8 s in a ~2-minute run, so the boundary is nearly

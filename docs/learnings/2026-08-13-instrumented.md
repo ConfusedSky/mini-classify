@@ -21,7 +21,7 @@ devices. The 8 GB card holds SigLIP and nothing else. The iGPU draws from shared
 system RAM, and its buffers land in **GTT, not the vram carve-out** — sizing
 anything off `mem_info_vram_used` misses the geometry entirely. And it is not
 obvious we want to move: iGPU-render plus dGPU-embed is free cross-device
-parallelism. See `docs/masa/renderer_alternatives.md`.
+parallelism. See `docs/actor-refactor/renderer_alternatives.md`.
 
 ### Full-collection baseline, and what the parser swap moved
 

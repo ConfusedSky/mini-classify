@@ -9,7 +9,7 @@ Usage: python eval/renderer_open3d.py [mesh.stl] [subdivisions]
 Defaults to ../test-stls/bunny.stl subdivided 3x (~4.4M tris). test-stls/ is
 gitignored, so pass a path if you do not have the fixtures.
 
-Numbers from this script are written up in docs/masa/renderer_alternatives.md.
+Numbers from this script are written up in docs/actor-refactor/renderer_alternatives.md.
 """
 import os
 import subprocess

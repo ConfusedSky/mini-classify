@@ -30,7 +30,7 @@ readback with no draw behind it does not hit the same path. The combined row is
 what the pipeline actually pays. Single-process, 8 iterations, one machine — run
 it a few times, the spread is real.
 
-See docs/masa/renderer_alternatives.md.
+See docs/actor-refactor/renderer_alternatives.md.
 """
 import sys
 import threading
