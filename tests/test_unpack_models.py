@@ -173,6 +173,49 @@ def test_an_extractor_decoding_names_differently_still_lands(tmp_path, monkeypat
     assert not list(z.parent.glob("*.partial"))
 
 
+def test_a_kill_mid_swap_is_not_mistaken_for_redundancy(tmp_path):
+    # review R1: a hard kill between the two renames leaves dest missing and
+    # the original in .replaced — whose content is byte-identical, so the CRC
+    # sample would happily confirm a false 'elsewhere' for an absent model
+    z = leaf(tmp_path)
+    _, dest, _ = plan_zip(z)
+    extract(z, dest)
+    dest.rename(dest.with_name(dest.name + ".replaced"))
+    assert plan_zip(z)[0] == "extract"
+
+
+def test_extract_restores_an_interrupted_swap_before_anything_else(tmp_path):
+    # review R1: the orphaned aside copy is the original — put it back, and
+    # stop so the stale plan gets remade against the restored tree
+    z = leaf(tmp_path)
+    _, dest, _ = plan_zip(z)
+    extract(z, dest)
+    (dest / "32mm_Barrier.stl").write_bytes(b"the original")
+    dest.rename(dest.with_name(dest.name + ".replaced"))
+    with pytest.raises(RuntimeError, match="interrupted swap"):
+        extract(z, dest)
+    assert (dest / "32mm_Barrier.stl").read_bytes() == b"the original"
+    assert not list(z.parent.glob("*.replaced"))
+
+
+def test_unexpected_staging_contents_raise_rather_than_misnest(tmp_path, monkeypatch):
+    # review R2: with owns_root, anything but exactly one staged root dir used
+    # to fall back to renaming tmp itself — the tree landed one level too deep
+    # and the collection walk quietly found nothing. A loud stop beats that.
+    z = make_zip(tmp_path / "Kit.zip", {"Kit/mini.stl": "solid\n"})
+    real = unpack_models.unzip_into
+
+    def extra(zpath, tmp):
+        real(zpath, tmp)
+        (tmp / "__MACOSX_leftover").write_text("")
+    monkeypatch.setattr(unpack_models, "unzip_into", extra)
+    _, dest, _ = plan_zip(z)
+    with pytest.raises(RuntimeError, match="exactly the archive's root"):
+        extract(z, dest)
+    assert not dest.exists()
+    assert not list(z.parent.glob("*.partial"))
+
+
 def test_a_failed_swap_restores_the_original(tmp_path, monkeypatch):
     # review N1: the swap must never have a moment where neither copy exists —
     # a rename failing mid-swap puts the original back

@@ -117,7 +117,10 @@ def content_elsewhere(z, zpath, cache):
     if zpath.parent not in cache:
         idx = defaultdict(list)
         for dp, dn, fn in os.walk(zpath.parent):
-            dn[:] = [d for d in dn if not d.endswith(".partial")]
+            # .replaced is an interrupted swap's aside copy: byte-identical to
+            # the archive, so counting it would confirm a false 'elsewhere'
+            # for a model that is in fact missing from the collection
+            dn[:] = [d for d in dn if not d.endswith((".partial", ".replaced"))]
             for f in fn:
                 p = Path(dp) / f
                 try:
@@ -132,7 +135,7 @@ def content_elsewhere(z, zpath, cache):
         return False
     if any((Path(i.filename).name, i.file_size) not in idx for i in ents):
         return False
-    step = max(1, len(ents) // 5)
+    step = max(1, -(-len(ents) // 5))    # ceil: spread the sample to the tail
     return all(any(_crc32(p) == i.CRC
                    for p in idx[(Path(i.filename).name, i.file_size)])
                for i in ents[::step][:5])
@@ -215,6 +218,17 @@ def extract(zpath, dest, replace=False):
     The refusal also catches two zips resolving to one destination in a single
     run (thingiverse-style archives share their author's name as the root
     dir), where the second extraction would otherwise destroy the first."""
+    aside = dest.with_name(dest.name + ".replaced")
+    if aside.exists():
+        if dest.exists():
+            # a finished swap whose final cleanup failed: superseded old copy
+            shutil.rmtree(aside, ignore_errors=True)
+        else:
+            # a hard kill mid-swap: put the original back and stop, because
+            # the plan that led here was made against a tree without it
+            aside.rename(dest)
+            raise RuntimeError(f"{dest.name}/ restored from an interrupted "
+                               f"swap — rerun to re-plan this zip")
     if dest.exists() and not replace:
         raise RuntimeError(f"{dest.name}/ already exists — repairs are "
                            f"opt-in (--repair), and two zips may be "
@@ -236,22 +250,28 @@ def extract(zpath, dest, replace=False):
             # archives that need 7z (Windows-authored, Deflate64) are exactly
             # the ones that omit the flag.
             inner = list(tmp.iterdir())
-            if len(inner) == 1 and inner[0].is_dir():
-                staged = inner[0]
+            if len(inner) != 1 or not inner[0].is_dir():
+                # owns_root means destination() saw exactly one top-level name,
+                # so anything else is a genuine surprise — and falling back to
+                # renaming tmp itself would write the tree one level too deep,
+                # a plausible-looking answer the collection walk quietly misses
+                raise RuntimeError(f"expected exactly the archive's root dir "
+                                   f"in staging, found "
+                                   f"{sorted(p.name for p in inner)}")
+            staged = inner[0]
         if dest.exists():
             if not replace:   # appeared while we were extracting
                 raise RuntimeError(f"{dest.name}/ appeared mid-extraction — "
                                    f"another zip claims this destination")
-            aside = dest.with_name(dest.name + ".replaced")
-            if aside.exists():
-                shutil.rmtree(aside)
             dest.rename(aside)
             try:
                 staged.rename(dest)
             except BaseException:
                 aside.rename(dest)          # put the original back
                 raise
-            shutil.rmtree(aside)
+            # the swap has succeeded; a cleanup failure here must not report
+            # the zip as failed. A leftover .replaced is swept on the next run.
+            shutil.rmtree(aside, ignore_errors=True)
         else:
             staged.rename(dest)
     except BaseException:
@@ -291,6 +311,12 @@ def main():
     counts, total, cache = Counter(), 0, {}
     for p in zips:
         action, dest, size = plan_zip(p, args.unpack_all, cache)
+        if dest and dest.with_name(dest.name + ".replaced").exists():
+            # an interrupted swap's aside copy; extract() sweeps it when it
+            # visits, but a zip planning 'done' is never visited again
+            problems.append((p, f"stray {dest.name}.replaced/ from an "
+                                f"interrupted swap — verify {dest.name}/ "
+                                f"then delete it"))
         if action == "repair" and not repair_authorized(p, args.repair):
             counts["repair-held"] += 1
             held.append(p)
