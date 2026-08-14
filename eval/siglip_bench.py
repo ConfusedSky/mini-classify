@@ -458,15 +458,29 @@ def prefetch_duty(model, processor, imgs, device, results, chunk=8, cycles=8,
     return row
 
 
-def compile_test(model, processor, imgs, device, results, batch=None):
+def compile_test(model, processor, imgs, device, results, batch=None,
+                 mode="default"):
     """Compile the image forward at one fixed shape and check it against eager.
 
     Fixed shape on purpose: the production call sites hand it 24 tiles and then
     16 views, so a compiled forward would face two shapes and pay two compiles
     unless the batch is padded.
+
+    mode is torch.compile's: "default", "max-autotune", "reduce-overhead".
+    Worth knowing before reading a max-autotune number on this card: inductor
+    gates its Triton GEMM autotuning behind is_big_gpu (>=68 SMs) and the 4060
+    Laptop is far under it, so "max-autotune" here autotunes pointwise/
+    reduction kernels only — the row records whether the gate was open.
     """
     batch = batch or VIEW_TILES
-    print(f"\n-- torch.compile: image forward at batch {batch} --")
+    torch._dynamo.reset()          # a fresh compile per mode, no cache reuse
+    try:
+        from torch._inductor.utils import is_big_gpu
+        big_gpu = bool(is_big_gpu(0) if is_big_gpu.__code__.co_argcount else is_big_gpu())
+    except Exception:
+        big_gpu = None
+    print(f"\n-- torch.compile mode={mode}: image forward at batch {batch} "
+          f"(max_autotune_gemm gate open: {big_gpu}) --")
     imgs_b = batch_slice(imgs, batch)
     inputs = processor(images=imgs_b, return_tensors="pt").to(device)
     pv = inputs["pixel_values"]
@@ -479,7 +493,8 @@ def compile_test(model, processor, imgs, device, results, batch=None):
     ref = eager().float().clone()
     base = timed(eager)
 
-    fn = torch.compile(model.get_image_features)
+    fn = torch.compile(model.get_image_features,
+                       mode=None if mode == "default" else mode)
 
     @torch.no_grad()
     def compiled():
@@ -520,7 +535,8 @@ def compile_test(model, processor, imgs, device, results, batch=None):
     ab_eager = {"median": statistics.median(et), "min": min(et), "max": max(et),
                 "all": [round(t, 5) for t in et]}
 
-    row = {"batch": batch, "eager_pre_compile": base, "eager": ab_eager, "compiled": hot,
+    row = {"batch": batch, "mode": mode, "big_gpu_gate": big_gpu,
+           "eager_pre_compile": base, "eager": ab_eager, "compiled": hot,
            "cold_wall_s": cold, "clocks_mhz": clocks,
            "eager_img_s": batch / ab_eager["median"],
            "compiled_img_s": batch / hot["median"],
@@ -530,7 +546,8 @@ def compile_test(model, processor, imgs, device, results, batch=None):
     print(f"  eager    {row['eager_img_s']:6.1f} img/s")
     print(f"  compiled {row['compiled_img_s']:6.1f} img/s  ({row['speedup']:.3f}x)")
     print(f"  max abs diff on normalised embeddings: {drift:.2e}")
-    results.setdefault("compile", {})[str(batch)] = row
+    key = str(batch) if mode == "default" else f"{batch}@{mode}"
+    results.setdefault("compile", {})[key] = row
     return row
 
 
@@ -668,7 +685,9 @@ def main():
         # both production shapes: 24 pose tiles, then the 16-view list. A compiled
         # forward meets both, so both compiles get paid unless the batch is padded.
         for b in [int(x) for x in os.environ.get("COMPILE_BATCH", str(VIEW_TILES)).split(",")]:
-            compile_test(model, processor, imgs, device, results, batch=b)
+            for m in os.environ.get("COMPILE_MODES", "default").split(","):
+                compile_test(model, processor, imgs, device, results, batch=b,
+                             mode=m.strip())
     if "sweep" in phases:
         project(results)
 
