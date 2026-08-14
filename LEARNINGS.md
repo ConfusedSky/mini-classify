@@ -1515,6 +1515,29 @@ the sweep. Every number above comes from a re-run with a 150 s soak and
 shuffled, interleaved rounds. On this machine, a benchmark that runs its
 configurations in a fixed order is measuring the fan.
 
+### The ceiling moves when the cooling does (same day)
+
+Re-run with improved cooling, same protocol (60 models, both mode orders,
+2-minute cooldown between runs), idle temperature 66–71 °C → 58–60 °C.
+Cool-start against cool-start:
+
+| | before | cooled | gain |
+|---|---|---|---|
+| baseline (sequential) | 125.0 s | 115.2 s | 1.09× |
+| overlap | 106.9 s | 93.5 s | 1.14× |
+| sequential embed (duty-cycled) | 71.0 s | 61.9–65.7 s | ~1.10× |
+| saturated embed (back-to-back) | 100.7–112.9 s | 84.8–90.5 s | ~1.20× |
+
+Cooling paid roughly twice as much in the saturated regime as in the
+idle-gapped one — which is the regime the overlap pushes the card into, so
+the two changes compound: **1.34× over the original sequential baseline**
+(125.0 → 93.5 s). The order-dependence of the naive comparison also shrank
+(1.15×/1.27× against 1.03×/1.37× before), i.e. less thermal hysteresis
+between runs. Not eliminated: the saturation penalty is still ~1.3–1.45×
+(from 1.4–1.6×), so further cooling or a power-limit raise keeps paying
+roughly proportionally. Raw numbers:
+`eval/out/overlap_spike_cooled_run1.json` beside the standard output file.
+
 ## Open-set queries: detecting "not in the collection"
 
 - Cosine scores are only comparable *within* a query — some phrasings run
