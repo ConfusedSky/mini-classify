@@ -1,7 +1,10 @@
+import shutil
 import zipfile
+from pathlib import Path
 
 import pytest
 
+import unpack_models
 from unpack_models import destination, extract, plan_zip
 
 
@@ -71,7 +74,7 @@ def test_a_zero_length_file_is_repaired_not_called_done(tmp_path):
     extract(z, dest)
     (dest / "32mm_Barrier.stl").write_bytes(b"")
     assert plan_zip(z)[0] == "repair"
-    extract(z, dest)
+    extract(z, dest, replace=True)
     assert (dest / "32mm_Barrier.stl").read_text() == "solid\n"
     assert plan_zip(z)[0] == "done"
     assert not list(z.parent.glob("*.partial"))
@@ -95,8 +98,125 @@ def test_a_failed_repair_leaves_the_damaged_copy_in_place(tmp_path):
     (dest / "32mm_Barrier.stl").write_bytes(b"")
     z.write_bytes(z.read_bytes()[:-40])          # truncate the source
     with pytest.raises(Exception):
-        extract(z, dest)
+        extract(z, dest, replace=True)
     assert dest.is_dir() and (dest / "32mm_Barrier.stl").exists()
+    assert not list(z.parent.glob("*.partial"))
+
+
+def test_an_existing_destination_is_never_replaced_without_authorization(tmp_path):
+    # the j4roid case: fifteen thingiverse zips share their author's name as
+    # the root dir, so a root-level --apply would have each one destroy its
+    # predecessor. Unauthorized, the second extraction refuses instead.
+    z = leaf(tmp_path)
+    _, dest, _ = plan_zip(z)
+    extract(z, dest)
+    (dest / "32mm_Barrier.stl").write_bytes(b"different")
+    stray = dest.with_name(dest.name + ".partial")
+    stray.mkdir()                               # someone else's interrupted run
+    with pytest.raises(RuntimeError, match="opt-in"):
+        extract(z, dest)                        # no replace: refuse
+    assert (dest / "32mm_Barrier.stl").read_bytes() == b"different"
+    assert stray.is_dir()                       # refusal touches nothing (N5)
+
+
+def test_repair_authorization_is_per_zip_or_directory(tmp_path):
+    z = leaf(tmp_path)
+    assert not unpack_models.repair_authorized(z, [])
+    assert unpack_models.repair_authorized(z, [str(z)])
+    assert unpack_models.repair_authorized(z, [str(tmp_path)])
+    assert not unpack_models.repair_authorized(z, [str(tmp_path / "other")])
+
+
+def curated(tmp_path, text="solid\n"):
+    """A zip plus a hand-curated copy of its model under another dir name."""
+    z = make_zip(tmp_path / "Set" / "Kit.zip",
+                 {"Kit/mini.stl": "solid\n", "Kit/render.jpg": "not kept"})
+    other = tmp_path / "Set" / "My Curated Name"
+    other.mkdir(parents=True)
+    (other / "mini.stl").write_text(text)
+    return z
+
+
+def test_content_extracted_by_hand_elsewhere_is_recognised(tmp_path):
+    # a set someone unzipped manually and curated into their own layout: every
+    # model exists under the zip's parent by name, size and bytes, junk
+    # pruned. The zip is redundant and must not re-extract a duplicate tree.
+    assert plan_zip(curated(tmp_path))[0] == "elsewhere"
+
+
+def test_a_name_and_size_coincidence_is_not_elsewhere(tmp_path):
+    # review N2: same basename, same byte count, different mesh. The CRC
+    # sample must catch it — a false 'elsewhere' means a zip is silently
+    # never unpacked, the exact failure this script exists to fix.
+    assert plan_zip(curated(tmp_path, text="SOLID\n"))[0] == "extract"
+
+
+def test_all_still_unpacks_a_redundant_zip(tmp_path):
+    # review N3: --all promises to unpack everything regardless
+    assert plan_zip(curated(tmp_path), unpack_all=True)[0] == "extract"
+
+
+def test_an_extractor_decoding_names_differently_still_lands(tmp_path, monkeypatch):
+    # review N1: 7z decodes no-UTF-8-flag entry names as UTF-8 where zipfile
+    # used cp437, so the staged root can carry a name destination() never
+    # predicted. The swap adopts whatever single root was actually written.
+    z = make_zip(tmp_path / "Kit.zip", {"Kit/mini.stl": "solid\n"})
+    real = unpack_models.unzip_into
+
+    def divergent(zpath, tmp):
+        real(zpath, tmp)
+        (tmp / "Kit").rename(tmp / "K┤ít")
+    monkeypatch.setattr(unpack_models, "unzip_into", divergent)
+    _, dest, _ = plan_zip(z)
+    extract(z, dest)
+    assert (dest / "mini.stl").read_text() == "solid\n"
+    assert not list(z.parent.glob("*.partial"))
+
+
+def test_a_failed_swap_restores_the_original(tmp_path, monkeypatch):
+    # review N1: the swap must never have a moment where neither copy exists —
+    # a rename failing mid-swap puts the original back
+    z = leaf(tmp_path)
+    _, dest, _ = plan_zip(z)
+    extract(z, dest)
+    (dest / "32mm_Barrier.stl").write_bytes(b"damaged but mine")
+    real = Path.rename
+
+    def boom(self, target):
+        if Path(target) == dest and ".partial" in str(self):
+            raise OSError("injected mid-swap")
+        return real(self, target)
+    monkeypatch.setattr(Path, "rename", boom)
+    with pytest.raises(OSError, match="injected"):
+        extract(z, dest, replace=True)
+    assert (dest / "32mm_Barrier.stl").read_bytes() == b"damaged but mine"
+    assert not list(z.parent.glob("*.partial"))
+    assert not list(z.parent.glob("*.replaced"))
+
+
+@pytest.mark.skipif(not any(shutil.which(n) for n in ("7z", "7zz", "7za")),
+                    reason="needs a 7z binary")
+def test_a_method_python_cannot_decompress_goes_through_7z(tmp_path, monkeypatch):
+    # Windows Explorer writes Deflate64 into large archives, which zipfile
+    # lists but cannot extract. Force the same dispatch on an ordinary zip and
+    # let the real 7z do the work end to end — staging and swap included.
+    monkeypatch.setattr(unpack_models, "PY_METHODS", set())
+    z = leaf(tmp_path)
+    _, dest, _ = plan_zip(z)
+    extract(z, dest)
+    assert (dest / "32mm_Barrier.stl").read_text() == "solid\n"
+    assert plan_zip(z)[0] == "done"
+    assert not list(z.parent.glob("*.partial"))
+
+
+def test_a_missing_7z_names_the_problem_and_cleans_up(tmp_path, monkeypatch):
+    monkeypatch.setattr(unpack_models, "PY_METHODS", set())
+    monkeypatch.setattr(shutil, "which", lambda _: None)
+    z = leaf(tmp_path)
+    _, dest, _ = plan_zip(z)
+    with pytest.raises(RuntimeError, match="needs 7z"):
+        extract(z, dest)
+    assert not dest.exists()
     assert not list(z.parent.glob("*.partial"))
 
 
