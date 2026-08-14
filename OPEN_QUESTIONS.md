@@ -11,6 +11,19 @@ never pool `hard` into an accuracy.
 
 Moved out of this file; the measurements are in `LEARNINGS.md`.
 
+- **Set `UP_TILE_AZIMUTHS = 2`** — adopted. Measured on all 49 labels at
+  production pixels first: zero ensemble pick changes, per-set accuracy
+  identical (21/23, 18/21, 5/5), one extra escalation — for half of the run's
+  largest GPU item. The gate re-read this entry required happened in the same
+  harness: replaying ten recorded arbiters through `MARGIN_THRESHOLD=0.45` at
+  n_az=2, every one scores ≥ its n_az=4 self (gemini-3.5-flash@512 gains,
+  37/40 → 38/40), so 0.45 stands; re-read again if production escalation
+  rates drift, since crossing counts carry ±2–3 models of pixel-source noise.
+  `POSE_CACHE_VERSION` deliberately not bumped: the measurement is that picks
+  do not move, VLM-sourced entries are kept whatever gated them, and
+  re-resolving 2284 poses would cost hours to reproduce answers shown
+  equivalent — bump to 5 if that judgement ever looks wrong.
+  `eval/tile_count.py`, LEARNINGS 2026-08-13.
 - **Does overlapping render and embed saturate the 4060?** — measured, yes and
   no. A renderer child process feeding SigLIP through a bounded queue takes the
   card from ~57% to ~94% busy, but wall-clock gains only **1.17–1.21×** against
@@ -109,15 +122,6 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   rotated copies and re-uploads each; the cost is geometry upload, not pixels
   (3.74 s at 2048 px vs 3.33 s at 384 px on 1.8M triangles). Move the camera
   instead.
-
-- **Set `UP_TILE_AZIMUTHS = 2`.** Measured on all 49 labels at production
-  pixels: zero ensemble pick changes, per-set accuracy identical (21/23,
-  18/21, 5/5), escalation up by exactly one call — for half of the run's
-  largest GPU item. Replaying ten recorded arbiters, the pipeline never loses
-  and usually gains. One constant in `classify_stls.py`; margins compress, so
-  **re-read `MARGIN_THRESHOLD` against the labels after adopting** rather than
-  assuming 0.45 still sits right. Escalation counts carry ±2–3 models of
-  pixel-source noise. `eval/tile_count.py`, LEARNINGS 2026-08-13.
 
 ## Open questions — genuinely unknown
 

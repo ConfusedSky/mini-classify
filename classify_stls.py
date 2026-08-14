@@ -182,7 +182,12 @@ def load_mesh(mesh_path):
 
 DEFAULT_ELEVATIONS = [20.0]
 UP_TILE_ELEVATION = 20.0  # pose contact sheet: fixed, independent of --elevations
-UP_TILE_AZIMUTHS = 4      # views per up candidate for the ensemble; the sheet still gets one
+# Views per up candidate for the ensemble; the arbiter sheet still gets one.
+# 2, not 4: measured on all 49 labels at production pixels, halving the
+# azimuths flips zero ensemble picks and costs one extra escalation, for half
+# of pose-embed — the run's largest GPU item (eval/tile_count.py, LEARNINGS
+# 2026-08-13). 1 is not safe: it breaks three models including 32mm_Gate_L.
+UP_TILE_AZIMUTHS = 2
 
 
 def view_angles(n_views, elevations):
@@ -961,7 +966,7 @@ def main():
             deferred_answer is (arbiter_index, pose-as-resolved-without-it) for a
             file parked on its first visit. Pose resolution is *not* repeated on
             the revisit: the ensemble already decided, and re-running it would
-            redo the mesh load, the 24 candidate renders and their embeddings —
+            redo the mesh load, the candidate renders and their embeddings —
             and, because the deferral hook is off the second time, ask the
             arbiter all over again. Measured: that cost more than the overlap
             saved, and two independent calls disagreed on three models."""
@@ -989,7 +994,7 @@ def main():
                             with stage("mesh-wait"):
                                 mesh = prefetch.get(f)
                             # guarded like the view renders below: resolve_up runs
-                            # 24 renders and their embeddings, and a degenerate
+                            # the candidate renders and embeddings, and a degenerate
                             # mesh that survived load_mesh (coincident vertices,
                             # NaNs) raises out of Filament on its empty AABB —
                             # one bad file must not end the run

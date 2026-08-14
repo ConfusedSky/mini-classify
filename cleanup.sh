@@ -6,7 +6,7 @@
 # clears only the two cheap-to-rebuild parts of it — <cache>/renders/ and
 # <cache>/embeds/ — and leaves the three files beside them alone:
 #
-#   pose-cache.json   24 up-candidate renders + a SigLIP forward per model, and
+#   pose-cache.json   the up-candidate renders + a SigLIP forward per model, and
 #                     any "vlm" entry also cost a paid arbiter call
 #   walk-*.json       a full rescan of the collection, which lives on removable
 #                     media
