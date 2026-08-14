@@ -888,3 +888,153 @@ Also confirmed correct:
 * **M3's render-size gap** — same shape, still open.
 * **`S1`–`S5`** above. `S1` and `S2` before the next cache migration; the rest
   any time.
+
+---
+
+# Pass 4 — 2026-08-14, against `0b939b9`
+
+Three commits: `3e1d084` (the R1 pose-flip measurement, landed *between*
+passes), `4678131` recorded pass 3, `0b939b9` is the S1–S5 fixes. Suite **189
+passed, 1 skipped** — up four from pass 3.
+
+This pass verifies a **recovery that has already run** and reviews a
+measurement, so both halves are checked against outcomes rather than
+intent. New findings carry `T` IDs.
+
+## P4.0 Verdict
+
+**All five S findings taken, the recovery confirmed complete by independent
+reconstruction, and the S1 fix is structurally better than the sketch it came
+from.** `cache_key_from_identity` with `cache_key` refactored to call through
+it makes the §P3.1 identity load-bearing rather than a reviewer's trick — the
+two can no longer drift, which the sketch did not ask for.
+
+The measurement in `3e1d084` is methodologically clean and its conclusion is
+probably right. What it does not yet have is a bound: **the gate result rests
+on four exposed models, not the 180 in its headline** (`T2`), and the reason
+it under-sampled is itself evidence for a gap still open in `P3.5`.
+
+## P4.1 Verification of the recovery
+
+Same reconstruction as §P3.1 — every key rebuilt from `pose-cache.json` plus
+`run-params.json`, no collection access:
+
+| cache | on disk | at new keys | still at old keys | neither | pose entries |
+|---|---|---|---|---|---|
+| `embed-cache2` | 2943 | **2943** | 0 | 0 | 2943 |
+| `embed-cache3` | 1148 | **1148** | 0 | 0 | 1149 |
+
+The 144 are recovered and both caches are complete. (`embed-cache3`'s single
+pose entry without an embedding predates this work and is not a migration
+artifact.)
+
+## P4.2 Disposition of pass 3
+
+| finding | status |
+|---|---|
+| S1 | taken, and improved on — see `P4.0`. Recovery verified above |
+| S2 | taken — populated test now covers `renders/` and root `*.npy`; refusal still precedes the stamp; middle case tested |
+| S3 | taken — `[\|evN]` added |
+| S4 | taken — `collapsed` and `unclaimed` split out. See `T1` |
+| S5 | taken — guard precedes `cache_root` in both tools |
+
+## P4.3 New findings
+
+### T1. `collapsed` cannot detect the case its docstring describes — LOW
+
+`plan_token_moves` computes **one** old token per identity, from the run's
+single `args.up_axis` (`migrate_cache_keys.py:229-236`). The collapse it is
+named for — "a forced axis and a geometry answer that agree used to hold two
+keys and now share one" — needs *two* old tokens for one identity (`"z"` and
+`"auto"`), which nothing computes. `old != new` is therefore always true when
+both exist, so `collapsed` fires only when the computed pair both exist, i.e.
+a partial-apply leftover. The forced/geometry duplicate the docstring
+describes lands in `unclaimed` instead.
+
+Both buckets are reported and neither is touched, and both were empty on both
+caches — this is labelling accuracy, not behaviour. Either compute both old
+tokens for that identity, or reword to what it detects.
+
+### T2. The gate result rests on n=4, not n=180 — MEDIUM
+
+`eval/compile_pose_flips.py` reports one up flip and **zero gate flips** over
+180 models. The gate arm selects the 60 nearest `|m − 0.45|` by **cached**
+margin (`:61`). Only four landed within the reachable delta band once measured
+**live** — which the commit message does disclose, so this is a framing gap,
+not a hidden result.
+
+The population is computable from the pose cache, which stores `margin` for
+every entry:
+
+| band around the 0.45 gate | `embed-cache2` | `embed-cache3` |
+|---|---|---|
+| ±1.1e-02 (max observed delta) | **54** of 2943 | 21 of 1149 |
+| ±1.2e-03 (median delta) | 5 | 2 |
+
+margins: `embed-cache2` min 0.0000, p1 0.0067, median 0.598, max 1.91;
+`embed-cache3` min 0.0000, p1 0.0036, median 0.409, max 1.85.
+
+The 60-nearest selection contains all 54 cached-in-band models by
+construction, so **54 cached-in-band collapsed to 4 live-in-band**. Zero flips
+in four gives a 95% upper bound near 50% per in-band model, against 54 in-band
+models collection-wide. The conclusion is very likely right and consistent
+with every other measurement here; the evidence does not yet bound it.
+
+**Why the targeting missed is the more useful half.** Cached margins are not
+live margins, for two already-known reasons: `UP_TILE_AZIMUTHS` dropped 4 → 2
+in `af258ce` with `POSE_CACHE_VERSION` **deliberately** unbumped, so the cache
+holds a mix of n_az=4- and n_az=2-derived margins; and the pose cache is not
+keyed on render size (`P3.5`). That non-bump was well argued — picks measured
+not to move, the 0.45 gate re-read at n_az=2, every recorded arbiter scoring
+≥ its n_az=4 self — and it is a claim about *decisions* being stable, which
+they are. It says nothing about margins being stable, and margins are what the
+targeting used.
+
+So this is the category-side lesson recurring on the pose side — *"the
+targeting has to be read against the margin the towers actually contested"* —
+and it is now visible in data rather than argued: 54 → 4 is a direct
+measurement of how far cached margins have drifted from live ones, which
+strengthens the render-size gap from a hypothesis into an observation.
+
+**Cheap re-run that would bound it:** one eager pass to collect *live* margins
+over a wider pool, then compile-compare only those landing in band. The
+harness already computes the eager margin for every model it touches
+(`:102`), so this is a selection change, not new machinery.
+
+## P4.4 What is right — do not re-verify
+
+* **`cache_key_from_identity` is byte-preserving.** Old
+  `f"{rel}|{mtime}|{size}|{views}|…"`, new `f"{ident}|{views}|…"` with
+  `ident = f"{rel}|{mtime}|{size}"` — identical, which is why the recovery
+  found files rather than creating new keys.
+* **The forced-axis carve-out is correct.** `idents = dict(poses)` with the
+  walk consulted only when `args.up_axis in ("z", "y")`
+  (`migrate_cache_keys.py:223-227`): under `auto` an embedding cannot exist
+  without a pose entry, and under a forced axis no pose entries are written,
+  so the walk is genuinely all there is.
+* **Raw-JSON poses preserved.** The migration still reads `pose-cache.json`
+  directly rather than through `load_pose_cache`, so old-version entries are
+  included and both source spellings still resolve — the pass-3 trap stayed
+  avoided through the refactor.
+* **The stamp is still written last**, and the probe now runs regardless of
+  it, so a stray-holding v1 cache is fixed by the tool.
+* **The measurement harness itself.** `torch.compile(model.get_image_features)`
+  — the bound method, per the null-canary lesson (`:80`); one `inputs`
+  preprocess fed to both towers (`:102-103`), so the comparison is immune to
+  substrate drift; live `render_up_candidate_grid` rather than cached views,
+  which is required because the `.npy` cache holds classification views, not
+  pose tiles; and both the argmax *and* `needs_arbiter_margin` compared
+  (`:107-108`), which is the exposure `R1` actually named.
+* **The ~20× pose-vs-category amplification is a new and load-bearing
+  finding** — `combine_up`'s min-max is the mechanism, and it is the reason
+  the pose side needed measuring separately at all rather than inheriting the
+  category-side number.
+
+## P4.5 Still open
+
+* **`R1`** — correctly still an accepted decision rather than a closed item.
+  `3e1d084` moves the acceptance from argument to measurement, which was the
+  ask; `T2` is about how tightly that measurement bounds it, not whether the
+  decision is right.
+* **M3's render-size gap** — unchanged, and now with `T2` as evidence.
+* **`T1`, `T2`** above.
