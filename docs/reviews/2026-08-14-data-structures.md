@@ -299,3 +299,412 @@ nobody asserts `len(rows) == admitted`.
    otherwise be found at implementation time.
 4. **D6, D8** — after Q1 and Q2 are answered.
 5. **D15** — last, since answering Q1 changes what is left to mark.
+
+---
+
+# Pass 2 — 2026-08-14, against `76be854`
+
+Six commits since pass 1: `898635e` took D1–D15, `bfa63c6` and `76be854`
+revised the shapes further, and `3717534`/`17d0d5a`/`b563fd7` are the
+precision arc and the `--compile` flag. Suite green at review time: **180
+passed, 1 skipped**.
+
+Same method as pass 1 — claims re-derived from source and from the caches on
+disk, not read. New findings carry `R` IDs. This pass also records two
+**decisions** taken during the review conversation (§P2.3) and the migration
+they imply (§P2.5), because both outran what a findings list can hold.
+
+## P2.0 Verdict
+
+**Pass 1's findings all landed; the follow-on work opened one new hole in
+shipped code and one in the design.** The doc's revision is materially better
+— D7's grid, D9's frozen `Pose`, D10's version handling and D14's LRU are all
+correct now, and the two gating questions are answered inline.
+
+The new code hole is `R1`: `--compile` was correctly made part of the
+embedding cache's identity and was **not** made part of the pose cache's,
+which consumes the same compiled tower.
+
+The design hole is `R2`, and chasing it produced the more valuable result.
+Asking why `"geometry"` read badly exposed that nobody had written down what
+`source` actually means — it records *what moved the answer*, not *what ran* —
+and that `embed_cache_token` keys on it only as a **proxy for determinism**.
+Both are now decided (§P2.3) and cost a migration, not a re-embed (§P2.5).
+
+## P2.1 Disposition of pass 1
+
+| finding | status |
+|---|---|
+| D1 | **reversed deliberately** — see `R2`, then superseded by decision `P2.3-A` |
+| D2 | taken; `actors_proposal.md` §Shutdown corrected in the same commit |
+| D3 | taken — citations moved to `pose.py:196` / `pose.py:126` |
+| D4 | taken — table relabelled as the spike's payload, production noted |
+| D5 | taken — `EmbedTilesRequest`/`TileEmbeds`/`CachedHit`/`Embedded` added |
+| D6 | answered (Q1): the `Future` wins, the back-edge list is corrected |
+| D7 | taken — `tiles: list[list[np.ndarray]]`, `[candidate][azimuth]` |
+| D8 | answered (Q2) — `needs_embed: bool`, child owns saving. See `R7` |
+| D9 | taken — `Pose` frozen, `Done` writes through the canonical dict |
+| D10 | taken — `v` carries through, no field default |
+| D11 | taken — stays a module function over `Pose \| None` |
+| D12 | taken — pair collapsed, and the Loader *module* seam kept deliberately |
+| D13 | taken — the 275 ms upload leads the argument, parse is the aside |
+| D14 | taken — `move_to_end` LRU, `in_flight` exemption, soft-bound stated |
+| D15 | taken — explicit v1 / threaded-successor split at the top |
+
+## P2.2 New findings
+
+### R1. `--compile` re-keys the embedding cache but not the pose cache — HIGH
+
+`b563fd7` makes the numeric regime part of `cache_key` on exactly the right
+argument: a permanent cache must not mix regimes. The pose cache is also
+permanent, and it also consumes the compiled tower.
+
+`main()` replaces the bound method (`classify_stls.py:887`), and
+`score_upright` reaches it through `embed_images` →
+`model.get_image_features` (`classify_stls.py:963-965`). So under `--compile`
+the pose ensemble's tile embeddings carry the drift — median 7.3e-04, max
+3.1e-03 by the write-up's own table — into `upright_scores` → `combine_up`,
+which decides both the argmax and the margin. `pose.file_identity` is
+`rel_path|mtime|size` (`pose.py:110`): no regime token, no version bump. Two
+runs at different regimes share pose entries, and whichever resolves a file
+first pins it.
+
+The exposure is not a wrong category, it is the escalation gate: a combined
+margin crossing `MARGIN_THRESHOLD = 0.45` (`pose.py:30`) changes whether a
+*paid* Gemini call happens, on the artifact the code singles out as the only
+one whose loss costs money (`classify_stls.py:1166-1169`). And
+`eval/compile_flips.py` measured top-1 **category** flips — the pose-side rate
+is unmeasured, so "1 of 341" does not cover this path.
+
+Accepting it is defensible: poses are resolved only on cold and upgrade files,
+and a mixed cache is inside the noise `parser_gate` concluded is permanent.
+But `docs/learnings/2026-08-14-precision-and-compile.md` covers `.npy`
+identity and text embeddings and is silent here, so it currently reads as an
+omission rather than a decision. Fold it into the entry proposed in
+[M3](#m3-close-the-pose--embedding-key-gaps).
+
+### R2. The `"geometry"` rename picked a name a measured write-up had rejected — HIGH
+
+Taking D1 by changing the code rather than the literal is legitimate, and
+`from_cache` mapping the old value is a *better* answer than the migration
+script the open question assumed. The target was wrong.
+
+`OPEN_QUESTIONS.md:118-120` and
+`docs/learnings/2026-08-12-where-a-7-hour-run-went.md:869-875` had already
+decided this rename with a measurement behind it: `"heuristic"` means *the
+ensemble ran and agreed* (verified by re-resolving 15 `heuristic`-marked
+models — **0 of 15 moved**), and the name "reads as 'the ensemble was skipped'
+— it actively misled during a previous session".
+
+`data_structures.md:238-251` justified `"geometry"` as "it reads better",
+citing neither. Superseded by `P2.3-A`, which resolves it differently than
+either the doc or the open question proposed.
+
+### R3. The rename's blast-radius list is incomplete — MEDIUM
+
+`data_structures.md:247-250` names the write site, two test files and the CSV
+column. Also affected:
+
+* `cleanup.sh:36` and `:106` — usage text and the deletion message. Worth
+  naming **because** it is the destructive path, and worth stating that its
+  filter keys on `"vlm"` (`cleanup.sh:104`), so the rename cannot break it.
+* `classify_stls.py:926` — "ambiguous poses keep the heuristic guess".
+* `classify_stls.py:451` — the `resolve_up` docstring.
+* `eval/siglip_up.py:142,148` — prints `cached['source'][:4]`; that column
+  silently becomes `geom`.
+
+Historical specs under `docs/superpowers/` also quote the old value; leave
+them, they are records.
+
+### R4. `Pose` frozen with a `dict` field — LOW
+
+`hash(pose)` raises `TypeError` (a frozen dataclass generates `__hash__` from
+its fields; `front_view` is a dict), and `pose.front_view[cfg] = i` still
+mutates through the freeze. Only matters if anything ever keys on a `Pose` —
+one line in the note.
+
+### R5. `Done` does not stay on the device either — LOW
+
+`data_structures.md:161-170` is accurate that the **Poser** does the one
+conversion, but `Done` needs numpy regardless: `front_view_index`
+(`classify_stls.py:1117`) and the `.npy` write (`:1105`). Don't let it read as
+"Done never leaves the GPU".
+
+### R6. Typo — LOW
+
+`pre---compile` at `classify_stls.py:616`.
+
+### R7. `needs_embed=False` retires outside the admission window — LOW
+
+On that path the file retires via `CachedHit` while the child still holds
+render work, so the admission counter is not what bounds it — the bounded task
+queue is. Self-limiting, but "one window, three consumers"
+(`data_structures.md:340`) is doing slightly more work than stated.
+
+## P2.3 Decisions taken during this pass
+
+Recorded here because they change `pose.py`'s contract and belong in the
+design note, not only in a findings list.
+
+### P2.3-A. Source vocabulary: `forced | geometry | siglip | vlm`
+
+**What `source` actually means**, which no document stated plainly before:
+
+```python
+# classify_stls.py:466-478
+up, source, margin = pose.UP_CANDIDATES[geo_idx], "heuristic", None
+...
+idx, margin = pose.combine_up(geo_scores, sig)
+if idx != geo_idx:
+    up, source = pose.UP_CANDIDATES[idx], "ensemble"
+```
+
+Every label but `forced` sits on the axis *did this tier **move** the answer* —
+not *did it run*. The ensemble runs on every model, so `"ensemble"` cannot
+mean "the ensemble decided"; it means "the combined pick differed from
+geometry's". `apply_arbiter` (`classify_stls.py:506-510`) behaves the same
+way: a paid VLM call that **confirms** the pose leaves the label alone, so
+`pose_source` undercounts arbiter usage too.
+
+The doc's `"forced" | "geometry" | "ensemble" | "vlm"` mixes axes —
+`geometry` names an input, `ensemble` names a mechanism — which is what makes
+it read as a tier ladder. Renaming **both** halves fixes the axis:
+
+| label | meaning |
+|---|---|
+| `forced` | the user's `--up-axis` |
+| `geometry` | geometry's pick stood |
+| `siglip` | SigLIP moved it off geometry's pick |
+| `vlm` | the arbiter moved it off what the ensemble concluded |
+
+Chosen over the open question's `"confirmed"` for two reasons: it keeps one
+axis (whose answer prevailed) where `confirmed` mixes a state with two
+mechanisms, and it stays true for the `--no-up-ensemble` case, where
+`confirmed` would be actively false — nothing confirmed it. The "did SigLIP
+run at all" question stays where it already lives and is already load-bearing:
+`margin is not None` (`pose.py:141-156`). Put that sentence in the `Pose`
+docstring so it is never re-derived.
+
+Two caveats to carry:
+
+* **`siglip` slightly overclaims.** `combine_up` takes the argmax of
+  `geo_weight * unit(geo) + unit(siglip)` (`pose.py:268`), so a compromise
+  candidate ranked second by both can win — a case where `ensemble` was
+  literally accurate. Expected to be rare, **not measured**; neither cache
+  stores the component scores, so quantifying it needs a re-resolve pass
+  (`eval/tile_count.py` already computes both arms).
+* **The latent overload is real but not live.** `--no-up-ensemble` also
+  produces the agreement label, with `margin: None`. **0 of 4092** entries
+  across both caches have a null margin, because ensemble-available runs
+  upgrade them in place (`classify_stls.py:1021`).
+
+### P2.3-B. The embedding token becomes `up_str(pose.up)`
+
+**Why the token exists at all**, which was likewise unwritten. The cache is
+not keyed on pose *source*; it is keyed on `up`, and `source` is a **proxy for
+determinism**. Only `up` changes the pixels
+(`mesh.rotate(rotation_to_z_up(entry["up"]))`, `classify_stls.py:1081`), and
+`up_token` is the only pose-dependent component of `cache_key`.
+
+Geometry's answer is a deterministic function of the file — `up_axis_scores`
+is seeded (`pose.py:54`) — and the file's identity is already in the key, so
+its up vector is *redundant* and elides to the legacy `--up-axis` string.
+SigLIP and VLM answers are not reproducible from the file, so they splice the
+vector in. The elision existed to keep a populated pre-pose-pipeline cache
+valid (`docs/superpowers/plans/2026-08-10-pose-pipeline.md:194`,
+`docs/learnings/2026-08-11-canonical-pose.md:15-16`).
+
+**Decision: drop the elision.** The token becomes the render identity for
+every pose:
+
+```python
+def embed_cache_token(pose):
+    """The render identity of a pose. Only `up` changes the pixels."""
+    return up_str(pose.up)
+```
+
+Rationale beyond tidiness — the elision costs real duplication today.
+`--up-axis z` yields token `"z"`; an auto run whose geometry resolves to
+`[0,0,1]` yields `"auto"`. Same file, same `up`, `rotation_to_z_up([0,0,1])`
+the identity in both: **identical pixels, two keys, two `.npy` files.** Under
+the honest token they are one entry, and a pose that changes label without
+changing axis stops re-embedding. It also takes the source string out of the
+cache key entirely, which is what makes `P2.3-A` a plain rename instead of a
+1531-model re-embed (994 + 537 `ensemble`-sourced poses).
+
+## P2.4 What checked out — do not re-verify
+
+* **All of pass 1's D-findings**, per the table in §P2.1.
+* **`11–66 ms` parse** — `classify_stls.py:399`, `actors_proposal.md:128`.
+* **`--inflight 3`, queue depth 4** — `eval/overlap_spike.py:250-251`.
+* **275 ms upload vs 34 ms re-show ≈ 8×**, and **28.4×** at 2048 px.
+* **`make_contact_sheet` at `pose.py:300`.**
+* **`Pose` field order is valid Python** — the four non-default fields precede
+  `margin` and `front_view`.
+* **`--compile` mechanics**: pre-existing eager keys stay byte-identical
+  (`classify_stls.py:616`); `save_run_params`' `is not None` filter correctly
+  preserves `compile: false` (`:749`); the **bound method** is compiled, not
+  the wrapper (`:887`) — the null-canary lesson from the write-up applied.
+* **Cache census**, for sizing the migration:
+
+| cache | pose entries | agree / override | `.npy` | on disk |
+|---|---|---|---|---|
+| `embed-cache2` | 2943 | 1949 / 994 | 2990 | 788 MB |
+| `embed-cache3` | 1149 | 612 / 537 | 1148 | 299 MB |
+
+## P2.5 Migration plan
+
+Five coupled changes. **The order is forced** — each step needs something the
+next one destroys, or provides something the next one depends on.
+
+| step | what | why it is here |
+|---|---|---|
+| M0 | cache-root schema stamp | makes M1 detectable instead of a silent re-embed |
+| M1 | honest `up_str` token + migration arm | needs the pose cache intact for the `up` mapping |
+| M2 | source rename | free only once M1 takes `source` out of the key |
+| M3 | pose ↔ embedding key gaps | `--compile`, render size, no `EMBED_CACHE_VERSION` |
+| M4 | doc corrections | independent |
+
+### M0. Stamp the cache root with a schema version — FIRST
+
+**The stamp is what makes M1 detectable; without it a key-scheme change fails
+silently.** A cache whose keys moved does not error — every lookup simply
+misses, and the run re-renders and re-embeds the whole collection. That is not
+hypothetical: it is the failure `migrate_cache_keys.py`'s own docstring exists
+to prevent — *"Without this every entry misses and the next run re-renders,
+re-embeds and re-resolves the whole collection — hours, and real money once a
+pose entry is VLM-sourced."*
+
+It also costs the migration tool real complexity today. Because nothing records
+which scheme a cache was written under, `migrate_cache_keys` cannot read it —
+it takes the old scheme as a **parameter** and reconstructs keys from it
+(`old_base(f, old_root, new_root, absolute)`, `old_identity`, `old_cache_key`,
+`old_render_key` — `migrate_cache_keys.py:57-93`). Every future migration
+inherits that: another `old_*` family, and a caller who has to know which one
+applies.
+
+```python
+# classify_stls.py
+CACHE_META_FILE = "cache-meta.json"
+CACHE_VERSION = 1     # 1 = up_str token (M1) + embeds/ & renders/<cfg>/ layout
+                      # 0 = unstamped: the up-token elision, pre-M1
+
+def cache_version(cache_dir):
+    """0 for any cache written before the stamp — i.e. every current one."""
+    p = Path(cache_dir) / CACHE_META_FILE
+    return json.loads(p.read_text())["cache_version"] if p.exists() else 0
+```
+
+On mismatch, **refuse and name the migration command.** The whole value is
+turning a silent 2943-model re-embed into one line of output.
+
+Four design points, each with a reason:
+
+* **A separate file, not `run-params.json`.** That file is merge-only and
+  accumulates keys forever — `embed-cache2/run-params.json` still carries
+  `"pool": "mean"`, a key no longer in `RUN_PARAMS_KEYS`
+  (`classify_stls.py:678-681`), surviving because `save_run_params` does
+  `load_run_params(...) | {...}` (`:748-749`). Useful for durability, wrong
+  for an authoritative schema record; and its semantics are "defaults for the
+  next run", a different lifecycle from "how to read this cache".
+* **A manual integer, not a hash of the key format.** The repo *deliberately*
+  makes byte-compatible changes to `cache_key` — `elev` and `|compiled` appear
+  only when non-default, precisely so existing keys survive
+  (`classify_stls.py:610-617`). An auto-derived schema hash would fire on
+  exactly those, forcing a pointless migration each time and punishing the
+  discipline the repo already practises.
+* **Root-level, unlike `POSE_CACHE_VERSION`.** Poses are stamped per entry
+  (`v: 4`), which lets `load_pose_cache` drop selectively and carry mixed
+  versions (`pose.py:126`) — right for one JSON file read whole. Stamping
+  4138 `.npy` files would mean opening every one to decide, so root-level
+  all-or-nothing is the correct trade here.
+* **Write the stamp last.** `migrate_cache_keys` should bump it only after all
+  moves succeed, so an interrupted migration stays at the old version and
+  stays re-runnable — which the tool already is by design.
+
+Then `cleanup.sh` must never delete `cache-meta.json`, the same rule
+`run-params.json` already has. If `--clear-caches` removed it, an
+already-migrated cache would read as version 0 and the next migration would
+compute old keys for files that no longer have them.
+
+Optionally record the `cache_key` format string alongside the integer, marked
+**informational only, never compared** — it makes a mass-miss diagnosable by
+eye without inviting an automatic check that would trip on the compatible
+changes above.
+
+### M1. Honest token + a `migrate_cache_keys.py` arm — AFTER M0
+
+`P2.3-B` changes every key: `"auto"` → `"0,0,1"`, `"ensemble:0,0,1"` →
+`"0,0,1"`, `"z"` → `"0,0,1"`. **This is a rename, not a re-embed.** The `.npy`
+content is a pure function of `(file, views, render_size, up, model, elev,
+compile)` — only the sha1 of the key string moves. 4138 files, ~1.1 GB never
+read; metadata-only on one filesystem.
+
+`migrate_cache_keys.py` is the home: it already re-keys a cache whose scheme
+moved, is dry-run by default, re-runnable, and leaves unmatched files in
+place. Its docstring already carries the constraint this needs — *"Order is
+forced: poses first, because an embedding's key contains the pose's up-token,
+then embeds, then renders."* Adding an old-token arm is an extension of that
+tool, not a new migration.
+
+Two constraints:
+
+* **Run before any `POSE_CACHE_VERSION` bump.** The new key needs each file's
+  `up`, which only the pose cache knows, and `load_pose_cache` drops
+  mismatched versions on load (`pose.py:126`). Bump first and the mapping is
+  gone and every `.npy` orphans — that *is* the expensive re-embed.
+* **The 47-file discrepancy is not orphaned embeddings.** `embed-cache2` holds
+  2990 `.npy` total, but `embeds/` holds exactly **2943 — 1:1 with the pose
+  cache**. The other 47 sit loose in the cache *root*, residue from the
+  earlier layout migration that `migrate_cache_keys` reported and left by
+  design. `embed-cache3` has 1148 in `embeds/` and none in the root. So the
+  M1 mapping is complete for every file it needs to move; do not read the
+  count as migration failure.
+
+### M2. The source rename — AFTER M1
+
+Once the token is `up_str(pose.up)`, `source` is out of the cache key, so
+`heuristic → geometry` and `ensemble → siglip` are both plain renames with no
+compatibility shim. `from_cache` maps the two old values; `to_cache` writes
+the new ones; disk converges on the first load+save cycle.
+
+Sites: `classify_stls.py:466` (write), `:1061` (`pose_changed` — behavioural,
+drives render refresh only), `:451`, `:926`; `pose.py:170` disappears with the
+token; `tests/test_pose.py`, `tests/test_migrate_cache_keys.py`;
+`cleanup.sh:36,106` (text only — the filter at `:104` keys on `"vlm"`);
+`eval/siglip_up.py:142,148`.
+
+**Amend `OPEN_QUESTIONS.md:118-120` in place** rather than striking it: the
+entry proposed `"confirmed"` and "Needs a pose-cache migration", and both
+parts resolved differently. Per the repo convention the answer goes into the
+entry.
+
+### M3. Close the pose ↔ embedding key gaps
+
+Three instances of one bug: **an input that moves the pose but not the key.**
+They read as one entry, not three.
+
+1. **`--compile`** — `R1` above; unmeasured on the pose path.
+2. **Render size** — already recorded
+   (`docs/learnings/2026-08-12-where-a-7-hour-run-went.md`, "the pose cache is
+   not keyed on render size"): the ensemble's tiles come through the main
+   renderer, so its answer depends on `--render-size`, which `file_identity`
+   does not carry.
+3. **No `EMBED_CACHE_VERSION`.** After M1 the embedding key is honest about
+   `up`, but nothing versions the *derivation*. If `load_mesh` →
+   `up_axis_scores` → `rank_up_scores` ever changes its answer for unchanged
+   bytes, the pose cache notices (bump the version, re-resolve) and the
+   embedding cache does not. It has held by luck of scope — v2→v3→v4 changed
+   `geo_weight` and the arbiter sheet, never `up_axis_scores` — and the numpy
+   parser swap was the near-miss, passing only because triangle counts and
+   bounding boxes came out exact.
+
+M1 shrinks (3) — an honest `up` in the key means a changed geometry answer
+re-keys itself — but does not close (1) or (2), which move the pose *before*
+`up` is written.
+
+### M4. Doc corrections — any time
+
+`R3`, `R4`, `R5`, `R6`, `R7`, plus folding `P2.3-A` and `P2.3-B` into
+`data_structures.md` with their reasoning, since both replace text the note
+currently argues for.
