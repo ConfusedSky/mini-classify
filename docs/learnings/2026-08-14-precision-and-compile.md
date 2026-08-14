@@ -90,3 +90,27 @@ the flag lands with the regime in the cache identity:
   costs a re-embed, which is the correct price.
 * Text embeddings stay eager — they are recomputed at startup, never cached
   per-file.
+
+### Pass 2 addendum: the pose cache shares the tower (review R1/M3)
+
+The review's second pass found the gap in the paragraph above: `--compile`
+re-keys the *embedding* cache and not the *pose* cache, which consumes the
+same compiled tower — `score_upright` reaches `get_image_features` through
+`embed_images`, so under `--compile` the ensemble's tile embeddings carry the
+~1e-03 drift into `combine_up`, which decides both the pose argmax and the
+margin. The exposure is not a wrong category but the escalation gate: a
+margin crossing `MARGIN_THRESHOLD` changes whether a *paid* arbiter call
+happens, and `compile_flips.py` measured category flips, not pose flips — the
+pose-side rate is unmeasured.
+
+**Accepted, as a decision rather than an omission**: poses are resolved only
+on cold and upgrade files, and a mixed pose cache sits inside the state noise
+`parser_gate`'s A/A control showed is permanent anyway. It is one of three
+instances of the same bug — an input that moves the pose but not its key —
+beside `--render-size` (recorded in the 7-hour-run write-up) and the absence
+of any version on the embedding's *derivation*. The third is now closed:
+`EMBED_CACHE_VERSION` versions the `load_mesh → up_axis_scores` chain the way
+`POSE_CACHE_VERSION` versions poses, appended to the key only when bumped so
+its introduction moved nothing (the numpy-parser swap was the near-miss that
+motivated it — it passed only because triangle counts and bounding boxes came
+out exact).

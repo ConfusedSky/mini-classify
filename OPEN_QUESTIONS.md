@@ -115,9 +115,13 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   (`path + mtime + size`) cannot tell the difference. Either fix the tile size
   or adopt `patch16-512`, which is invariant across 384–2048; the fixed size is
   much the cheaper of the two.
-- **Rename `source: "heuristic"` to `"confirmed"`.** It currently means "the
-  ensemble ran and agreed", and reads as "the ensemble was skipped" — it
-  actively misled during a previous session. Needs a pose-cache migration.
+- ~~**Rename `source: "heuristic"` to `"confirmed"`.**~~ Resolved 2026-08-14,
+  differently on both counts (`docs/reviews/2026-08-14-data-structures.md`
+  §P2.3-A): the vocabulary is now `geometry`/`siglip` — one axis, *whose
+  answer prevailed*, where "confirmed" mixes a state with two mechanisms and
+  is actively false for a `--no-up-ensemble` run. And no pose-cache migration
+  after all: `load_pose_cache` maps the old spellings on load, and the
+  `up_str` embed token (§P2.3-B) took `source` out of the cache key entirely.
 - **Upload the mesh once in `render_up_candidate_tiles`.** It builds six
   rotated copies and re-uploads each; the cost is geometry upload, not pixels
   (3.74 s at 2048 px vs 3.33 s at 384 px on 1.8M triangles). Move the camera

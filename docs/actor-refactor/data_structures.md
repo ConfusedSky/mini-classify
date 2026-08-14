@@ -167,7 +167,10 @@ is the consumer's business. `Done` keeps the tensor on device for its
 import that requires lives in the Poser module under `src/` — `pose.py`
 itself stays torch-free, receiving plain arrays as it always has. Both
 messages live entirely in the parent process, so nothing here is ever
-pickled and transport plays no part in the choice.
+pickled and transport plays no part in the choice. Nor is "on device" a
+residency claim for `Done` (R5): it still lands on numpy for
+`front_view_index` and the `.npy` cache write — the tensor stays put for the
+scoring matmul, not forever.
 
 `Failure` is load-bearing, not a convenience: the Supervisor's
 `admitted − retired` counter only reaches zero if errors *retire* files
@@ -223,7 +226,7 @@ nothing the boundary was not already costing.
 class Pose:
     up: tuple[float, float, float]
     confidence: float
-    source: str                    # "forced" | "geometry" | "ensemble" | "vlm"
+    source: str                    # "forced" | "geometry" | "siglip" | "vlm"
     v: int                         # no default: from_cache carries it through,
                                    # fresh resolutions pass POSE_CACHE_VERSION
                                    # explicitly (D10)
@@ -235,20 +238,29 @@ class Pose:
     def to_cache(self) -> dict: ...
 ```
 
-* **`"geometry"` replaces today's `"heuristic"` — deliberately this time.**
-  D1 caught an earlier draft listing `"geometry"` by accident, against caches
-  holding only `"heuristic"`; the refactor now adopts it on purpose because
-  it reads better, with the migration living where legacy shapes already go:
-  `from_cache` maps `"heuristic"` → `"geometry"`, `to_cache` writes
-  `"geometry"`, and the disk converges on the first load+save cycle — no
-  migration script. Safe because nothing keys on the string:
-  `pose_is_sufficient` tests `"vlm"` (`pose.py:154`), `embed_cache_token`
-  tests `"vlm"`/`"ensemble"` (`pose.py:170`), so cache keys do not move.
-  Remaining blast radius: the write site (`classify_stls.py:466`) and its
-  comments, the tests asserting `"heuristic"` (`tests/test_pose.py`,
-  `tests/test_migrate_cache_keys.py`), and the `pose_source` CSV column's
-  value. D1's actual lesson — `from_cache` must never reject real entries —
-  is preserved by the explicit mapping.
+* **The vocabulary is `forced | geometry | siglip | vlm` — decided in the
+  review's pass 2 (P2.3-A) and already live in today's code.** What `source`
+  records, stated plainly so it is never re-derived: **which tier moved the
+  answer**, not which ran. The ensemble runs on every model, so the old
+  `"ensemble"` could not mean "the ensemble decided" — it meant "the combined
+  pick differed from geometry's"; likewise a paid arbiter call that
+  *confirms* the pose leaves the label alone, so `pose_source` undercounts
+  arbiter usage. `forced` = the user's `--up-axis`; `geometry` = geometry's
+  pick stood; `siglip` = SigLIP moved it off that pick; `vlm` = the arbiter
+  moved it off the ensemble's conclusion. Whether the ensemble ran at all
+  lives where it always has: `margin is not None` (`pose_is_sufficient`).
+  Chosen over the old open question's `"confirmed"` because it keeps one axis
+  and stays true for `--no-up-ensemble`. Two carried caveats: `siglip`
+  slightly overclaims (a compromise candidate ranked second by both arms can
+  win the combined argmax — rare, unmeasured, and the component scores are
+  not stored), and the agreement label with `margin: None` is a latent
+  overload that is not live (0 of 4092 entries across both caches).
+  Mechanically the rename maps old spellings in `load_pose_cache` — the
+  refactor's `from_cache` inherits that — with **no version bump**, because a
+  bump would re-resolve (and re-bill) unchanged poses.
+* **The freeze is shallow, and `Pose` is unhashable** (R4): `front_view` is a
+  dict, so `hash(pose)` raises and mutation through the field is still
+  possible. Nothing may key on a `Pose`; `index` is the identity, everywhere.
 * **`from_cache` absorbs legacy shapes, not versions.** The shapes are real on
   disk: `embed-cache3` holds bare-int `front_view: 0` entries beside
   per-config dicts — today merged at the *write* site
@@ -265,6 +277,24 @@ class Pose:
   `embed_cache_token` can become a method.
 * The on-disk pose cache stays JSON dicts; `from_cache`/`to_cache` are the
   only crossing points.
+
+### The embedding token is the up vector (P2.3-B)
+
+`embed_cache_token` is `up_str(pose.up)` for every pose — shipped, with both
+live caches migrated. The cache was never keyed on *source*; it is keyed on
+what changes the pixels, and only `up` does. The old elision — deterministic
+poses keyed as the literal `--up-axis` string — existed to keep a
+pre-pose-pipeline cache valid, and it cost real duplication: a forced
+`--up-axis z` and an auto run whose geometry resolved to `[0,0,1]` rendered
+identical pixels under two keys. Under the honest token they are one entry, a
+pose that changes *label* without changing *axis* stops re-embedding, and the
+source string leaves the cache key — which is what made P2.3-A a plain rename
+instead of a 1531-model re-embed.
+
+The key scheme is stamped in `cache-meta.json` (`CACHE_VERSION`); readers
+refuse a cache they cannot read instead of silently missing on every key, and
+`migrate_cache_keys.py` re-keys old caches — a rename of `.npy` files, never
+a re-embed, stamped only after every move succeeds.
 
 ## Rows
 
@@ -340,7 +370,10 @@ In v1 this is a plain counter the driver loop consults; the
 **One window, three consumers** (D15): the admission limit is the single
 knob. The child's task-queue depth and the residency exemption below both
 derive from it — the roundtrip spike ran the same window as `--inflight 3`
-with queue depth 4, and nothing was learned from them differing.
+with queue depth 4, and nothing was learned from them differing. One nuance
+(R7): a `needs_embed=False` file retires at `Done` via `CachedHit` while its
+render work may still sit in the child's queue, so on that path the bounded
+task queue, not the admission counter, is what bounds the child's backlog.
 
 ## Renderer-child mesh residency
 
@@ -415,7 +448,10 @@ Triggers for the swap: instrumentation shows the parent's `get()` starving the
 
 Pose cache (`file_identity → entry` on disk), embedding cache (`.npy` per
 `cache_key`), render index, walk cache — shapes untouched; the refactor moves
-who reads and writes them (Cache Checker reads, Done writes).
+who reads and writes them (Cache Checker reads, Done writes). The embedding
+*key* did change with P2.3-B above, and the cache root gained
+`cache-meta.json`, but both landed in current code before the refactor — the
+`src/` split inherits them.
 
 Of the proposal's three atomicity defects, **two have since been fixed in the
 current code** (D2): the CSV now flushes inside the `finally` chain that
