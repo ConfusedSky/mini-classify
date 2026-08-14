@@ -708,3 +708,183 @@ re-keys itself — but does not close (1) or (2), which move the pose *before*
 `R3`, `R4`, `R5`, `R6`, `R7`, plus folding `P2.3-A` and `P2.3-B` into
 `data_structures.md` with their reasoning, since both replace text the note
 currently argues for.
+
+---
+
+# Pass 3 — 2026-08-14, against `8b35316`
+
+Three commits: `d159494` recorded pass 2, `b0ea59a` is the code half (M0–M2,
+one third of M3), `8b35316` the doc half. Suite **185 passed, 1 skipped** — up
+five from pass 2, the new ones covering the token migration and the stamp.
+
+This pass reviews a **migration that has already run against both live
+caches**, so it verifies outcomes on disk rather than reasoning about intent.
+New findings carry `S` IDs.
+
+## P3.0 Verdict
+
+**The migration math is correct and independently confirmed; both defects are
+in the guard around it, not in the re-keying.** Nothing landed at a wrong key,
+nothing was clobbered, and `embed-cache3` migrated 100% cleanly. The commit
+also avoided the one mistake most likely to have destroyed a cache silently
+(§P3.4).
+
+What is wrong is the boundary: the migration only visits files in the current
+walk, and left 144 embeddings behind without reporting them (`S1`); and the
+stamp's own "is this cache empty" test can mark a genuinely unmigrated cache
+as current (`S2`), which is the exact failure M0 exists to prevent.
+
+## P3.1 Independent verification of the migration
+
+Worth recording as a method, because it audits any future key change with no
+run and no collection access: **`pose.file_identity` is byte-identical to
+`cache_key`'s first three fields** (`rel_path|mtime_key|size`). So every
+embedding key — old scheme and new — is reconstructible from
+`pose-cache.json` plus `run-params.json` alone, without `stat()`ing a single
+STL.
+
+Reconstructing both schemes for every pose entry and intersecting with
+`embeds/`:
+
+| cache | on disk | at new keys | still at old keys | neither |
+|---|---|---|---|---|
+| `embed-cache2` | 2943 | 2799 | **144** | 0 |
+| `embed-cache3` | 1148 | 1148 | 0 | 0 |
+
+"Neither = 0" is the load-bearing column: no file landed at a key belonging to
+neither scheme, so nothing was mis-keyed or half-renamed. The commit message's
+"2799 + 1148 re-keyed" is accurate; what it does not say is that 144 files
+were left behind (`S1`).
+
+## P3.2 Disposition of pass 2
+
+| item | status |
+|---|---|
+| R1 | **recorded as a decision** in the precision write-up, escalation gate named as the exposure. Substance still open — see `P3.5` |
+| R2 | resolved by `P2.3-A` and implemented |
+| R3 | taken — all behavioural sites; `eval/siglip_up.py` correctly left (display-only `[:4]`, now reads `geom`/`sigl`) |
+| R4, R5, R7 | taken in `data_structures.md` |
+| R6 | fixed |
+| P2.3-A | implemented — `forced\|geometry\|siglip\|vlm`, mapped on load |
+| P2.3-B | implemented — token is `up_str(pose.up)` |
+| M0 | implemented — see `S2`, `S3`, `S5` |
+| M1 | implemented and run — see `S1`, `S4` |
+| M2 | implemented |
+| M3 | **one of three closed** — `EMBED_CACHE_VERSION` landed; `--compile` and render-size remain (`P3.5`) |
+| M4 | taken |
+
+## P3.3 New findings
+
+### S1. 144 embeddings left at v0 keys in a v1-stamped cache, unreported — MEDIUM
+
+`plan_token_moves` iterates `files` from `load_file_list`, so it re-keys only
+embeddings whose file is in the current walk. `embed-cache2` holds 2943 pose
+entries against 2801 walked files; the 144 difference was never visited. The
+`.npy` files are intact and their poses are still known — **nothing is lost
+and nothing is broken today.** Two things make it worth fixing anyway:
+
+* **Nothing reports them.** `missing_t` counts *files with no cached
+  embedding*; there is no reverse scan for *embeddings no file claimed*. The
+  root migration path has exactly that (`orphans`), and the module docstring
+  promises it — *"unmatched .npy files and renders are reported and left where
+  they are."* The token path does not honour its own contract.
+* **The door is now shut.** The cache is stamped v1, so `need_token` is False
+  and a re-run prints "nothing to migrate" and returns. Should those models
+  return (remount, restore, re-add) they miss and re-embed, and the only route
+  back is hand-editing `cache-meta.json` to 0.
+
+**Fix — smaller than the current code: drive the token migration from the pose
+cache, not the walk.** Per §P3.1 both keys are computable from
+`file_identity` + `run-params.json` with no filesystem access and no
+`f.stat()`. That is not a proposal, it is what the verification above did, and
+it reached all 2943. It also drops the coupling to a possibly-partial mount,
+which is what caused this.
+
+### S2. `require_cache_version` stamps an unmigrated old-layout cache as current — MEDIUM
+
+The "is this cache empty" test is `pose-cache.json` or `embeds/`. A
+pre-layout cache has neither — root-level `.npy` and nothing else — so it is
+treated as empty and stamped current:
+
+```
+$ ls cache/            # one root .npy, one run-params.json
+$ python -c "...; print(cache_version(d)); require_cache_version(d); print(cache_version(d))"
+before: 0
+after : 1 <-- stamped current, never migrated
+```
+
+Every key then misses, the collection re-embeds, and the guard never fires
+again because the stamp reads v1. That is precisely the failure M0 exists to
+prevent, in the one case where the cache predates everything else.
+
+Not hypothetical: `embed-cache2` still holds **47 loose root `.npy` files**,
+so the layout exists in this tree. The realistic route in is a forced
+`--up-axis z\|y` cache, which writes no `pose-cache.json` at all
+(`classify_stls.py:1234-1235`).
+
+Widen the test to include root `*.npy` and `renders/`. The suite covers
+"unstamped populated cache is refused" and "empty cache is stamped current"
+but not this middle case.
+
+### S3. The stamp's `cache_key_format` is stale on arrival — LOW
+
+It reads `sha1(rel|mtime|size|views|render_size|up_token|model|pv[|e:...][|compiled])`
+and omits `|ev{N}`, which M3 added in the same commit. Marked informational
+and never compared, so nothing breaks — but eyeball diagnosis of a mass-miss
+is its only job.
+
+### S4. The deliberate collapse is indistinguishable from "already migrated" — LOW
+
+`plan_token_moves` folds the forced/geometry key collapse into `already_t`, so
+the output cannot tell a collapsed duplicate from a file that was already at
+its new key, and the superseded `.npy` stays in `embeds/` as unreported dead
+bytes. Same reverse-scan fix as `S1`.
+
+### S5. The guard runs after `cache_root` — LOW
+
+`require_cache_version` is called after `cache_root` in both `main()`
+(`classify_stls.py`) and `test_categories.py`. `cache_root` can prompt and
+re-anchor, so a user with an unreadable cache may be asked to answer a
+re-anchor question before being told the cache cannot be read.
+
+## P3.4 What is right — do not re-verify
+
+**The trap that was avoided is worth naming explicitly**, because it was the
+most likely way this commit could have quietly destroyed a cache.
+`load_pose_cache` renames sources on load (`P2.3-A`), so a migration reading
+poses through it would compute *new*-spelling sources, `old_embed_cache_token`
+would not match `("vlm", "ensemble")`, and all 1531 override-sourced
+embeddings would have failed to be found — a silent 1531-model re-embed. The
+code reads `pose-cache.json` as **raw JSON** in the migration path and
+`old_embed_cache_token` accepts both spellings, with a docstring saying why.
+
+Also confirmed correct:
+
+* The stamp is written **last** in both migration paths, so an interrupted run
+  stays at the old version and re-runnable.
+* `migrate_cache_keys` imports `cache_version` and `stamp_cache_version` but
+  **not** `require_cache_version` — which would have made the migration refuse
+  the very cache it exists to fix.
+* The source rename is mapped on load rather than behind a
+  `POSE_CACHE_VERSION` bump, so no pose is re-resolved or re-billed for a
+  spelling.
+* `EMBED_CACHE_VERSION` suppresses at 1, the same byte-compatible trick as
+  `elev` and `|compiled`.
+* `cleanup.sh` documents the never-delete rule for `cache-meta.json`; its
+  filter still keys on `"vlm"` and is untouched, so the rename cannot reach
+  the destructive path.
+* Remaining `"ensemble"` strings under `eval/` are local harness arm labels
+  (`("sig", …), ("ens", …)`), unrelated to pose source.
+
+## P3.5 Still open
+
+* **`R1` — the pose cache does not carry the compile regime.** Recorded as an
+  accepted decision in `docs/learnings/2026-08-14-precision-and-compile.md`
+  with the escalation gate named, which was the ask; `eval/compile_pose_flips.py`
+  is now measuring the rate that decision rests on. Note that `b0ea59a`'s
+  message lists R1 among what it takes — the substance (`file_identity`
+  carrying no regime) is untouched, correctly, pending that number. Do not let
+  the commit trail read as closed.
+* **M3's render-size gap** — same shape, still open.
+* **`S1`–`S5`** above. `S1` and `S2` before the next cache migration; the rest
+  any time.
