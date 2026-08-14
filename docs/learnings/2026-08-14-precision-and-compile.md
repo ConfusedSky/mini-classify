@@ -100,8 +100,18 @@ same compiled tower — `score_upright` reaches `get_image_features` through
 ~1e-03 drift into `combine_up`, which decides both the pose argmax and the
 margin. The exposure is not a wrong category but the escalation gate: a
 margin crossing `MARGIN_THRESHOLD` changes whether a *paid* arbiter call
-happens, and `compile_flips.py` measured category flips, not pose flips — the
-pose-side rate is unmeasured.
+happens, and `compile_flips.py` measured category flips, not pose flips.
+
+**Now measured** (`eval/compile_pose_flips.py`): 180 models — the 60 tightest
+cached margins, the 60 nearest the 0.45 gate, 60 controls — through the
+production ensemble path with identical tiles into both towers. **1 up flip**
+(a ramp plank at eager margin 2.2e-03, z to −z — a symmetric coin toss) and
+**0 gate flips**, including the 4 models whose eager margins sat within the
+maximum observed delta of the gate (two only ~4e-03 away). One number worth
+keeping: pose-side margin deltas run ~20× the category-side sim deltas
+(median 1.2e-03, max 1.1e-02) because `combine_up_scores`' min-max
+normalisation amplifies small score shifts — and flips *still* confine to
+ties. The acceptance below stands, now on measurement rather than argument.
 
 **Accepted, as a decision rather than an omission**: poses are resolved only
 on cold and upgrade files, and a mixed pose cache sits inside the state noise
