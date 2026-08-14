@@ -327,18 +327,20 @@ actors are daemon threads joined with a timeout, so one wedged actor cannot take
 the pose cache down with it. This preserves today's guarantee that an interrupted
 run keeps its (expensive) pose resolutions.
 
-Three defects to fix while we are in here — all present in the current code, not
-introduced by this design:
+Three defects were listed here; two have since been fixed in the current code
+(review D2) and one remains:
 
-* **Ctrl-C loses the CSV entirely.** The write sits *after* the `finally`, so
-  `KeyboardInterrupt` propagates past it: the caches survive, the results do not.
-  `Done` should flush partial rows on abort.
+* ~~Ctrl-C loses the CSV entirely~~ — **fixed**: the write now runs inside the
+  `finally` chain that attempts all three artifacts even when another's write
+  raises (`classify_stls.py:1134-1169`).
 * **`save_pose_cache` is a bare `write_text`** and runs on every shutdown
   including Ctrl-C. A kill mid-write corrupts the most expensive artifact we
   have — re-resolving it means 24 candidate renders per model plus ~$0.30 of
-  Gemini calls. Write to temp + `os.replace`.
-* **`np.save` to the embedding cache is non-atomic.** A truncated `.npy` still
-  passes the `.exists()` check and comes back as a cache hit next run. Same fix.
+  Gemini calls. Write to temp + `os.replace`. **Still open.**
+* ~~`np.save` to the embedding cache is non-atomic~~ — **handled**: the write
+  unlinks its file on `BaseException`, so a truncated `.npy` cannot pass the
+  `.exists()` check next run (`classify_stls.py:1086-1092`). Temp +
+  `os.replace` would still be stronger against SIGKILL.
 
 ## Spikes
 
