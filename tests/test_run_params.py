@@ -2,7 +2,8 @@ import argparse
 import json
 import sys
 
-from classify_stls import RUN_PARAMS_FILE, RUN_PARAMS_KEYS, apply_run_params
+from classify_stls import (DEFAULT_ELEVATIONS, RUN_PARAMS_FILE, RUN_PARAMS_KEYS,
+                           apply_run_params, cache_key)
 
 
 def apply(tmp_path, monkeypatch, recorded, parser):
@@ -36,3 +37,25 @@ def test_command_line_still_beats_the_manifest(tmp_path, monkeypatch):
 
 def test_pool_is_not_in_the_manifest():
     assert "pool" not in RUN_PARAMS_KEYS
+
+
+def test_compile_is_cache_identity():
+    # compiled embeddings drift ~1e-03 from eager, so the regime must travel
+    # with the cache like any other identity key
+    assert "compile" in RUN_PARAMS_KEYS
+
+
+def test_compile_keys_a_separate_regime(tmp_path):
+    f = tmp_path / "a.stl"
+    f.write_bytes(b"x")
+
+    def key(**kw):
+        return cache_key(f, argparse.Namespace(
+            views=4, render_size=512, elevations=DEFAULT_ELEVATIONS,
+            model="m", **kw), "auto", tmp_path)
+
+    legacy = key()               # a parser that predates the flag entirely
+    eager = key(compile=False)
+    compiled = key(compile=True)
+    assert eager == legacy       # pre---compile caches survive byte-identical
+    assert compiled != eager     # the two numeric regimes never share a key

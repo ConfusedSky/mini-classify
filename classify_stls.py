@@ -611,7 +611,11 @@ def cache_key(f, args, up_token, root):
     # and "vlm:<x,y,z>" when a VLM override changed the render.
     # The path is relative to the collection root (identity.py) so the library
     # can change drives without re-embedding everything.
-    raw = f"{identity.rel_path(f, root)}|{identity.mtime_key(stat)}|{stat.st_size}|{args.views}|{args.render_size}|{up_token}|{args.model}|pv{elev}"
+    # torch.compile's kernels drift ~1e-03 from eager, so the two regimes are
+    # different numbers under the same pixels; like elev, the token appears
+    # only when non-default so every pre---compile key stays byte-identical.
+    comp = "|compiled" if getattr(args, "compile", False) else ""
+    raw = f"{identity.rel_path(f, root)}|{identity.mtime_key(stat)}|{stat.st_size}|{args.views}|{args.render_size}|{up_token}|{args.model}|pv{elev}{comp}"
     return hashlib.sha1(raw.encode()).hexdigest()
 
 
@@ -650,6 +654,12 @@ def add_cache_args(parser, input_help):
                              "product (default 20)")
     parser.add_argument("--render-size", type=int, default=512)
     parser.add_argument("--model", default="google/siglip2-so400m-patch14-384")
+    parser.add_argument("--compile", action=argparse.BooleanOptionalAction, default=False,
+                        help="torch.compile the image forward: ~1.09x embed throughput for "
+                             "~1e-03 embedding drift, which flips only coin-toss margins "
+                             "(eval/compile_flips.py: 1 of 341, at margin 4.3e-06). "
+                             "Compiled embeddings cache under their own keys, so the two "
+                             "numeric regimes never mix")
     parser.add_argument("--up-axis", choices=["auto", "z", "y"], default="auto",
                         help="up axis of source meshes; auto detects the flat print base (default)")
     parser.add_argument("--cache-dir", default="embed-cache",
@@ -669,7 +679,7 @@ RUN_PARAMS_FILE = "run-params.json"
 # test_categories overrode the REPL's own deliberate softmax default —
 # querying happens there, so its default wins there.
 RUN_PARAMS_KEYS = ("input", "views", "elevations", "render_size", "model",
-                   "up_axis", "categories", "render_format",
+                   "compile", "up_axis", "categories", "render_format",
                    "collection_root")
 
 
@@ -869,6 +879,14 @@ def main():
     with stage("model-load"):
         model = AutoModel.from_pretrained(args.model, torch_dtype=torch.float16).to(device).eval()
         processor = AutoProcessor.from_pretrained(args.model)
+    if args.compile:
+        # compile the bound method — wrapping the model only intercepts
+        # forward() and get_image_features silently stays eager. Lazy: the
+        # first embed call of each batch shape (24 tiles, 16 views) pays the
+        # compile. Text embeddings stay eager; they are not cached per-file.
+        model.get_image_features = torch.compile(model.get_image_features)
+        print("torch.compile on the image forward; embeddings keyed as a "
+              "separate cache regime")
 
     with stage("text-embed"):
         text_embeds = embed_texts(model, processor, categories, device)
