@@ -3,9 +3,14 @@
 Design note, 2026-08-14. Third of the set: [actors_proposal.md](actors_proposal.md)
 argues the boundaries, [data_structures.md](data_structures.md) fixes the
 shapes, this one fixes the **calling conventions** — who calls whom, with
-what signature, what blocks, and who converts errors into `Failure`. Types
-named here are data_structures.md's; where writing this note changed one
-(`PoseTiles.geo_scores`), the change is recorded there with credit.
+what signature, what blocks, and who converts errors into `Failure`. Revised
+the same day against
+[docs/reviews/2026-08-14-interfaces.md](../reviews/2026-08-14-interfaces.md)
+(findings I1–I16); the review's two gating questions are answered inline —
+**Q1: the parent owns admission, and therefore `tasks` is unbounded; Q2: a
+`Retired` message is what retires a file that produces no row.** Types named
+here are data_structures.md's, including the driver-side shapes it now
+carries (`RenderConfig`, `CacheContext`, `Redraw`, `Retired`, `EndOfInput`).
 
 Everything below is the v1 form: sequential driver, one renderer subprocess.
 Where a signature exists only so the threaded successor can slot a queue in
@@ -23,8 +28,8 @@ src/cache_checker.py route(): the admission decision
 src/poser.py         ensemble + continuations + arbiter calls
 src/arbiter.py       windowed ThreadPoolExecutor wrapper
 src/embedder.py      SigLIP; the only module that owns torch models
-src/done.py          scoring, rows, cache writes, flush
-src/driver.py        the sequential loop; owns Admission
+src/done.py          scoring, rows, pose store, retirement, flush
+src/driver.py        the sequential loop; owns admission
 pose.py              math + Pose + caches (unchanged home)
 classify_stls.py     CLI entry: args, run-params, cache guards -> driver
 ```
@@ -37,7 +42,7 @@ Import rules, and why each is load-bearing:
 | `poser` | torch (one conversion), numpy, pose, PIL (contact sheet) | open3d renderer calls | the Poser works on renders, never geometry |
 | `embedder` | torch, transformers | — | the only owner of models |
 | pose.py | numpy, open3d, PIL | torch, anything in src/ | the standing rule, unchanged |
-| `messages` | pose, numpy, torch (annotations) | everything else | shapes only, no behaviour |
+| `messages` | pose, numpy; torch **under `TYPE_CHECKING` only**, with `from __future__ import annotations` | a module-scope `import torch` | the child unpickles its tasks from `messages` — a real torch import there hands the child exactly the dependency the first row forbids (I8). The two tensor-typed messages never cross a queue, so the name is annotation-only |
 
 (pose.py imports open3d for `up_axis_scores`, so the parent transitively
 imports open3d too — import only; no renderer is ever created parent-side.)
@@ -47,28 +52,29 @@ imports open3d too — import only; no renderer is ever created parent-side.)
 ```
  PARENT PROCESS                                    CHILD PROCESS
 ┌────────────────────────────────────────┐        ┌─────────────────────────────┐
-│ driver: sequential loop, Admission     │  tasks │ run_child loop              │
+│ driver: sequential loop, admission     │  tasks │ run_child loop              │
 │                                        │ ─────▶ │                             │
-│ walker ─▶ cache_checker.route(f, i)    │ Pose-  │  loader.get(file)           │
-│    │           │            │          │ Render │      │ LoadedMesh          │
-│    │      CachedHit    *RenderTask ────┼─Task / │      ▼                      │
-│    │           │                       │ Embed- │  renderer.pose_tiles /      │
-│    │           ▼                       │ Render │  renderer.views(up in cam)  │
-│    │      done.on(msg) ◀───────────────┼─Task───│      │                      │
-│    │        ▲    ▲                     │        │  save renders (child owns)  │
-│    │        │    │                     │ results│      │                      │
-│    │   Embedded  Failure ◀─────────────┼─◀───── │  resident LRU (bytes)       │
-│    │        │             PoseTiles /  │ Pose-  └─────────────────────────────┘
-│    │   embedder.embed_views  │         │ Tiles(geo,tiles) | EmbedViews | Failure
-│    │        ▲                ▼         │
-│    │        │      poser.on_tiles ──▶ embedder.embed_tiles
-│    │        │           │                   │
-│    │  EmbedViews   TileEmbeds ◀─────────────┘
-│    │        │           ▼
-│    │        │      poser.on_tile_embeds ──▶ EmbedRenderTask (back to tasks)
-│    │        │           │ parked?
-│    │        │           ▼
-│    │        │      arbiter.submit(call) ── Future ──▶ poser.poll()
+│ walker ─▶ cache_checker.route(f, i)    │ (un-   │  loader.get(file)           │
+│    │        │        │         │       │ bound- │      │ LoadedMesh          │
+│    │   CachedHit/  Redraw  *RenderTask─┼─ ed)   │      ▼                      │
+│    │   Retired    (both)               │        │  renderer.pose_tiles /      │
+│    │        │                          │        │  renderer.views (up in cam) │
+│    │        ▼                          │        │  save renders (child owns)  │
+│    │   done.on(CachedHit|Embedded|     │results │      │                      │
+│    │           Failure|Retired)        │(bound- │  resident LRU (bytes)       │
+│    │        ▲    ▲                     │  ed)   └─────────────────────────────┘
+│    │        │    │        ◀────────────┼─◀──── PoseTiles(geo,tiles) |
+│    │   Embedded  Failure/Retired       │        EmbedViews | Failure
+│    │        │                │         │
+│    │   embedder.embed_views  ▼         │
+│    │        ▲       poser.on_tiles ──▶ embedder.embed_tiles
+│    │        │            │                   │
+│    │   EmbedViews   TileEmbeds ◀─────────────┘
+│    │        │            ▼
+│    │        │       poser.on_tile_embeds ──▶ EmbedRenderTask | Retired | None
+│    │        │            │ parked?
+│    │        │            ▼
+│    │        │       arbiter.submit(call) ── Future ──▶ poser.poll()
 └────┴────────┴─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -79,30 +85,46 @@ crossing the box edge are the only queues.
 
 ```python
 class Transport(Protocol):            # src/transport.py
-    def send(self, msg) -> None       # blocks while the queue is full
+    def send(self, msg) -> None       # blocks only if bounded and full
     def recv_nowait(self):            # a message, or None if empty
-    def recv(self, timeout: float):   # a message, or None on timeout
-    def close(self) -> None
+    def recv(self, timeout=None):     # a message; None = nothing arrived
+    def close(self) -> None           # drop: cancel_join_thread + close —
+                                      # unflushed pickles are abandoned, so an
+                                      # aborting parent cannot be held open by
+                                      # the queue's feeder thread (I6)
 ```
 
-* Two transports, both `mp.Queue` at depth = the admission window:
-  `tasks` (parent→child, carries `PoseRenderTask | EmbedRenderTask | None`)
-  and `results` (child→parent, carries `PoseTiles | EmbedViews | Failure`).
-* **Blocking convention:** `tasks.send` blocking is the *secondary* guard —
-  the Admission window keeps in-flight work below the depth, so a blocked
-  send means a bug in the window, not normal operation. The parent never
-  blocks on `results.recv` while it has other work; the driver uses
-  `recv_nowait` in its drain step and a short-timeout `recv` only when the
-  window is full and nothing else can proceed.
-* **Child lifecycle:** spawned once (`ctx.get_context("spawn")`, daemon),
-  handed its config whole (`RenderConfig`: render size, views, elevations,
-  save dir/format, `budget_bytes`, collection root) — the child never reads
-  argv or run-params. `None` on the tasks queue is end-of-input: the child
-  finishes its queue and exits. This sentinel is safe *here*, unlike
-  pipeline-wide poison pills, because the parent owns admission and sends it
-  only after the last task.
+* **`tasks` (parent→child) is unbounded; `results` (child→parent) is bounded
+  at the admission window** (I2, Q1). This is the shape the overlap spike
+  measured and the deadlock rule already prescribes — `Poser → Renderer` is
+  a listed back-edge, and bounding both directions closes the
+  `Renderer → Poser → Renderer` cycle: child blocked in `results.send`,
+  parent blocked in `tasks.send`, nobody draining. The parent-owned
+  admission this note chooses (because `route` and `Done` live there) keeps
+  the measured property that made the spike deadlock-free: **the parent
+  never blocks on a send.** Admission is the *only* forward pressure; the
+  bounded `results` queue is what paces the child when the parent lags.
+  An earlier draft bounded both and called a blocked `tasks.send` "a bug in
+  the window" — refuted by the `needs_embed=False` path (data-structures
+  review R7), where files retire while their render work is still queued,
+  so admission does not bound the child's backlog on a redraw-heavy run.
+* `tasks` carries `PoseRenderTask | EmbedRenderTask | EndOfInput`;
+  `results` carries `PoseTiles | EmbedViews | Failure`.
+* **End of input is `EndOfInput()`, a frozen message** (I5) — `recv`'s
+  `None` already means "nothing arrived within the timeout", and a value
+  meaning two things would make the child exit on its first idle window.
+  The sentinel is safe *here*, unlike pipeline-wide poison pills, because
+  the parent owns admission and sends it only after quiescence (see the
+  driver epilogue) — by then nothing can ever enqueue another task.
+* **Child lifecycle:** spawned once (`mp.get_context("spawn")`, daemon —
+  spawn is load-bearing with CUDA initialised in the parent), handed its
+  config whole (`RenderConfig`, shape in data_structures.md; it crosses the
+  spawn boundary, so it must stay picklable). The child never reads argv or
+  run-params.
 * The shm variant changes only what `send`/`recv` carry (`(block_id,
-  shapes)` + a free-list back-queue) — the signatures above do not move.
+  shapes)` + a free-list back-queue) — the signatures above do not move,
+  and `EndOfInput` being a message rather than `None` is what survives that
+  variant.
 
 ## Per-module conventions
 
@@ -110,18 +132,18 @@ class Transport(Protocol):            # src/transport.py
 
 ```python
 def route(f: Path, index: int, ctx: CacheContext) \
-        -> PoseRenderTask | EmbedRenderTask | CachedHit
+        -> PoseRenderTask | EmbedRenderTask | CachedHit | Redraw | Retired
 ```
 
-`CacheContext` bundles what today is closure state: the pose dict, embeds
-dir, render index, parsed args. `route` **reads** caches and **never**
-writes, renders, or embeds — it is the one function whose entire behaviour
-is the decision table in the proposal's Cache Checker section, and it is
-trivially unit-testable for exactly that reason. The redrawn path returns
-`EmbedRenderTask(needs_embed=False)` *and* the driver also sends the
-`CachedHit` — `route` signals this by returning the task with
-`needs_embed=False`; the driver derives the accompanying `CachedHit` from
-the same `ctx` lookup rather than `route` returning two values.
+`CacheContext` (shape in data_structures.md) bundles what today is closure
+state: the pose store, embeds dir, render index, parsed args. `route`
+**reads** caches and **never** writes, renders, or embeds — it is the one
+function whose entire behaviour is the decision table in the proposal's
+Cache Checker section, and it is trivially unit-testable because the
+*whole* decision is in the return value: the redraw path returns
+`Redraw(task, hit)` — both halves in one value, so a test of `route` covers
+what the driver dispatches (I14) — and the `--skip-embed` warm path (pose
+sufficient, nothing else wanted) returns `Retired` directly (Q2).
 
 ### Render child
 
@@ -129,19 +151,27 @@ the same `ctx` lookup rather than `route` returning two values.
 def run_child(tasks: Transport, results: Transport, cfg: RenderConfig) -> None
 ```
 
-One loop: `recv` → dispatch on type → `send` result(s). Conventions:
+One loop: `recv` → dispatch on type → `send` result(s); `EndOfInput`
+terminates it. Conventions:
 
 * `PoseRenderTask` → `loader.get` → `up_axis_scores` → `renderer.pose_tiles`
   → `PoseTiles(geo_scores, tiles)`. The geometry evidence crosses with the
   tiles because the mesh does not.
 * `EmbedRenderTask` → `renderer.views(lm, pose.up)` — up-rotation in the
-  camera (`R.T`), never `mesh.rotate`, or residency is worthless.
-  `needs_embed=False` → save renders, send **nothing**.
+  camera, never `mesh.rotate`. **This is a precondition to verify while
+  building `renderer.views`, not a settled fact** (I11): the proposal's
+  Spike 3 lists it first among the unmeasured, and the roundtrip spike that
+  produced the residency numbers *rotated held meshes*
+  (`eval/overlap_spike.py:101-103`) — `R.T` is proven pixel-identical only
+  for the tile grid at one elevation, and the classification views are
+  8 azimuths × 2 elevations. Build `renderer.views`, then check it
+  pixel-identical against `mesh.rotate` across the full view set (the
+  harness pattern exists in `eval/render_determinism.py`); residency is
+  inert without it. `needs_embed=False` → save renders, send **nothing**.
 * **Every exception between `recv` and `send` becomes
   `Failure(file, index, str(e))`** — one bad mesh must not end the run, and
-  the Supervisor's counter needs the file to retire. The child never
-  crashes on a per-file error; it crashes only on protocol errors (which
-  are bugs).
+  the file must retire. The child never crashes on a per-file error; it
+  crashes only on protocol errors (which are bugs).
 * `loader.get(file) -> LoadedMesh` raises on malformed input; the child
   loop is the boundary that converts. The Loader/Renderer seam stays a
   function call — multiple loader workers or a second live renderer attach
@@ -151,26 +181,27 @@ One loop: `recv` → dispatch on type → `send` result(s). Conventions:
 
 ```python
 class Poser:
-    def __init__(self, up_T, down_T, arbiter: Arbiter, vlm_cfg): ...
+    def __init__(self, up_T, down_T, arbiter: Arbiter, record_pose, vlm_cfg): ...
     def on_tiles(self, m: PoseTiles) -> EmbedTilesRequest
-    def on_tile_embeds(self, m: TileEmbeds) -> EmbedRenderTask | None
-    def poll(self) -> list[EmbedRenderTask]
-    def abandon(self) -> list[EmbedRenderTask]      # abort path: keep ensemble poses
+    def on_tile_embeds(self, m: TileEmbeds) -> EmbedRenderTask | Retired | None
+    def poll(self) -> list[EmbedRenderTask | Retired]
+    def abandon(self) -> None          # abort: parked files keep their
+                                       # ensemble pose, already recorded (I15)
 ```
 
 * `on_tiles` stashes `(geo_scores, tiles-grid)` keyed by index and returns
   the embed request — it cannot finish without the Embedder.
 * `on_tile_embeds` pulls the tensor off the GPU (the one
-  `.float().cpu().numpy()`), runs `upright_scores` → `combine_up`, writes
-  the resolved `Pose` into the canonical pose dict, and either returns the
-  `EmbedRenderTask` (done) or **returns `None` having parked the file** —
-  the margin gate fired, the arbiter call is submitted, and a `ParkedFile`
-  holds the `Future`. Never blocks on it (Q1: the `Future` *is* the
-  transport).
+  `.float().cpu().numpy()`), runs `upright_scores` → `combine_up`, records
+  the resolved `Pose` through `record_pose` — **`Done`'s write API, not a
+  dict reference** (I9) — and returns one of three things: the
+  `EmbedRenderTask` (embeds or renders wanted), `Retired` (`--skip-embed`
+  and no renders wanted — pose resolution was the whole job, Q2), or `None`
+  having parked the file on a submitted arbiter `Future` (Q1 of the
+  data-structures review: the `Future` *is* the transport).
 * `poll()` is called every driver iteration: resolved futures are folded in
-  via `apply_arbiter` semantics and their `EmbedRenderTask`s returned.
-  Failed futures keep the ensemble's pose (one bad call must not sink the
-  file).
+  via `apply_arbiter` semantics; each resumed file yields its task — or
+  `Retired`, under `--skip-embed`. Failed futures keep the ensemble's pose.
 * The contact sheet is built here — `Image.fromarray` over the grid's first
   column — because arrays are what cross the boundary.
 
@@ -179,10 +210,17 @@ class Poser:
 ```python
 class Arbiter:
     def submit(self, call: Callable[[], int | None]) -> Future
-    def shutdown(self) -> None        # cancel_futures, never joins the 24s tail
+    def shutdown(self) -> None
 ```
 
-Rate limiting and windowing live inside `submit`. Network backends only.
+Rate limiting and windowing live inside `submit`. `shutdown` cancels
+**queued** futures (`cancel_futures=True`); calls already running are not
+cancellable, and the pool's threads are joined at interpreter exit
+regardless — so Ctrl-C's residual wait is up to one in-flight call
+(~24 s) per worker, in parallel (I7). Today's comment draws exactly this
+queued-vs-running distinction; the second Ctrl-C (hard exit) is what
+bounds the residue, and anyone building on "Ctrl-C is instant" should know
+it is "instant except the in-flight calls".
 
 ### Embedder — synchronous, owns the GPU
 
@@ -200,20 +238,30 @@ wraps `get_image_features` here and nowhere else. If instrumentation ever
 shows the parent starving the 4060, a queue goes in front of these two
 methods and nothing else changes.
 
-### Done — the only writer
+### Done — the only writer, and the owner of retirement
 
 ```python
 class Done:
-    def on(self, m: CachedHit | Embedded | Failure) -> None   # retires exactly once
+    def __init__(self, admission: Admission, text_embeds, cache_ctx): ...
+    def record_pose(self, ident: str, pose: Pose) -> None   # the Poser's write API
+    def on(self, m: CachedHit | Embedded | Failure | Retired) -> None
     def flush(self) -> None            # rows CSV + pose cache (temp+replace)
 ```
 
-`on` is where retirement happens: it increments `Admission.retired` for
-every message, success or `Failure`. It loads the `.npy` for `CachedHit`,
-scores, resolves `front_view` (writing through the canonical pose dict via
-`replace`), writes fresh embeddings to the cache. `flush` is **called by
-the driver on the main thread**, on both the drain and abort paths — the
-durable-state-outside-the-actors rule.
+* **`Done` owns the canonical pose store** (I9). The Poser writes through
+  `record_pose`; `Done.on` writes `front_view` through it; `flush`
+  serialises it — and `flush` is where the still-open `save_pose_cache`
+  atomicity fix (temp + `os.replace`) finally lands, which is why the
+  ownership must be unambiguous. `CacheContext` holds *the same object*
+  (read-only by convention), so `route` sees this run's resolutions.
+* **`Done` owns `Admission.retired`** (I10) — the deliberate exception to
+  single-ownership, stated: `admitted` is written only by the driver,
+  `retired` only by `Done.on`, and every message reaching `on` retires its
+  index exactly once. `Retired` retires without a row (`rows` legitimately
+  has holes — settled in the data-structures review's pass 1).
+* `on` loads the `.npy` for `CachedHit`, scores, resolves `front_view`,
+  writes fresh embeddings to the cache. `flush` is **called by the driver
+  on the main thread**, on both the drain and abort paths.
 
 ### Driver — the loop that is the v1 architecture
 
@@ -221,34 +269,46 @@ durable-state-outside-the-actors rule.
 def run(cfg) -> None:
     child = spawn_render_child(cfg)
     for index, f in enumerate(walker):
-        admission.wait_below(WINDOW)          # v1: drain until below
+        while admission.in_flight() >= WINDOW:
+            drain(block=True)
         admission.admitted += 1
-        dispatch(cache_checker.route(f, index, ctx))
+        dispatch(route(f, index, ctx))
         drain(block=False)
-    tasks.send(None)                          # end of input
-    while admission.admitted > admission.retired:
-        drain(block=True)                     # quiescence, not poison pills
-    done.flush(); child.join(timeout)
+    while admission.in_flight() > 0:          # quiescence FIRST: the arbiter
+        drain(block=True)                     # tail resolves files long after
+    tasks.send(EndOfInput())                  # the walker runs dry (I1)
+    child.join(timeout)
+    done.flush()                              # drain path: flush after join —
+                                              # deliberate; abort flushes first
 ```
 
-`drain` is the whole routing table, and the only place message types meet
-module calls:
+`dispatch` routes `route`'s return: `CachedHit`/`Retired` → `done.on`;
+tasks → `tasks.send`; `Redraw(task, hit)` → both. `drain` is the routing
+table, and **each arm is an error boundary** (I4): the parent runs four
+things that raise (the embedder, the poser, future folding, the `.npy`
+load), and today both halves of the pipeline convert those to error rows —
+an unguarded drain would regress that, and a naive guard would admit
+without retiring, which is I1's hang wearing a different hat.
 
 ```python
 def drain(block):
-    for m in results:                         # recv_nowait / short timeout
-        match m:
-            case PoseTiles():  dispatch(poser.on_tile_embeds(
-                                   embedder.embed_tiles(poser.on_tiles(m))))
-            case EmbedViews(): done.on(embedder.embed_views(m))
-            case Failure():    done.on(m)
-    for task in poser.poll():                 # arbiter answers
-        tasks.send(task)
+    while (m := results.recv(SHORT) if block else results.recv_nowait()):
+        try:
+            match m:
+                case PoseTiles():
+                    out = poser.on_tile_embeds(embedder.embed_tiles(poser.on_tiles(m)))
+                    if out is not None: dispatch(out)      # task, or Retired
+                case EmbedViews(): done.on(embedder.embed_views(m))
+                case Failure():    done.on(m)
+        except Exception as e:
+            done.on(Failure(m.file, m.index, str(e)))      # retire, never crash
+    for out in poser.poll():                               # arbiter answers
+        dispatch(out)
 ```
 
-`dispatch(None)` is a no-op (a parked file). Note the chain in the
-`PoseTiles` arm is three synchronous calls — the seams exist so the
-threaded successor can cut any of them, not because v1 needs indirection.
+(`results.recv` with a short timeout when blocking — the `Transport`
+protocol has no iterator, I16 — and every produced task flows through the
+one `dispatch`, not two paths.)
 
 ## Sequence: one cold file, worst case (arbiter escalation)
 
@@ -261,13 +321,14 @@ driver          child                poser          embedder   arbiter    done
   │                                  ├─EmbedTilesRequest─▶│ forward
   │                                  │◀────TileEmbeds─────┤
   │                                  │ combine_up → margin < gate
+  │                                  ├──record_pose──────────────────────────▶│
   │                                  ├─────submit(sheet call)────▶│ (24s, async)
   │                                  │ parked[index]=Future       │
   │   ...driver keeps admitting and draining other files...       │
   │                                  │ poll(): Future done ◀──────┘
-  │                                  │ apply answer → pose dict
+  │                                  │ fold answer, record_pose ─────────────▶│
   │◀─EmbedRenderTask(pose)───────────┤
-  ├──send──────▶│ views (R.T, resident hit: 34ms)
+  ├──send──────▶│ views (up in camera; resident hit)
   │             ├──EmbedViews────────▶ (driver drain)
   │                                             │ forward
   │                                        Embedded ──────────────────▶│ score,
@@ -275,45 +336,54 @@ driver          child                poser          embedder   arbiter    done
   │                                                                    │ retired+1
 ```
 
-The warm path is two hops: `route` → `CachedHit` → `done.on`. The redrawn
-path is the warm path plus a fire-and-forget `EmbedRenderTask(needs_embed=
-False)` whose renders the child saves silently.
+The warm path is two hops: `route` → `CachedHit` → `done.on`. The redraw
+path is `Redraw`: the hit retires the file at `Done` while the child saves
+renders silently. The `--skip-embed` cold path ends at the Poser:
+resolution recorded, `Retired` → `done.on`, no render task at all when no
+renders are wanted.
 
 ## Shutdown
 
-**Drain** (input exhausted): the driver's own epilogue above — stop
-admitting, sentinel the child, drain to quiescence, `done.flush()`, join.
+**Drain** (input exhausted): the driver's epilogue above — quiescence
+first, then `EndOfInput`, join, flush.
 
 **Abort** (Ctrl-C): a `stopping` flag the driver checks per iteration.
 Order matters and is fixed:
 
 ```
-arbiter.shutdown()          # cancel futures; queued calls are ~24s each
+arbiter.shutdown()          # cancels QUEUED calls; up to one in-flight
+                            #   ~24s call per worker still runs (I7)
 poser.abandon()             # parked files keep their ensemble pose (already
-                            #   in the pose dict — nothing to do but drop)
+                            #   recorded through record_pose)
 done.flush()                # pose cache first (the artifact that costs money,
                             #   temp+os.replace), then partial rows CSV
+tasks.close()               # cancel_join_thread: unflushed pickles must not
+                            #   hold the process open (I6)
 child: daemon, join(timeout) — abandoned renders are debug artifacts
 ```
 
-Second Ctrl-C: hard exit. `flush` is idempotent and runs on the main
-thread in a `finally`, exactly as today's nested-finally chain does.
+Second Ctrl-C: hard exit — which is also what bounds the arbiter's
+in-flight residue. `flush` is idempotent and runs on the main thread in a
+`finally`, exactly as today's nested-finally chain does.
 
 ## Invariants (the contract the tests pin)
 
 1. **Every admitted index retires exactly once** — via `Embedded`,
-   `CachedHit`, or `Failure` reaching `done.on`. No other path touches
-   `retired`.
+   `CachedHit`, `Failure`, or `Retired` reaching `done.on`. No other path
+   touches `retired`. The parent's drain arms convert their own exceptions
+   to `Failure` so this holds under errors, not only on the happy path.
 2. **`index` is the identity everywhere**; no message or module keys on
    `Path` except the caches, which key on `file_identity`.
-3. **Single-writer rules:** the pose dict is written by Poser (resolution)
-   and Done (`front_view`) only; rows by Done only; the scene and residency
-   by the Renderer only; nothing writes another module's state.
+3. **Single-writer, with two named exceptions:** the pose store is owned by
+   `Done`, written by the Poser only through `record_pose`; `Admission` is
+   split `admitted`=driver / `retired`=`Done`, each field single-writer.
+   Rows are `Done`'s alone; the scene and residency the Renderer's alone.
 4. **The child sends exactly one result per task**, except
-   `needs_embed=False` (zero) and `None` (terminates). A task that raises
-   sends `Failure` — the exception never crosses raw.
-5. **No module blocks on the Arbiter**, and the parent never does a blocking
-   `recv` while it holds work it could dispatch.
+   `needs_embed=False` (zero) and `EndOfInput` (terminates). A task that
+   raises sends `Failure` — the exception never crosses raw.
+5. **The parent never blocks on a send** (`tasks` is unbounded — Q1), and
+   never does a blocking `recv` while it holds work it could dispatch. No
+   module blocks on the Arbiter.
 
 ## What this note deliberately does not decide
 

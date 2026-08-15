@@ -79,6 +79,13 @@ class EmbedRenderTask:             # pose resolved → render classification vie
     needs_embed: bool              # False: the redrawn path (D8) — embedding
                                    # cached but a saved render is missing/stale;
                                    # the child renders, saves, returns nothing
+
+@dataclass(frozen=True)
+class EndOfInput:                  # terminates the child. A message, not None:
+    pass                           # recv's None means "nothing arrived yet",
+                                   # and a value meaning two things would make
+                                   # the child exit on its first idle window
+                                   # (interfaces review I5)
 ```
 
 The child owns saving renders in every case (Q2): the pixels are already in
@@ -159,6 +166,11 @@ class Failure:                     # any stage → Done; becomes a RENDER_ERROR 
     file: Path
     index: int
     error: str
+
+@dataclass(frozen=True)
+class Retired:                     # → Done: retire with no row (interfaces
+    file: Path                     # review I3/Q2) — the --skip-embed paths,
+    index: int                     # where pose resolution was the whole job
 ```
 
 `Done` holds the category text embeddings (computed once by the Embedder at
@@ -194,6 +206,32 @@ today's working mechanism (`ThreadPoolExecutor`, `classify_stls.py:976`), the
 cheaper build, and the v1 reality. The Arbiter module is a windowed,
 rate-limited pool the Poser holds; the back-edge rule in [Queues](#queues)
 does not apply to it.
+
+### Driver-side shapes (never cross a queue)
+
+```python
+@dataclass(frozen=True)
+class Redraw:                      # route's redraw return: both halves of the
+    task: EmbedRenderTask          # decision in one value, so a test of route
+    hit: CachedHit                 # covers what the driver dispatches (I14)
+
+@dataclass(frozen=True)
+class RenderConfig:                # handed whole to the child at spawn — it
+    render_size: int               # crosses the spawn boundary, so everything
+    views: int                     # here must stay picklable (I13)
+    elevations: tuple[float, ...]
+    save_renders_dir: Path | None
+    render_format: str
+    budget_bytes: int
+    collection_root: Path
+
+@dataclass
+class CacheContext:                # route()'s read-only world: the pose store
+    poses: dict                    # (THE object Done owns, not a copy — route
+    embeds_dir: Path | None        # must see this run's resolutions), the
+    render_index: dict             # render index, and the parsed args the
+    args: argparse.Namespace       # cache keys derive from
+```
 
 ## Inside the child: the Loader/Renderer seam
 
@@ -413,15 +451,26 @@ to come back). `in_flight` entries are never evicted, which makes
 the heaviest mesh (~450 MB at 3 × 150 MB) — this is the proposal's
 residency-depth-follows-the-admission-window link, restored (D14).
 
-The rotate-into-the-camera precondition from the proposal still applies:
-residency only pays if the resident geometry is reusable as-is, so the embed
-render must carry the up-rotation in the camera (`render_up_candidate_grid`'s
-proven `R.T` pattern), not by mutating vertices.
+The rotate-into-the-camera rule still applies — residency only pays if the
+resident geometry is reusable as-is — and it is a **precondition to verify,
+not a settled fact** (interfaces review I11): `R.T` is proven
+pixel-identical only for the tile grid at one elevation, the roundtrip
+spike that produced the residency numbers *rotated held meshes*, and the
+classification views span 8 azimuths × 2 elevations. Building
+`renderer.views` includes a pixel-identity check against `mesh.rotate`
+across the full view set; residency is inert until that check passes.
 
 ## Queues
 
-* v1: the two boundary `mp.Queue`s (both directions, depth = the admission
-  window). In-process edges are function calls in the sequential driver.
+* v1: two boundary `mp.Queue`s — **`tasks` (parent→child) unbounded,
+  `results` (child→parent) bounded at the admission window** (interfaces
+  review I2/Q1). An earlier revision bounded both, which closes the
+  `Renderer → Poser → Renderer` cycle the deadlock rule exists for:
+  `Poser → Renderer` is a listed back-edge, and the overlap spike left it
+  unbounded for exactly that reason. Admission is the only forward
+  pressure; the parent never blocks on a send; the bounded `results` queue
+  is what paces the child. In-process edges are function calls in the
+  sequential driver.
 * Threaded successor: forward edges bounded, back-edges (`Embedder → Poser`,
   `Poser → Renderer`) **unbounded** — the deadlock rule. Pressure is applied
   only at admission. (`Arbiter → Poser` left this list with Q1: a `Future` is
