@@ -2,7 +2,8 @@
 
 Design note, 2026-08-14. Companion to [actors_proposal.md](actors_proposal.md):
 that document argues for the boundaries and records what the spikes measured;
-this one fixes the shapes. Revised the same day against
+this one fixes the shapes, and [interfaces.md](interfaces.md) fixes the
+calling conventions between the modules that hold them. Revised the same day against
 [docs/reviews/2026-08-14-data-structures.md](../reviews/2026-08-14-data-structures.md)
 (findings D1–D15); the review's two gating questions are answered inline —
 **Q1: the Arbiter stays a `Future` the Poser holds; Q2: the render child saves
@@ -94,6 +95,12 @@ abandoned on abort (debug artifacts only).
 class PoseTiles:                   # → Poser
     file: Path
     index: int
+    geo_scores: np.ndarray         # up_axis_scores from the child's mesh: the
+                                   # mesh never crosses the boundary, so its
+                                   # geometry evidence must — the ensemble is
+                                   # combine_up(geo, sig) and the Poser holds
+                                   # no mesh (found writing interfaces.md; the
+                                   # roundtrip spike's child already sent it)
     tiles: list[list[np.ndarray]]  # [candidate][azimuth] — the grid, not a
                                    # flat list (D7): the ensemble reshapes by
                                    # candidate, and n_az just changed 4 → 2
