@@ -1038,3 +1038,186 @@ harness already computes the eager margin for every model it touches
   decision is right.
 * **M3's render-size gap** — unchanged, and now with `T2` as evidence.
 * **`T1`, `T2`** above.
+
+---
+
+# Pass 5 — 2026-08-14, against `afaadf4`
+
+Three commits: `bcc53bf` recorded pass 4, `71970b7` is T1, `afaadf4` is T2.
+Suite **189 passed, 1 skipped**, tree clean. Both prior backlogs are empty.
+
+New findings carry `U` IDs. This pass is mostly about a result the
+implementer's own re-run produced and did not fully cash in.
+
+## P5.0 Verdict
+
+**Both findings taken, both judgment calls correct, and the T2 re-run is the
+right harness.** The two-phase design — eager census for live margins, then
+compile-compare only the live-exposed set — is what the review asked for, and
+its paired construction (tiles rendered and preprocessed once, both towers fed
+identical tensors) is what makes the bound survive the noise the census then
+uncovered. That was not luck; it is the null-canary discipline paying off a
+second time.
+
+The census produced a number that settles `R1` far more decisively than any
+flip count, and the write-up does not quote it (`U1`). It also opened a
+genuine new question about the pipeline itself (`U2`), and surfaced a cost
+figure worth knowing before anyone turns the arbiter on (`U4`).
+
+## P5.1 Disposition of pass 4
+
+| finding | status |
+|---|---|
+| T1 | taken as a reword — **the right call**, see below |
+| T2 | taken as a two-phase re-run — see `U1`, `U3` |
+
+**Judgment call 1 (T1: reword rather than compute both old tokens) —
+accepted.** The review offered either, and the reasoning given is correct: the
+cross-axis duplicate requires `--up-axis` to have changed across runs against
+one cache dir, which no cache in this tree has. The reword goes further than
+required by naming where that case *would* surface (`unclaimed`), so a future
+cache with that history is not silently mishandled — the docstring now
+describes what the code detects and what it does not.
+
+**Judgment call 2 (T2: band = 0.022) — accepted, and the data supports the
+stated reasoning.** "State noise, not band width, is the binding constraint"
+is right, and understated: run-to-run noise (median 2.66e-02) is *larger* than
+the band itself (`U1`). Widening the band would sample more models without
+making the in-band set more stable. The right follow-up is `U2`, not a wider
+sweep.
+
+## P5.2 New findings
+
+### U1. The result that settles R1 is in the output and not in the write-up — MEDIUM
+
+`eval/out/compile_pose_flips.json` records `census_margin` (phase-1 eager) and
+`eager_margin` (phase-2 eager) for all 197 compared models. Those are two
+eager passes on the same model, same code, same config — so their difference
+is the pipeline's own run-to-run noise, directly comparable to the
+compile delta measured on the same rows:
+
+| |Δ margin| | median | p90 | max |
+|---|---|---|---|---|
+| run-to-run (eager vs eager) | **2.66e-02** | 8.93e-02 | 2.69e-01 |
+| torch.compile (identical tensors) | **1.48e-03** | 4.70e-03 | 1.52e-02 |
+
+**Compile perturbs the pose margin ~18× less than re-running the pipeline
+unchanged**, and for **123 of 197** models the run-to-run noise exceeds the
+*largest* compile delta observed anywhere.
+
+That converts `R1` from a statistical acceptance into a categorical one:
+enabling `--compile` perturbs a pose less than re-resolving that same pose
+twice eagerly — something the pipeline already does routinely on every
+upgrade path and already treats as sound. No flip count is needed to justify
+it, and no future flip count can weaken it while this ratio holds. The
+write-up says the mixed cache "sits inside the state noise", which is the
+right intuition; it should say by how much, because the factor is the
+argument.
+
+### U2. Pose resolution is nondeterministic at gate-crossing scale, mechanism unidentified — MEDIUM
+
+The same measurement, read as a property of the system rather than of
+`--compile`: two identical eager passes move a model's margin by a median of
+2.66e-02 and up to 2.69e-01.
+
+This is the failure mode `up_axis_scores` was deliberately seeded to prevent
+(`pose.py:50-53`) — *"an unseeded draw moves picks between runs on identical
+input — which would make the pose cache irreproducible and the ensemble below
+unstable."* Geometry was fixed; the SigLIP arm reintroduces it, larger, and
+`combine_up`'s min-max amplifies it (the ~20× already recorded).
+
+The mechanism is not identified, and the candidates are cheaply separable:
+
+* **Filament render nondeterminism** — the most likely, and the only stage not
+  obviously deterministic. `_upload` calls `clear_geometry()` before
+  `add_geometry` (`classify_stls.py:241-242`), so scene accumulation is
+  excluded.
+* **fp16 kernel variance in the tower** — would be surprising at identical
+  shapes on one device, but is not excluded.
+
+**Ten-minute isolation:** render one mesh's candidate grid twice in one
+process and hash the pixel buffers. Identical ⇒ the tower; different ⇒ the
+renderer. Worth an `OPEN_QUESTIONS.md` entry either way, because it bounds how
+much any margin-level claim in this repo can ever mean — the `parser_gate` A/A
+conclusion, now with a magnitude.
+
+Related, and one field away: the census stores `live_idx`, but the compare
+rows record only `up_flip` (eager vs compiled), never the eager pick against
+the census pick. So run-to-run stability of the *up axis itself* — the thing
+that actually gets cached and used — is still unmeasured, while margin jitter
+is measured twice.
+
+### U3. "~107 in-band collection-wide" is a floor, not the population — LOW
+
+The rule-of-three bound (0 flips in 49 ⇒ ≈6% per in-band model) is sound: the
+49 are in-band by their *own pass's* eager margin and each is compared against
+its own compiled margin on identical tensors. The paired design is what makes
+this valid, and it is worth saying so explicitly.
+
+The multiplier is the soft part. Because the margin itself moves more than the
+band, the set of models that can be in-band on *some* run is not a fixed 107.
+From the census (n=2799):
+
+| within ±b of the 0.45 gate | count |
+|---|---|
+| 0.022 (harness band) | 107 |
+| 0.0266 (median run-to-run noise) | 133 |
+| 0.0893 (p90 noise) | 385 |
+
+Quote the exposed population as a range rather than a point, or the ≈6% reads
+as tighter than it is.
+
+### U4. The collection-wide escalation rate is 44%, not the ~20% the gate was tuned to — INFORMATIONAL
+
+The census is the first collection-scale read of the margin distribution, and
+it says **1227 of 2799 models (44%) fall below `MARGIN_THRESHOLD`** on live
+margins — 39% on cached ones. `pose.py:29` records the gate as "firing on
+~20% of models", and `af258ce` re-read it at n_az=2 as 8 → 9 of 49. Both
+figures come from a 44–49 model labelled subset.
+
+Live margins run *lower* than cached (median −0.044, 62% of models), the
+direction the n_az 4→2 compression predicts, which is why the live figure is
+the higher one.
+
+**This is latent, not live**: both production caches contain **zero** `vlm`
+entries, because `run_classify.sh` passes `--pose-vlm off`. Nothing has been
+billed. But whoever enables the arbiter on a cold collection gets ~1227 paid
+calls rather than the ~560 the recorded rate implies — roughly a 2.4× cost
+surprise, and worth recording beside the gate constant before it is
+discovered by a bill.
+
+## P5.3 What is right — do not re-verify
+
+* **The two-phase harness is the recommended fix, built better than
+  specified.** The census is cached and reusable (`--refresh-census`), and
+  selection covers both exposure points (the gate *and* zero, for up flips),
+  which the review did not ask for.
+* **The paired comparison is what saves the bound.** `inputs` is computed once
+  per model and passed to both towers (`eval/compile_pose_flips.py:88-89`), so
+  run-to-run noise affects *which* models are compared, never the comparison
+  itself. Had the harness re-rendered per tower, `U1`'s noise would have
+  swamped the signal entirely and the result would have been unusable.
+* **The compare-time denominator is the honest one.** Reporting "49 still in
+  the gate band at compare time" rather than the 107 selected is the correct
+  choice and is what made `U1` computable at all.
+* **T1's reword documents its own blind spot**, which is stronger than
+  silently narrowing the claim.
+* **The census's side findings were recorded, not buried** — the 0.119 cached
+  drift and the live-vs-live instability are both in the precision write-up,
+  flagged as outweighing the bound they were collected for. `U1` and `U2` are
+  about cashing them in, not about disclosure.
+
+## P5.4 Still open at handback
+
+* **`R1`** — accepted, and `U1` upgrades the basis from bounded-measurement to
+  below-the-noise-floor. Recommend folding the ratio in and closing it.
+* **M3's render-size gap** — open, now with two independent measurements
+  attached (T2's 54→4, and the census's 0.119 median drift).
+* **`U2`** — new, and the only one that could change a design decision. The
+  isolation test is ten minutes.
+* **`U3`, `U4`** — wording and a recorded number.
+
+Nothing here blocks the `src/` skeleton. `data_structures.md` has been stable
+since pass 2, and the substrate this review has been hardening — key
+derivation, the schema stamp, regime handling — is precisely what the Cache
+Checker and `Done` sit on, so the sequencing is right.
