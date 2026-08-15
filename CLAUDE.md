@@ -14,7 +14,8 @@ with SigLIP (RTX 4060), score against category text embeddings.
   answer (often ~~struck through~~), not deleted.
 - `docs/actor-refactor/` — the pipeline refactor: `actors_proposal.md`
   (stage boundaries + what the spikes measured), `data_structures.md` (the
-  settled shapes), `renderer_alternatives.md` (renderer research).
+  settled shapes), `interfaces.md` (the calling conventions between the
+  modules that hold them), `renderer_alternatives.md` (renderer research).
 - `docs/reviews/` — dated review notes.
 - `eval/README.md` — the measurement harnesses; they import the production
   code path, never a copy.
