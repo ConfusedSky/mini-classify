@@ -1221,3 +1221,118 @@ Nothing here blocks the `src/` skeleton. `data_structures.md` has been stable
 since pass 2, and the substrate this review has been hardening — key
 derivation, the schema stamp, regime handling — is precisely what the Cache
 Checker and `Done` sit on, so the sequencing is right.
+
+---
+
+# Pass 6 — 2026-08-14, against `48262a5`
+
+Two commits: `69426fb` recorded pass 5, `48262a5` is U1–U4. Suite **189
+passed, 1 skipped**, tree clean.
+
+One finding, `V1`, and it is a good-news one: the mechanism `U2` isolated is
+fixable on the renderer already in use.
+
+## P6.0 Verdict
+
+**All four taken, and `U2`'s isolation is the best piece of measurement in
+this whole arc.** `eval/render_determinism.py` separates the two candidates
+cleanly — mesh loaded once, geometry computed once (seeded), the tower fed a
+*single* `inputs` object twice — and the answer is unambiguous: Filament
+differs on every repeat, the tower is bit-deterministic at 0.0 delta on all
+five models. It also caught what pass 5 said was one field away:
+`32mm_Pipe5` picked a **different up axis** across identical eager passes
+(`picks [3, 0, 0]`), so the instability reaches the cached decision, not just
+the margin.
+
+The `OPEN_QUESTIONS` entry then offers accept-and-record or
+average-over-k-renders, and files a Filament-level fix under
+"renderer-alternatives". **That last classification is wrong, and it excludes
+the option that dominates both** (`V1`).
+
+## P6.1 Disposition of pass 5
+
+| finding | status |
+|---|---|
+| U1 | taken — the 18× ratio is now the basis for the R1 acceptance |
+| U2 | **isolated and answered**, beyond what was asked — see `V1` for the next step |
+| U3 | taken — population quoted as 107/133/385 |
+| U4 | taken, and filed in the right place: beside `MARGIN_THRESHOLD` (`pose.py:30-36`), where the next person to read the constant will see it |
+
+## P6.2 New finding
+
+### V1. The render nondeterminism is a one-line toggle on the current renderer — MEDIUM
+
+`OPEN_QUESTIONS` frames the Filament fix as a renderer-alternatives question.
+It is not: Open3D exposes the post-processing chain directly on
+`rendering.View` — `set_post_processing`, `set_antialiasing`,
+`set_ambient_occlusion`, `set_sample_count`. Measured here, six consecutive
+renders of one mesh through `make_renderer`/`render_views`:
+
+| renderer config | hashes of 6 renders | pixel Δ |
+|---|---|---|
+| default (production) | **6 unique** — every render differs | 43.7% of px, max 2/255 |
+| `scene.view.set_post_processing(False)` | first differs, then **5 identical** | 0.0% of px, max **0/255** |
+
+The 43.7%-of-pixels-at-±2/255 signature reproduces
+`render_determinism.py`'s five real models (43.8 / 43.1 / 43.2 / 42.9 /
+42.9%) on a synthetic torus, so this is the same effect, and it is Filament's
+post-processing — the ±2/255 spread over most of the frame is the fingerprint
+of temporal dithering. `32mm_Pipe5`'s 28/255 outlier is larger than dithering
+alone and is probably a silhouette AA resolve, so `set_antialiasing` /
+`set_sample_count` may need to come off too; the toggle above was not tuned.
+
+**Note the one-frame warm-up**: the first render after the toggle still
+differs, and only renders 2–6 are identical. Whether setting it inside
+`make_renderer` removes that, or whether a throwaway frame is needed, is
+unverified and matters for any implementation.
+
+**Why this changes the option set.** Averaging sig scores over k re-renders
+shrinks the noise ~√k at k× the cost of `pose-render` **and** `pose-embed`
+— 15.9–18.7% and 29.3–41.7% of wall respectively in the instrumented run, so
+k=4 for a 2× reduction roughly doubles a cold run, permanently. The toggle
+removes the noise entirely for a one-time cost. If it holds up, it dominates.
+
+**The one-time cost is real and must be paid deliberately**: disabling
+post-processing changes every pixel, therefore every embedding and every
+margin. That is a `POSE_CACHE_VERSION` **and** `EMBED_CACHE_VERSION` bump —
+a full re-resolve and re-embed. The repo built `EMBED_CACHE_VERSION` (M3) for
+exactly this case, so the machinery exists, but it is hours of compute and
+the arbiter's contact sheets change appearance too, so the VLM numbers were
+measured against a different image.
+
+**Validate before adopting.** Tone mapping affects contrast, and SigLIP's
+accuracy was measured with it on. `eval/gold_upright.py` and
+`eval/tile_count.py` are the existing harnesses; if accuracy is flat, the
+toggle is close to free at steady state.
+
+**The payoff is larger than this one entry.** `parser_gate`'s conclusion that
+margin-level claims are "weak *permanently*" was permanent *because* of this
+noise. Remove it and that ceiling lifts — every margin-level measurement in
+the repo gets sharper, `U3`'s in-band population becomes a fixed set rather
+than a distribution, and the pose cache regains the reproducibility
+`up_axis_scores` was seeded to give it (`pose.py:50-53`). Worth doing before
+much more margin-level work, because it changes what that work can conclude.
+
+## P6.3 What is right — do not re-verify
+
+* **`render_determinism.py`'s isolation design.** Mesh loaded once, `geo`
+  computed once, and the tower test embeds from a *single* `inputs` object
+  twice (`:88-89`) — so a nonzero tower delta could only have been kernel
+  variance. It came back 0.0e+00 on all five models, which is a clean
+  exclusion rather than an absence of evidence.
+* **`picks` recorded per repeat**, closing pass 5's "one field away" gap in
+  the same commit that opened it.
+* **U4 filed beside the constant**, not only in a write-up — the failure mode
+  was someone reading `MARGIN_THRESHOLD`'s comment and believing ~20%.
+* **U1 stated as the categorical argument**, which is what makes R1 closable
+  rather than perpetually re-litigated.
+
+## P6.4 Still open at handback
+
+* **`V1`** — test the toggle, validate accuracy, then choose. This supersedes
+  the accept-or-average framing in `OPEN_QUESTIONS`; amend that entry rather
+  than adding a second one.
+* **`U2`** — stays open until `V1` resolves, but is no longer
+  mechanism-unknown.
+* **M3's render-size gap** — unchanged.
+* **`R1`** — closable on `U1`'s ratio.
