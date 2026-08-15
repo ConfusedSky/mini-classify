@@ -139,9 +139,17 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   byte-identical** after one throwaway frame (margin spread 0.00 on all 7,
   including `32mm_Pipe5`, whose pick instability reproduces with it on;
   antialiasing did not need to come off). The noise is Filament's temporal
-  dithering and the fix is one line on the current renderer. What remains is
-  the adoption decision: the toggle moves margins by median 1.3e-01 / max
-  3.5e-01 on these models — every pixel, embedding and margin changes — so
+  dithering and the fix is one line on the current renderer. **But the line
+  is a blunt one** (seen, not just measured — `eval/out/render_arms.html`):
+  `set_post_processing(False)` also removes tone mapping, so the stable
+  render is near-black against the production look (max 187/255 over 100%
+  of pixels), a different image, not the same image de-noised. And there is
+  no finer knob: every `ColorGrading` quality × tone-mapping combination in
+  Open3D's binding still dithers (all unstable, all 41–54/255 from
+  production) — Filament's dither switch is not exposed separately. What
+  remains is the adoption decision: the toggle moves margins by median
+  1.3e-01 / max 3.5e-01 on these models — every pixel, embedding and margin
+  changes — so
   adopting it is a `POSE_CACHE_VERSION` **and** `EMBED_CACHE_VERSION` bump
   (full re-resolve + re-embed, hours; the machinery exists — M3 built it for
   exactly this), and SigLIP's accuracy must be re-read with post-processing

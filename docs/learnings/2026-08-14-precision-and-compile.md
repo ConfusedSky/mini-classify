@@ -151,9 +151,13 @@ irreproducibility; the SigLIP arm reintroduces it through the renderer, and
 `combine_up`'s min-max amplifies it. A fix exists and is verified (review
 V1): `set_post_processing(False)` — Filament's temporal dithering was the
 noise — gives byte-identical renders and 0.00 margin spread on 7/7 models
-after one throwaway frame. Adoption is gated on both cache version bumps
-and an accuracy re-read, since the toggle moves margins by median 1.3e-01;
-the open entry in `OPEN_QUESTIONS.md` carries the decision.
+after one throwaway frame. But the toggle also removes tone mapping: the
+stable render is a visibly different, much darker image (max 187/255 over
+100% of pixels vs production), and no `ColorGrading` combination in
+Open3D's binding is byte-stable, so there is no keep-the-look knob.
+Adoption is therefore gated on both cache version bumps *and* a real
+accuracy re-read on the new-look pixels (margins move median 1.3e-01); the
+open entry in `OPEN_QUESTIONS.md` carries the decision.
 
 The census bought two more observations bigger than the bound it ran for:
 
