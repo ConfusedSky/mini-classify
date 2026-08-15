@@ -27,6 +27,12 @@ SAMPLE_SEED = 0
 # Escalate to the VLM when the *ensemble* is unsure, not when geometry is.
 # 0.45 was picked on the `orig` set and read on the holdout (21/21 there, 43/44
 # pooled, firing on ~20% of models against the old gate's ~55%). See LEARNINGS.
+# Collection-scale reality check (review U4, live-margin census over 2799
+# models): 44% of live margins fall below this gate (39% of cached ones) —
+# the ~20% came from a 44-49 model labelled subset, and live margins run
+# lower than cached (the n_az 4->2 compression). Latent while production
+# runs --pose-vlm off, but whoever enables the arbiter cold should budget
+# ~1227 paid calls, not ~560.
 MARGIN_THRESHOLD = 0.45
 
 # How hard geometry's vote is attenuated when it found no print base. min-max

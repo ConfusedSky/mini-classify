@@ -111,14 +111,46 @@ live-in-band). The re-run selects on the margins the towers actually
 contest: an eager census over all 2799 pose-cached models, then
 compile-vs-eager on the 197 whose live margins sat within 0.022 of either
 exposure point. Result: **0 gate flips in the 49 still in the gate band at
-compare time** — a rule-of-three bound of ≈6% per in-band model, against
-~107 in-band collection-wide — and **4 up flips**, every one at an eager
-margin ≤ 4.1e-03: ties. Margin deltas median 1.5e-03, max 1.5e-02,
+compare time** — a rule-of-three bound of ≈6% per in-band model. The exposed
+population is a range, not a point (U3): 107 models sit within the harness
+band of the gate, 133 within the median run-to-run noise, 385 within its
+p90 — the margin moves more than the band, so "in-band" is not a fixed set.
+And **4 up flips**, every one at an eager margin ≤ 4.1e-03: ties. Margin deltas median 1.5e-03, max 1.5e-02,
 consistent with round one, and the ~20× pose-vs-category amplification
 (`combine_up_scores`' min-max) stands. The acceptance below now rests on a
 bounded measurement.
 
-The census bought two observations bigger than the bound it ran for:
+**The ratio that closes R1 (U1).** The compare rows hold two eager margins
+per model — phase-1 census and phase-2 compare — so their difference is the
+pipeline's own run-to-run noise, measured on the same rows as the compile
+delta:
+
+| \|Δ margin\| | median | p90 | max |
+|---|---|---|---|
+| run-to-run (eager vs eager) | 2.66e-02 | 8.93e-02 | 2.69e-01 |
+| torch.compile (identical tensors) | 1.48e-03 | 4.70e-03 | 1.52e-02 |
+
+**Compile perturbs the pose margin 18× less than re-running the pipeline
+unchanged**, and for 123 of 197 models the run-to-run noise exceeds the
+largest compile delta observed anywhere. That makes the acceptance
+categorical, not statistical: enabling `--compile` moves a pose less than
+re-resolving that same pose twice eagerly — which the pipeline already does
+routinely on every upgrade path and already treats as sound. No flip count
+can weaken this while the ratio holds.
+
+**The noise's mechanism is the renderer, isolated (U2,
+`eval/render_determinism.py`):** re-rendering the same loaded mesh's
+candidate grid in one process changes ~43% of pixels by 2–28/255 on every
+model tried, while the tower on byte-identical tensors is bit-deterministic
+(max delta 0.0, twice). Filament is the sole source; fp16 kernel variance is
+excluded. The spread reaches the up *pick* too: one tight-margin model
+(`32mm_Pipe5`) chose a different up axis between two identical eager passes
+— run-to-run pick instability is real at tie margins, not just margin
+jitter. Geometry was seeded precisely to prevent this class of
+irreproducibility; the SigLIP arm reintroduces it through the renderer, and
+`combine_up`'s min-max amplifies it.
+
+The census bought two more observations bigger than the bound it ran for:
 
 * **Cached margins have drifted median 0.119 (p90 0.354, max 1.13) from
   live ones** under the deliberately unbumped `POSE_CACHE_VERSION` — the

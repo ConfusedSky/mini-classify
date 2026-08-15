@@ -122,6 +122,21 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   is actively false for a `--no-up-ensemble` run. And no pose-cache migration
   after all: `load_pose_cache` maps the old spellings on load, and the
   `up_str` embed token (§P2.3-B) took `source` out of the cache key entirely.
+- **Pose resolution is nondeterministic at gate-crossing scale, and the
+  mechanism is Filament** (review U2, `eval/render_determinism.py`,
+  `eval/compile_pose_flips.py` census). Two identical eager passes move a
+  model's ensemble margin by a median of 2.7e-02 — 6% of the 0.45 gate — and
+  up to 2.7e-01; one tight-margin model (`32mm_Pipe5`) picked a *different up
+  axis* on a re-run. Isolated: re-rendering the same loaded mesh changes ~43%
+  of pixels by 2–28/255 every time, while SigLIP on byte-identical tensors is
+  bit-deterministic (0.0 delta) — the renderer is the sole source, fp16
+  kernel variance excluded. This bounds what any margin-level claim in this
+  repo can mean (it is the `parser_gate` A/A conclusion with a magnitude),
+  and geometry's arm was seeded precisely to prevent this class of
+  irreproducibility. Open: accept and record it as the floor, or stabilise —
+  averaging sig scores over k re-renders would shrink it ~√k at k× the
+  pose-render cost, and a Filament-level fix is a renderer-alternatives
+  question. Whichever way, margin-adjacent analyses must quote the floor.
 - **Upload the mesh once in `render_up_candidate_tiles`.** It builds six
   rotated copies and re-uploads each; the cost is geometry upload, not pixels
   (3.74 s at 2048 px vs 3.33 s at 384 px on 1.8M triangles). Move the camera
