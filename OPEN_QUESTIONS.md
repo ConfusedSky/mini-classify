@@ -133,10 +133,21 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   kernel variance excluded. This bounds what any margin-level claim in this
   repo can mean (it is the `parser_gate` A/A conclusion with a magnitude),
   and geometry's arm was seeded precisely to prevent this class of
-  irreproducibility. Open: accept and record it as the floor, or stabilise —
-  averaging sig scores over k re-renders would shrink it ~√k at k× the
-  pose-render cost, and a Filament-level fix is a renderer-alternatives
-  question. Whichever way, margin-adjacent analyses must quote the floor.
+  irreproducibility. ~~Accept the floor, average over k renders, or file it
+  under renderer-alternatives~~ — superseded by review V1, verified on 7
+  real models: **`scene.view.set_post_processing(False)` makes every render
+  byte-identical** after one throwaway frame (margin spread 0.00 on all 7,
+  including `32mm_Pipe5`, whose pick instability reproduces with it on;
+  antialiasing did not need to come off). The noise is Filament's temporal
+  dithering and the fix is one line on the current renderer. What remains is
+  the adoption decision: the toggle moves margins by median 1.3e-01 / max
+  3.5e-01 on these models — every pixel, embedding and margin changes — so
+  adopting it is a `POSE_CACHE_VERSION` **and** `EMBED_CACHE_VERSION` bump
+  (full re-resolve + re-embed, hours; the machinery exists — M3 built it for
+  exactly this), and SigLIP's accuracy must be re-read with post-processing
+  off (`gold_upright`, `tile_count`) since every recorded number was
+  measured with it on. Until adopted, margin-adjacent analyses must quote
+  the 2.7e-02 floor.
 - **Upload the mesh once in `render_up_candidate_tiles`.** It builds six
   rotated copies and re-uploads each; the cost is geometry upload, not pixels
   (3.74 s at 2048 px vs 3.33 s at 384 px on 1.8M triangles). Move the camera

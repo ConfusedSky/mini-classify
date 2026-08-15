@@ -148,7 +148,12 @@ excluded. The spread reaches the up *pick* too: one tight-margin model
 — run-to-run pick instability is real at tie margins, not just margin
 jitter. Geometry was seeded precisely to prevent this class of
 irreproducibility; the SigLIP arm reintroduces it through the renderer, and
-`combine_up`'s min-max amplifies it.
+`combine_up`'s min-max amplifies it. A fix exists and is verified (review
+V1): `set_post_processing(False)` — Filament's temporal dithering was the
+noise — gives byte-identical renders and 0.00 margin spread on 7/7 models
+after one throwaway frame. Adoption is gated on both cache version bumps
+and an accuracy re-read, since the toggle moves margins by median 1.3e-01;
+the open entry in `OPEN_QUESTIONS.md` carries the decision.
 
 The census bought two more observations bigger than the bound it ran for:
 
