@@ -90,10 +90,11 @@ class EndOfInput:                  # terminates the child. A message, not None:
 
 The child owns saving renders in every case (Q2): the pixels are already in
 its memory, and `--save-renders` config is passed once at child startup. On
-the `needs_embed=False` path the file's CSV row comes from the `CachedHit`
-sent to `Done` alongside (below), which is also what retires it — the child's
-outstanding render work is drained by the child join at shutdown, and
-abandoned on abort (debug artifacts only).
+the `needs_embed=False` path the row comes from the accompanying `CachedHit`
+(`retires=False`, below) and **retirement from the child's `Rendered` ack**
+— the uniform contract from the interfaces review's §P2.3, which is what
+keeps admission bounding the child's backlog. Render work is abandoned only
+on abort (debug artifacts).
 
 ### Child → parent
 
@@ -120,6 +121,14 @@ class EmbedViews:                  # → Embedder
                                    # Done writes front_view through the
                                    # canonical pose dict, not this copy (D9)
     views: list[np.ndarray]
+
+@dataclass(frozen=True)
+class Rendered:                    # → Done: the needs_embed=False ack. The
+    file: Path                     # child always sends exactly one result per
+    index: int                     # task (interfaces pass 2 §P2.3) — this is
+                                   # what retires a render-only file, which is
+                                   # what keeps admission bounding the child's
+                                   # backlog (J1/J2/J4)
 ```
 
 The arbiter path needs the six first-column tiles as PIL Images for
@@ -152,6 +161,9 @@ class CachedHit:                   # Cache Checker → Done: embedding cache hit
     index: int
     pose: Pose
     cache_file: Path               # Done loads the .npy (today's cache-load)
+    retires: bool = True           # False on the redraw path: the row comes
+                                   # from here, retirement from the child's
+                                   # Rendered ack (§P2.3)
 
 @dataclass(frozen=True)
 class Embedded:                    # Embedder → Done: fresh embeddings to score
@@ -231,6 +243,9 @@ class CacheContext:                # route()'s read-only world: the pose store
     embeds_dir: Path | None        # must see this run's resolutions), the
     render_index: dict             # render index, and the parsed args the
     args: argparse.Namespace       # cache keys derive from
+    root: Path                     # the collection anchor — Done derives
+                                   # file_identity from it, so the Poser
+                                   # never has to (J6)
 ```
 
 ## Inside the child: the Loader/Renderer seam
@@ -400,8 +415,13 @@ in-flight window:
 
 ```python
 class Admission:
-    admitted: int
-    retired: int                   # incremented by Done: success OR Failure
+    admitted: int                  # written only by the driver
+    retired: int                   # written only by Done — once per index,
+                                   # whichever of Embedded / CachedHit(retires)
+                                   # / Failure / Retired / Rendered arrives;
+                                   # repeats ignored via retired_ids (J2)
+    def in_flight(self) -> int:
+        return self.admitted - self.retired
 ```
 
 Quiescence — the shutdown signal — is: Walker exhausted **and**
@@ -412,13 +432,15 @@ In v1 this is a plain counter the driver loop consults; the
 `threading.Condition` that blocks `admit` belongs to the threaded successor
 (D15).
 
-**One window, three consumers** (D15): the admission limit is the single
-knob. The child's task-queue depth and the residency exemption below both
-derive from it — the roundtrip spike ran the same window as `--inflight 3`
-with queue depth 4, and nothing was learned from them differing. One nuance
-(R7): a `needs_embed=False` file retires at `Done` via `CachedHit` while its
-render work may still sit in the child's queue, so on that path the bounded
-task queue, not the admission counter, is what bounds the child's backlog.
+**One window, two consumers** (D15, revised with interfaces pass 2): the
+admission limit is the single knob; the `results` queue depth and the
+residency exemption both derive from it. The task queue is unbounded (I2)
+and the child's backlog is bounded by **admission itself**: under the
+uniform child contract (§P2.3), every task — `needs_embed=False` included —
+holds its admission slot until its result or `Rendered` ack returns, so
+quiescence genuinely means the child is idle. (The old R7 nuance, where
+redraw files retired while their render work was still queued, dissolved
+with the carve-out that created it — J5.)
 
 ## Renderer-child mesh residency
 
