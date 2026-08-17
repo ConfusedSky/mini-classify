@@ -444,3 +444,278 @@ them:
   roundtrip, the `--inflight 3` residency answer, and (per `I2` and `I11`) two
   structural decisions this note inherits without knowing it. The convention
   exists precisely so the next reader finds the harness from the number.
+
+---
+
+# Pass 2 — 2026-08-14, against `d18254b`
+
+Two commits: `f644e6a` recorded pass 1 (with the CLAUDE.md doc-map fix),
+`d18254b` is the response — `interfaces.md` substantially rewritten,
+`data_structures.md` gaining the driver-side shapes, and the `eval/README.md`
+aside taken with it.
+
+Same method as pass 1: the protocol walked through the four run modes rather
+than read. New findings carry `J` IDs. This pass also proposes one change that
+closes four of them at once (§P2.3), because they turn out to be one defect
+seen from four sides.
+
+## P2.0 Verdict
+
+**All sixteen findings taken, the two gating questions answered well — and the
+answer to Q1 removed the pipeline's only backpressure on the redraw path.**
+
+The rewrite is materially better. `I1`'s ordering is right, `EndOfInput` is the
+correct shape and is defended on the right axis now, the import rule states its
+own consequence, and `I11` is reframed into a verification step in *both* notes
+rather than softened. Q1 is answered with the argument I would have made.
+
+What is left is one finding half-taken and three consequences of the Q1 answer
+that were not followed through:
+
+* `--skip-embed --save-renders` still hangs, and is now *unrepresentable* in
+  `route`'s return type (`J1`) — `I3` covered one of its two paths.
+* Retirement is not idempotent, and two paths now retire the same index twice
+  (`J2`). One of them is created by the redraw carve-out; the other by the new
+  error boundary.
+* Unbounding `tasks` was correct, and it removed the throttle that the bounded
+  queue was accidentally providing. A redraw-heavy warm run now reaches
+  quiescence in seconds with the child holding the entire collection, and
+  `child.join(timeout)` silently discards the remainder (`J4`).
+* `data_structures.md` §Supervisor accounting still describes the bounded task
+  queue as what bounds the child's backlog (`J5`).
+
+`J1`, `J2` and `J4` are the same defect: **the `needs_embed=False` carve-out
+decouples "the pipeline is finished with this file" from "`Done` has its row".**
+§P2.3 proposes making the child's contract uniform, which closes all three and
+`J5` with it.
+
+## P2.1 Disposition of pass 1
+
+| finding | status |
+|---|---|
+| I1 | taken — quiescence, then `EndOfInput`, then join. Flush-after-join taken as the deliberate call it was flagged as. See `J4` |
+| I2 / Q1 | **answered and taken** — `tasks` unbounded, `results` bounded, parent never blocks on a send. Consequences not propagated: `J4`, `J5` |
+| I3 / Q2 | **half taken** — `Retired` is the right shape and covers the no-renders paths only. See `J1` |
+| I4 | taken inside `drain`; two of the four raising sites the note itself names are still outside the guard. See `J3` |
+| I5 | taken — `EndOfInput` frozen message, and correctly noted as what survives the shm variant |
+| I6 | taken — `close()` = `cancel_join_thread` + close, and it joins the abort order in the right position |
+| I7 | taken — queued-vs-running restored, residual stated as ~24 s per worker in parallel |
+| I8 | taken — `TYPE_CHECKING` + `from __future__ import annotations`, with the reason in the table |
+| I9 | taken — `Done` owns the store, `record_pose` is the write API. The signature is uncallable from the Poser (`J6`) and ownership stays conventional (`J7`) |
+| I10 | taken — `Admission` split per field, named as the exception in Invariant 3. `in_flight()` is used but not in the shape (`J5`) |
+| I11 | taken in both notes, as a precondition with a named verification step. The `eval/README` row for `overlap_spike.py` carries it too — better than asked |
+| I12–I16 | taken; `Redraw`, `RenderConfig` and `CacheContext` all have shapes, `abandon() -> None`, diagram and drain corrected |
+
+## P2.2 New findings
+
+### J1. `--skip-embed --save-renders` still hangs, and is now unrepresentable — HIGH
+
+`Retired` covers the two paths where nothing is wanted. The flag combination
+where *renders* are wanted and embeddings are not has both halves still open:
+
+* **Cold.** `on_tile_embeds` returns `EmbedRenderTask(needs_embed=False)` — the
+  note's own carve-out — the child sends nothing per Invariant 4, and nothing
+  retires the index. `I3`'s hang, unchanged.
+* **Warm.** `route` must send a render task *and* retire. The only return that
+  does both is `Redraw`, whose second field is typed `hit: CachedHit` — and a
+  `CachedHit` makes `Done` load the `.npy` and score it, which is exactly the
+  work `--skip-embed` exists to skip, on a file whose `.npy` may not exist.
+  There is no legal return value.
+
+The combination is real in today's code: `need_renders` is computed
+independently of `skip_embed` (`classify_stls.py:1155-1158`), the render runs,
+and scoring is skipped at `:1197`. "Build the pose cache and the debug renders
+without paying for embeddings" is the obvious reason to pass both.
+
+Narrow fix: widen to `Redraw(task, hit: CachedHit | Retired)` and state the rule
+the type is enforcing — **every `needs_embed=False` task is dispatched together
+with its retirement token.** §P2.3 is the wider one.
+
+### J2. Retirement is not idempotent, and two paths double-retire — HIGH
+
+Invariant 1 says "exactly once". Nothing enforces it, and the rewrite added a
+second way to violate it:
+
+* **Redraw + child error.** Invariant 4 exempts `needs_embed=False` tasks from
+  sending a result; the child's error convention is blanket — *"every exception
+  between `recv` and `send` becomes `Failure(file, index, str(e))`"*. So a
+  redraw task that fails in `loader.get` or `renderer.views` sends a `Failure`
+  for a file the `Redraw`'s `CachedHit` retired seconds earlier. (Not the save
+  half — `save_renders` swallows `OSError` by design, `classify_stls.py:374-384`
+  — but the load and render halves raise.)
+* **The new error boundary.** `except Exception: done.on(Failure(m.file,
+  m.index, str(e)))` wraps arms that call `done.on` themselves. If `done.on`
+  raises *after* incrementing `retired` — scoring, `front_view` resolution and
+  the `.npy` write all sit after that point on a path the note describes as
+  "retires exactly once" — the handler retires the same index again.
+
+The consequence is worse than a bad count. `retired` overtaking `admitted` makes
+`in_flight()` negative, so `while admission.in_flight() > 0` exits with files
+still in flight, `EndOfInput` races them, and the run flushes a complete-looking
+CSV. That is `I1`'s hang inverted: instead of never finishing, it finishes early
+and silently.
+
+Fix, independent of everything else: `Done` keeps `retired: set[int]` and
+ignores a repeat. Invariant 1 becomes mechanical rather than a convention four
+modules have to honour, and it is the same set `rows` is already keyed by.
+
+### J3. The error boundary stops short of two of the four sites it names — MEDIUM
+
+The note lists what raises: *"the embedder, the poser, future folding, the
+`.npy` load"*. The `try` covers the first two. The other two are outside it:
+
+* **`poser.poll()`** — the future-folding call — sits below the `while` loop in
+  `drain`, unguarded. One `apply_arbiter` fold that raises ends the run.
+* **`dispatch(route(f, index, ctx))`** in the walker loop is where
+  `done.on(CachedHit)` does the `.npy` load, and `route` itself stats files that
+  the walk cache may list but that have since vanished. Neither is inside any
+  `try`. This is the most-executed path on a warm run, and it reaches the same
+  `done.on` the drain arm carefully guards.
+
+One correction to pass 1 while fixing this, because the note repeats my framing:
+*"today both halves of the pipeline convert those to error rows"* is too strong.
+There is no per-file guard around `process(f)` (`classify_stls.py:1219-1220`);
+the two `RENDER_ERROR` sites cover mesh-load/render/embed only, so a corrupt
+`.npy` at cache-load ends the run today as well. Guarding the walker loop is an
+improvement to make, not a regression to avoid — the argument for it is
+Invariant 1, not parity.
+
+### J4. Nothing bounds the child's backlog now, and the join discards it — HIGH
+
+Unbounding `tasks` was right, and the bounded queue was doing a second job
+nobody costed: throttling the driver to the child's rate.
+
+Walk a warm run with `--save-renders` newly enabled, or with `renders/` cleared
+— every file returns `Redraw`:
+
+1. `route` is a dict lookup; `done.on(hit)` retires immediately.
+2. `in_flight()` never rises, so the `WINDOW` gate never engages.
+3. The walker loop completes in seconds, having pushed ~1000 render tasks into
+   an unbounded queue.
+4. `while admission.in_flight() > 0` is already false. `EndOfInput` is sent.
+5. `child.join(timeout)` — and the child has tens of minutes of rendering left.
+
+Whatever the timeout is, the daemon child dies at parent exit with most of the
+collection unrendered, and `done.flush()` writes a CSV that looks complete.
+`data_structures.md` promises the opposite: *"the child's outstanding render
+work is drained by the child join at shutdown."*
+
+The drain-path join and the abort-path join now mean different things — abort
+genuinely wants a timeout, drain must not have one. That alone is a fix. But it
+converts a silent truncation into an unbounded wait with no progress reporting,
+which is why §P2.3 is the better answer.
+
+### J5. §Supervisor accounting was not updated with the Q1 answer — MEDIUM
+
+`data_structures.md:415-421` still reads as it did before `tasks` was unbounded:
+
+* *"the admission limit is the single knob. The child's task-queue depth and the
+  residency exemption below both derive from it"* — the task-queue depth no
+  longer exists. It is one window, **two** consumers now.
+* *"on that path the bounded task queue, not the admission counter, is what
+  bounds the child's backlog"* — the R7 nuance is now simply false, and its
+  falseness is `J4`.
+
+Two smaller ones in the same block: `retired  # incremented by Done: success OR
+Failure` predates `CachedHit` and `Retired`; and `in_flight()`, which the driver
+epilogue calls twice, is not on the `Admission` shape.
+
+### J6. `record_pose(ident: str, pose)` cannot be called from the Poser — MEDIUM
+
+The Poser is constructed with `(up_T, down_T, arbiter, record_pose, vlm_cfg)`
+and its input is `PoseTiles(file, index, geo_scores, tiles)`. Computing `ident`
+means `pose.file_identity(f, root)` (`pose.py:107`) — and the Poser has no
+`root`, correctly: Invariant 2 keeps modules off `Path`-derived keys, and the
+caches are named as the one exception.
+
+`record_pose(file, index, pose)` and let `Done` derive the identity — it holds
+`CacheContext.args`, which is where `root` lives. Same one-line API, callable.
+
+### J7. `Done` "owns" a store it is handed — LOW
+
+`Done.__init__(admission, text_embeds, cache_ctx)`, and `CacheContext.poses` is
+*the* object. So the store is loaded by someone else (`load_pose_cache` in
+`classify_stls.py` or the driver), stored in a structure `route` reads, and
+"owned" by a module that receives it third-hand. That is fine as wiring and thin
+as ownership — and `I9` exists because the still-open `save_pose_cache`
+atomicity fix (`pose.py:150`) needs an unambiguous home. One sentence naming who
+constructs it and hands it over closes it.
+
+### J8. `while (m := ... )` is a truthiness test — LOW
+
+`while (m := results.recv(SHORT) if block else results.recv_nowait()):` should
+be `is not None`. Frozen dataclasses are truthy, so it is correct today and
+breaks silently the first time a message grows `__len__` or `__bool__` — and
+this note is a spec that will be implemented literally.
+
+## P2.3 The change that closes J1, J2, J4 and J5
+
+All three of the substantive findings trace to one carve-out:
+
+> **The child sends exactly one result per task**, except `needs_embed=False`
+> (zero)
+
+That exception is what decouples "`Done` has the row" from "the pipeline is
+finished with this file", and every consequence follows: a file retires while
+its work is outstanding (`J4`), so admission stops bounding the child (`J5`), so
+a later `Failure` for that same work double-retires (`J2`), and a path that
+needs a render *and* a retirement has no way to express it (`J1`).
+
+**Make the contract uniform: the child always sends exactly one result per
+task.** `needs_embed=False` returns `Rendered(file, index)`; the file retires on
+that, not on the `CachedHit`.
+
+| finding | why it closes |
+|---|---|
+| `J4` | admission holds the slot until the child acks, so the walker loop throttles again and quiescence genuinely means the child is idle |
+| `J2` (redraw half) | one retirement path per file — a child `Failure` replaces the ack rather than duplicating a retirement |
+| `J1` | `--skip-embed --save-renders` retires on the ack like everything else; no `Redraw`-shaped special case, cold or warm |
+| `J5` | "one window, three consumers" becomes true again, and R7 dissolves rather than needing a rewrite |
+| Invariant 4 | loses its exception; the child's blanket `Failure` rule stops contradicting it |
+
+The cost, stated honestly: `Done` must separate *writing the row* from
+*retiring the index* on the redraw path — the `CachedHit` writes, the ack
+retires. That is one flag on one message, against four findings and a carve-out
+that has now generated defects in two consecutive passes.
+
+Keep `J2`'s idempotent `retired: set[int]` regardless. It is what makes
+Invariant 1 mechanical, and the error boundary needs it whatever the child's
+contract is.
+
+## P2.4 What checked out — do not re-verify
+
+* **The `I1` ordering is correct**, including the subtle half: `poser.poll()`
+  can produce tasks during the quiescence loop, and the sentinel now follows
+  every one of them.
+* **`tasks` unbounded / `results` bounded is the deadlock-free pair.** The
+  parent's only blocking call is `results.recv(SHORT)`, which times out; the
+  child blocks on `results.send` or `tasks.recv`. No cycle. `results` occupancy
+  stays ≤ WINDOW *given* the `J2` fix — the failing-redraw path is the only
+  thing that can exceed it.
+* **`close()` on `tasks` only is right.** The feeder thread lives on the sending
+  side, the parent sends only on `tasks`, and the child's own feeder dies with
+  the daemon process.
+* **`EndOfInput` surviving the shm variant** — correct, and a better reason than
+  the one pass 1 gave.
+* **The `I7` rewrite is accurate to `concurrent.futures`' semantics**, including
+  that the second Ctrl-C is what bounds the residue.
+* **The `I11` reframing**, in `interfaces.md`, `data_structures.md` and the new
+  `eval/README.md` row alike — the row is the one that will actually be read
+  before someone re-quotes the residency numbers.
+* **The three new `eval/README.md` rows are accurate**: `overlap_spike.py`'s
+  three modes are `baseline`/`overlap`/`roundtrip` (`:249`, `:276-277`),
+  `parser_gate.py`'s A/A-control history matches its docstring, and
+  `renderer_gil.py`'s GIL split matches Spike 4.
+
+## P2.5 Suggested order
+
+1. **`J2`'s idempotent retirement** — smallest, closes the silent-early-exit
+   failure, and is needed under either answer to §P2.3.
+2. **§P2.3** — decide it before `J1` and `J4`, since taking it closes both. If
+   it is rejected, take `J1` as `Redraw(task, CachedHit | Retired)` and `J4` as
+   an untimed drain-path join, and say in the note why the carve-out is worth
+   the two special cases.
+3. **`J5`** — follows whichever way §P2.3 goes; do not update
+   §Supervisor accounting twice.
+4. **`J3`, `J6`** — both are one line, and `J6` blocks anyone writing the Poser.
+5. **`J7`, `J8`** — any time.
