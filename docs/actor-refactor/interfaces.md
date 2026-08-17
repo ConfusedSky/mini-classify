@@ -33,7 +33,8 @@ src/cache_checker.py route(): the admission decision
 src/poser.py         ensemble + continuations + arbiter calls
 src/arbiter.py       windowed ThreadPoolExecutor wrapper
 src/embedder.py      SigLIP; the only module that owns torch models
-src/done.py          scoring, rows, pose store, retirement, flush
+src/done.py          scoring, rows, pose store, retirement, Release, flush
+                     — the second parent-side writer on tasks (L3)
 src/driver.py        the sequential loop; owns admission
 pose.py              math + Pose + caches (unchanged home)
 classify_stls.py     CLI entry: args, run-params, cache guards -> driver
@@ -76,6 +77,7 @@ imports open3d too — import only; no renderer is ever created parent-side.)
 │    │        ▲       poser.on_tiles ──▶ embedder.embed_tiles
 │    │        │            │                   │
 │    │   EmbedViews   TileEmbeds ◀─────────────┘
+│    │        │  done ──Release (every retirement)──▶ tasks (unpins in_flight)
 │    │        │            ▼
 │    │        │       poser.on_tile_embeds ──▶ EmbedRenderTask | Retired | None
 │    │        │            │ parked?
@@ -187,13 +189,17 @@ terminates it. Conventions:
 * `Release(file, index)` clears a resident mesh's `in_flight` flag, dropping
   it to normal LRU eligibility; unknown or already-cleared indices are a
   no-op, which is what lets the parent send it unconditionally (K1).
-* `EndOfInput` terminates the loop — and `run_child` then exits with
-  **`os._exit(0)`**, never by returning (K2): interpreter teardown would
-  destroy the `OffscreenRenderer`, and teardown is the one thing this repo
-  has a hard constraint about (CLAUDE.md: renderers live for the process
-  lifetime, never destroyed — the abort is Filament throwing from a
-  destructor). The clean exit must not be the dangerous one, especially
-  under the untimed drain-path join.
+* `EndOfInput` terminates the loop — and `run_child` then flushes
+  stdout/stderr and exits with **`os._exit(0)`**, never by returning (K2):
+  interpreter teardown would destroy the `OffscreenRenderer`, and teardown
+  is the one thing this repo has a hard constraint about (CLAUDE.md:
+  renderers live for the process lifetime, never destroyed — the abort is
+  Filament throwing from a destructor). The stdio flush matters because
+  `os._exit` skips it and the child's diagnostics are block-buffered on a
+  pipe (L4). And note the load-bearing coupling: `os._exit` also skips the
+  queue feeder's delivery guarantee, which is safe *only because*
+  `EndOfInput` follows quiescence (I1) — by then every result is already
+  received. Moving the sentinel earlier breaks both fixes at once.
 * **Every exception between `recv` and `send` becomes
   `Failure(file, index, str(e))`** — one bad mesh must not end the run, and
   the file must retire. The child never crashes on a per-file error; it
@@ -331,17 +337,34 @@ def run(cfg) -> None:
                                               # cache-load ends the run too.
     while admission.in_flight() > 0:          # quiescence FIRST: the arbiter
         drain(block=True)                     # tail resolves files long after
-    tasks.send(EndOfInput())                  # the walker runs dry (I1); every
-    child.join()                              # Release precedes it in FIFO.
-    if child.exitcode != 0:                   # UNTIMED join: quiescence means
-        raise ChildDied(child.exitcode)       # idle (§P2.3); timeout is abort's.
-    done.flush()                              # exitcode is meaningful under
-                                              # os._exit(0) and is the only
-                                              # signal the child died with tasks
-                                              # outstanding (K2). Flush after
-                                              # join is deliberate; abort
-                                              # flushes first.
+        if child.exitcode is not None:        # the walker runs dry (I1).
+            for i, f in outstanding():        # Liveness INSIDE the loop (L1):
+                done.on(Failure(f, i,         # a dead child's tasks can never
+                    f"render child died ({child.exitcode})"))  # complete —
+                                              # fail them through the one path
+                                              # Invariant 1 allows, and lose
+                                              # those rows, not the run's pose
+                                              # cache. drain's SHORT timeout
+                                              # makes the check free.
+    tasks.send(EndOfInput())                  # every Release precedes it (FIFO)
+    child.join()                              # UNTIMED: quiescence means idle
+    done.flush()                              # (§P2.3); timeout is abort's.
+    if child.exitcode != 0:                   # AFTER flush, and a warning, not
+        warn(f"child exit {child.exitcode}")  # a raise: at this point the run
+                                              # is complete and correct, and
+                                              # the exitcode is a diagnostic
+                                              # about HOW the child ended — a
+                                              # raise here discards a finished
+                                              # run's artifacts over a cosmetic
+                                              # death (L2). Any lost work was
+                                              # already recorded as Failure
+                                              # rows by the in-loop check.
 ```
+
+`outstanding()` is the driver's admitted `index → file` map minus `Done`'s
+`retired_ids` — both already exist; no new bookkeeping. The child-death
+table is now closed on all four causes: the arbiter tail (I1), row-less
+files (I3/J1), double retirement (J2), and a child dying mid-run (L1).
 
 `dispatch` routes everything a decision can produce:
 `CachedHit`/`Retired`/`Failure` → `done.on` (the `Failure` arm is what

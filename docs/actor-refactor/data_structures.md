@@ -93,9 +93,10 @@ class EndOfInput:                  # terminates the child. A message, not None:
                                    # and a value meaning two things would make
                                    # the child exit on its first idle window
                                    # (interfaces review I5). The child then
-                                   # exits via os._exit(0) — interpreter
-                                   # teardown would destroy the renderer, the
-                                   # one hard-constraint abort (K2)
+                                   # flushes stdio and exits via os._exit(0)
+                                   # — interpreter teardown would destroy the
+                                   # renderer, the one hard-constraint abort
+                                   # (K2/L4)
 ```
 
 The child owns saving renders in every case (Q2): the pixels are already in
