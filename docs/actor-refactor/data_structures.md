@@ -439,10 +439,20 @@ class Admission:
 ```
 
 Quiescence — the shutdown signal — is: Walker exhausted **and**
-`admitted == retired`. No poison pills; a file can still be parked on an
-arbiter call long after the input is exhausted.
+`admitted == retired` **and** no file parked on an arbiter `Future`
+(amended per interfaces pass 8, P3). No poison pills; a file can still be
+parked on an arbiter call long after the input is exhausted. The counter
+and the parked set differ only after the interfaces note's
+`fail_outstanding` (its N3 path), where retirement empties `in_flight()`
+while paid arbiter answers are still in the air — the parked clause is
+what lets each answer fold through `record_pose` before `flush`. On every
+healthy run a parked file is un-retired, so the counter alone covers it.
 
-In v1 this is a plain counter the driver loop consults; the
+In v1 the counter is a field of `DriverState`, the driver's bookkeeping
+container (interfaces.md §Driver, its O1): `admission`, `admitted_files:
+dict[int, Path]`, the stall clock's `last_progress`, and `child_failed`,
+written as `drv.*` attributes. One `Admission` instance is handed to both
+`DriverState` and `Done` — the same object, never a copy (P2). The
 `threading.Condition` that blocks `admit` belongs to the threaded successor
 (D15).
 

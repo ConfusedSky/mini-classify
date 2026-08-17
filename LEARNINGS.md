@@ -59,7 +59,7 @@ notes at the bottom are amended in place. Open work is tracked separately in
   numeric regime keyed into the embedding cache.
 - [2026-08-17 — the cache learned its schema, and the design was reviewed into shape](docs/learnings/2026-08-17-cache-schema-and-design-by-review.md)
   — cache-meta.json and the up_str token (a rename, not a re-embed; the 144
-  the walk left behind); map-on-load beats version bumps; and what thirteen
+  the walk left behind); map-on-load beats version bumps; and what fourteen
   adversarial passes taught: walk protocols, remove carve-outs, make
   invariants mechanical, guard the clean path; convergence is severity
   falling, not counts.

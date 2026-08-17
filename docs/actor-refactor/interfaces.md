@@ -4,10 +4,10 @@ Design note, 2026-08-14. Third of the set: [actors_proposal.md](actors_proposal.
 argues the boundaries, [data_structures.md](data_structures.md) fixes the
 shapes, this one fixes the **calling conventions** — who calls whom, with
 what signature, what blocks, and who converts errors into `Failure`. Revised
-across seven review passes against
+across eight review passes against
 [docs/reviews/2026-08-14-interfaces.md](../reviews/2026-08-14-interfaces.md)
 (findings I1–I16, pass 2's J1–J8, pass 3's K1–K7, pass 4's L1–L4, pass 5's
-M1–M5, pass 6's N1–N7, pass 7's O1–O6); the review's gating
+M1–M5, pass 6's N1–N7, pass 7's O1–O6, pass 8's P1–P5); the review's gating
 questions are answered inline — **Q1: the parent owns admission, and
 therefore `tasks` is unbounded; Q2: a `Retired` message is what retires a
 file that produces no row; §P2.3: taken — the child always sends exactly one
@@ -214,6 +214,13 @@ terminates it. Conventions:
 
 ```python
 class Poser:
+    parked: dict[int, ParkedFile]      # continuation state (data_structures.md),
+                                       # written only here — abandon() owns it —
+                                       # and READ by the driver (P4): the
+                                       # quiescence loop and the M4/N1
+                                       # subtractions need membership, which is
+                                       # why this is an exposed attribute and
+                                       # not a bool predicate
     def __init__(self, up_T, down_T, arbiter: Arbiter, record_pose, vlm_cfg): ...
     def on_tiles(self, m: PoseTiles) -> EmbedTilesRequest
     def on_tile_embeds(self, m: TileEmbeds) -> EmbedRenderTask | Retired | None
@@ -335,6 +342,10 @@ class DriverState:                            # the container three passes asked
 
 def run(cfg) -> None:
     child = spawn_render_child(cfg)
+    admission = Admission()                   # ONE instance, handed to Done and
+                                              # DriverState alike (P2): the
+                                              # container holds the reference,
+                                              # it does not own the object.
     drv = DriverState(admission, {},          # stall clock starts at spawn (N4),
                       last_progress=now())    # so the child's Filament/open3d
                                               # startup sits inside the first
@@ -353,14 +364,10 @@ def run(cfg) -> None:
                                               # by retiring, so a break checked
                                               # only at the loop top would admit
                                               # one more file to a known-dead
-                                              # child — a Failure row for a file
-                                              # nothing ever tried to render. A
-                                              # dead child stops admission (N3):
-                                              # un-walked files are simply absent
-                                              # from the CSV, which is what a
-                                              # crashed run should look like —
-                                              # not ~1500 Failure rows flushed as
-                                              # a complete-looking file.
+                                              # child. What a dead child does to
+                                              # the walk is a stated trade — see
+                                              # "the dead-child walk" below
+                                              # (N3, P1).
         drv.admission.admitted += 1
         drv.admitted_files[index] = f
         try:
@@ -403,6 +410,28 @@ def run(cfg) -> None:
                                               # drain's check.
 ```
 
+**The dead-child walk, described honestly** (N3, P1): `drv.child_failed`
+is set only inside `fail_outstanding`, and the `outstanding()` guard
+fires that only when something is owed — so death is *noticed* only when
+it matters. Three clauses:
+
+1. A run that needs nothing from the child — every file warm, `route()`
+   serving `CachedHit`s — completes normally end to end, however and
+   whenever the child died. A child that cannot even initialise Filament
+   cannot damage a warm re-run.
+2. Otherwise the walk stops within `WINDOW` files of the first file the
+   dead child could not serve; the files admitted before the gate filled
+   end as `Failure` rows.
+3. The CSV therefore ends with up to `WINDOW` `Failure` rows and then
+   stops — truncated, not complete — and the stderr exit line is the
+   marker.
+
+The front edge is inexact **on purpose**: noticing `child.exitcode`
+unconditionally would make it exact at the cost of clause 1, breaking a
+warm run on a dead child it never needed — and this project's product is
+the caches, with the CSV a thin consumer, so warm-run survival outranks a
+crisp edge. The guard is the trade, not an accident.
+
 Driver state has a container: `DriverState` bundles `admission`,
 `admitted_files`, the stall clock's `last_progress`, and `child_failed`,
 and everything that mutates them does so through `drv.*` (O1). Three
@@ -411,7 +440,12 @@ passes found the same bug arriving one field at a time — state called
 it a local of whatever closure writes it (M2, N4, O1) — and that
 repetition is the signal the container was missing, not another
 declaration: an attribute write cannot be shadowed by Python's scoping
-the way a bare name can. The map is **new bookkeeping, deliberately
+the way a bare name can. `admission` is constructed once in `run` and
+handed to both `Done` and `DriverState` — the same instance, never a
+copy (P2): `admitted` stays the driver's field, `retired` stays `Done`'s
+(I10), and a second `Admission` anywhere yields an `in_flight()` that
+never decreases — I1's hang, reached through the container that was added
+to stop a scoping bug. The map is **new bookkeeping, deliberately
 unpruned** (M2): pruning would need `Done` to call back into the driver
 on retirement, the coupling I10 avoided, and unpruned it holds one `Path`
 per admitted file — ~1758 at the end of a full run, nothing. Two

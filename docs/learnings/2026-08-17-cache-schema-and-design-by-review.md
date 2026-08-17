@@ -2,10 +2,10 @@
 
 Two arcs from the actor-refactor design session that the 08-14 write-ups
 (ipc-transport, precision-and-compile) did not cover: the cache-key migration
-that shipped mid-review, and what thirteen adversarial review passes over two
+that shipped mid-review, and what fourteen adversarial review passes over two
 design notes taught about designing protocols on paper. The full finding
 trail is `docs/reviews/2026-08-14-data-structures.md` (six passes) and
-`docs/reviews/2026-08-14-interfaces.md` (seven).
+`docs/reviews/2026-08-14-interfaces.md` (eight).
 
 ### The cache schema migration (shipped, both live caches)
 
@@ -39,7 +39,7 @@ trail is `docs/reviews/2026-08-14-data-structures.md` (six passes) and
   `load_pose_cache` would hand it new-spelling sources, `old_embed_cache_token`
   would miss every override, and 1531 embeddings would quietly orphan.
 
-### What thirteen review passes taught about designing on paper
+### What fourteen review passes taught about designing on paper
 
 * **Protocols must be walked, not read.** The interfaces note's seams
   survived every pass; its *termination* did not — three of four run modes
@@ -75,15 +75,20 @@ trail is `docs/reviews/2026-08-14-data-structures.md` (six passes) and
   had not surfaced, because it only exists when you ask *who computes what
   where*. Design layers find each other's holes; sequence them.
 * **Severity falling is the convergence signal — counts are not** (amended
-  after pass 7's O6 caught the original claim contradicting its own data).
-  Neither sequence is monotonic: data structures 15 → 7 → 5 → 2 → 4 →
-  1-plus-good-news, interfaces 16 → 8 → 7 → 4 → 5 → 7 → 6 — and a count
-  test would have called the interfaces review converged one pass before
-  the liveness hang and two before the stall clock. What fell
-  monotonically is what the findings were *about*: protocol hangs (I/J),
-  then failure-path holes (K–M), then one mechanism's arithmetic (N), then
-  scoping and citations (O). Stop when the findings stop being about the
-  design.
+  twice: pass 7's O6 caught the claim contradicting its own data, pass 8's
+  P5 fixed the arithmetic in the amendment). Neither sequence is
+  monotonic: data structures 15 → 7 → 5 → 2 → 4 → 1-plus-good-news,
+  interfaces 16 → 8 → 7 → 4 → 5 → 7 → 6 → 5. A stop-on-first-rise count
+  test fires after pass 4 — right *after* the liveness hang it did catch,
+  and before the wedge bound (pass 5), the stall clock's arithmetic (pass
+  6), and the scoping bug that made both inert (pass 7) were ever
+  written. The count test does not fail by missing the obvious hang; it
+  fails by stopping while three passes of consequences are still
+  unwritten. What fell monotonically is what the findings were *about*:
+  protocol hangs (I/J), then failure-path holes (K–M), then one
+  mechanism's arithmetic (N), then scoping and citations (O), then prose
+  against a settled protocol (P) — at which point the reviewer called the
+  stop, and the rule held.
 
 ### Conventions that made the loop work
 
