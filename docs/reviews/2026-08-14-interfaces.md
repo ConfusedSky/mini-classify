@@ -1761,3 +1761,230 @@ corrected the reviewer. That is the convention working, not an exception to it.
 3. **`O2`** — delete the bump, or gate it on `not child_owed()`.
 4. **`O4`, `O5`** — one citation and one signature.
 5. **`O6`** — amend the write-up in place, per the LEARNINGS convention.
+
+---
+
+# Pass 8 — 2026-08-17, against `ea11bc3`
+
+Two commits: `befe283` recorded pass 7, `ea11bc3` is the response.
+
+New findings carry `P` IDs.
+
+## P8.0 Verdict
+
+**The protocol is done. Every finding this pass is about what the note *says*,
+not what it does — and the biggest one is that the code's real behaviour on a
+dead child is better than the sentence describing it.**
+
+`DriverState` is the right answer to `O1`, and the reasoning attached to it —
+three passes found the same bug one field at a time, so the container was the
+missing thing — is the correct generalisation. `O3`'s gate/break ordering is
+right. `O2` dropped the bump rather than gating it, which also removed the walrus
+and mooted half of `O5`; `O4` took the harder half (move `STALL_S` off 300 s so
+the number means one thing) rather than annotating a collision. The write-up
+amendments in `O6` are honest, including keeping the counter-example as the
+evidence rather than deleting the claim.
+
+I checked the things a new container usually breaks and they hold: `src/driver.py`
+was already in the module map (line 39), the dataclass is well-formed (no mutable
+default, non-default fields first), `now()` is `time.monotonic()` so
+`last_progress: float` types, and no stale "a fold is progress" prose survives
+anywhere in the note.
+
+What is left:
+
+* the dead-child walk behaves **differently and better** than the note's
+  description of it, at both edges (`P1`);
+* `DriverState` is half-owned by `src/done.py` and constructed from an
+  `Admission` that appears from nowhere (`P2`);
+* `data_structures.md` — the note that owns these shapes — knows about none of
+  it, and still states a quiescence condition that `N3` changed (`P3`);
+* `poser.parked` is read across a module boundary that the Poser's own interface
+  listing does not expose (`P4`);
+* the amended convergence bullet is off by one pass (`P5`).
+
+**This should be the last pass.** By the write-up's own amended rule — stop when
+the findings stop being about the design — pass 8 is the stop. `P1`–`P5` are text
+edits against a settled protocol; none of them changes a line of the mechanism.
+
+## P8.1 Disposition of pass 7
+
+| finding | status |
+|---|---|
+| O1 | **taken, container option** — `DriverState` with all four fields, `drv.*` writes, homed in `src/driver.py`, and the "three passes, one field at a time" reasoning recorded as why. Ownership and construction are `P2` |
+| O2 | taken — bump dropped, not gated, and the walrus went with it. The `for out in poser.poll()` form is back to the pre-`N4` shape, which is correct |
+| O3 | taken — gate tests `not drv.child_failed`, break sits below it. The remaining fuzziness is `P1`, and it is not this fix's fault |
+| O4 | taken, and the harder half: `STALL_S` → ~240 s so 300 s means only the arbiter's transport deadline, with `pose.py:456`/`:379` cited at the clause. ~8.5× checks out against the 3–28 s range |
+| O5 | taken — signature includes `Failure`; the generator hazard is moot now that no caller tests the return for truth |
+| O6 | taken and amended in place, both files plus the index line. The new bullet is right in substance, off by one pass in its example (`P5`) |
+
+## P8.2 New findings
+
+### P1. The dead-child walk is better than its own description — MEDIUM
+
+The note says:
+
+> un-walked files are simply absent from the CSV, which is what a crashed run
+> should look like
+
+That is not what happens at either edge, because `drv.child_failed` is set only
+inside `fail_outstanding`, which is itself gated by `if outstanding() and …` —
+my `N6` guard. Death is therefore *noticed* only when something is owed:
+
+* **Front edge.** A child that dies while `in_flight()` is low is not noticed.
+  The walker keeps admitting, and each admitted file that needs the child sits
+  there until the gate fills — so up to `WINDOW` files are dispatched to a known-
+  dead child and end as `Failure` rows for files nothing ever tried to render.
+  That is the row `O3` just removed, arriving `WINDOW` at a time from the other
+  direction.
+* **Back edge.** Once `child_failed` is set the walk stops, which discards the
+  remaining **warm** files — the ones `route()` would have served as `CachedHit`
+  without touching the child at all.
+
+But look at what the guard actually buys, because it is the interesting half: on
+a **fully warm run nothing is ever outstanding**, so a dead child is never
+noticed, the walk never breaks, and the run completes correctly end to end. A
+child that fails to initialise Filament on the iGPU cannot damage a warm re-run.
+That is exactly right, and it is currently an accident of where the guard sits.
+
+So: keep the code, fix the sentence. The honest description is three clauses —
+
+1. a run that needs nothing from the child completes normally, however the child
+   died;
+2. otherwise the walk stops within `WINDOW` files of the first one the dead child
+   could not serve;
+3. the CSV therefore ends with up to `WINDOW` `Failure` rows and then stops —
+   truncated, not complete, and the stderr exit line is the marker.
+
+If you would rather make (1) deliberate instead of emergent, the two-line version
+separates noticing from failing:
+
+```python
+if child.exitcode is not None:
+    drv.child_failed = True                       # noticing is free
+if outstanding() and (drv.child_failed or
+        (child_owed() and now() - drv.last_progress > STALL_S)):
+    fail_outstanding()
+```
+
+— but note that on its own this makes the front edge exact **at the cost of (1)**:
+a warm run would now break on a dead child it never needed. The current guard
+trades an exact edge for warm-run survival, and given that this project's product
+is the caches and the CSV is a thin consumer, that is the right trade. Say it is
+the trade.
+
+### P2. `DriverState` is half-written by `src/done.py`, and its `Admission` comes from nowhere — LOW
+
+```python
+drv = DriverState(admission, {}, last_progress=now())
+```
+
+`admission` is never constructed in `run` — the same class of undefined name the
+last three passes have been closing (`warn`, `ChildDied`, `now`, `STALL_S`,
+`child_failed`). Worse, it cannot be constructed here casually: `Done.__init__`
+takes `admission: Admission` (line 282) and is the **only** writer of `retired`
+(`data_structures.md` §Supervisor accounting). So `drv.admission` must be the
+same object `Done` holds.
+
+A dataclass named `DriverState`, homed in `src/driver.py`, described as "bookkeeping,
+not a message", reads as exclusively driver-owned. The first implementor who
+constructs `Done` with its own `Admission`, or who deep-copies `drv`, gets an
+`in_flight()` that never decreases — `I1`'s hang, reached through the container
+that was added to prevent a scoping bug. One clause where the dataclass is
+declared:
+
+> `admission` is constructed once and passed to both `Done` and `DriverState` —
+> the same instance, not a copy. `admitted` is the driver's, `retired` is
+> `Done`'s; the container holds the reference, it does not own the object.
+
+### P3. `data_structures.md` knows about none of this — MEDIUM
+
+Per `CLAUDE.md`'s doc map, `data_structures.md` fixes the shapes and this note
+fixes the calling conventions. A four-field dataclass wrapping `Admission` is a
+shape, and §Supervisor accounting — the section the data-structures review spent
+six passes settling — is now stale in two ways:
+
+* it still reads *"In v1 this is a plain counter the driver loop consults"*, with
+  no mention of `DriverState`, `admitted_files`, `last_progress` or
+  `child_failed`. Either move the dataclass there and cite it from here, or add
+  the pointer line; the current split means the shapes note describes a driver
+  that no longer exists.
+* it states quiescence as **"Walker exhausted and `admitted == retired`"**, which
+  `N3` changed: the loop is now `in_flight() > 0 or poser.parked`, and on the
+  death path those differ. That is an invariant living in the invariants note,
+  contradicted by the loop in this one. Amend it — quiescence is
+  `admitted == retired` **and** no parked file — and note that only the post-
+  `fail_outstanding` path can tell them apart.
+
+Cross-note drift is the failure mode this review has caught most often (`I8`, the
+`Q1` transport question, `N5`'s citation). It is worth one edit to close.
+
+### P4. `poser.parked` is read across a boundary the Poser does not expose — LOW
+
+The quiescence loop reads `poser.parked` directly, and `outstanding()`'s
+`--skip-embed` filter reads it too (`N5`). The `Poser` class sketch (lines
+215–222) lists five methods and no attributes; `parked` is declared in
+`data_structures.md` as continuation state, i.e. as the Poser's *internals*.
+
+For a note whose entire subject is who calls whom with what signature, two
+consumers reaching into another module's dict deserves either a line in the class
+sketch (`parked: dict[int, ParkedFile]  # read by the driver: quiescence, N5`) or
+a predicate (`def has_parked(self) -> bool`). The predicate is better — it is the
+only thing either caller needs, and it keeps `abandon()`'s ownership of the dict
+unambiguous.
+
+### P5. The amended convergence bullet is off by one pass — LOW
+
+> a count test would have called the interfaces review converged one pass before
+> the liveness hang and two before the stall clock
+
+The sequence is 16 → 8 → 7 → 4 → 5 → 7 → 6. It is still falling at pass 4; the
+first violation is pass 5. So a count-based stopping rule fires **after pass 4** —
+which means the liveness hang (`L1`, pass 4) *was* caught, and what would have
+been missed is the wedge (`M3`, pass 5), the stall clock's arithmetic (`N1`/`N2`,
+pass 6) and the scoping bug that made both inert (`O1`, pass 7).
+
+That is a better story for the bullet, not a worse one: the count test does not
+fail by stopping before the obvious hang, it fails by stopping right after it,
+while three passes of consequences were still unwritten. Third time this bullet
+has been wrong; get the arithmetic in it and it can stop being edited.
+
+## P8.3 What checked out — do not re-verify
+
+* **`DriverState` is well-formed and correctly placed.** Non-default fields
+  before the default, no mutable default (the `{}` is passed at the call site),
+  `last_progress: float` matches `time.monotonic()`, and `src/driver.py` was
+  already in the module map with "owns admission" — the container did not need a
+  new module or a new import rule.
+* **`O2`'s removal is complete.** No "a fold is progress" prose survives; the
+  only `last_progress` writes are the spawn init and the recv loop, which is the
+  intended pair.
+* **The gate/break ordering is right, and `drain(block=False)` composes with
+  it.** A `child_failed` set at the bottom of the body skips the next iteration's
+  gate via `not drv.child_failed` and breaks immediately; one set inside the gate
+  releases it and breaks below. Both paths admit nothing further.
+* **`STALL_S` at 240 s still clears everything.** 8.5× the documented 3–28 s
+  per-model range, and the arbiter cannot start the clock at all now that
+  `child_owed()` gates it — so the 300 s transport deadline and the stall
+  deadline never race.
+* **`child_owed()` is genuinely "what the child owes".** Every other wait in the
+  parent — `on_tiles`, `embed_tiles`, `on_tile_embeds`, `embed_views`, the fold —
+  is synchronous inside `drain`, so the arbiter is the only asynchronous
+  non-child wait and `parked` is the whole of it. The subtraction is exact.
+* **The death-in-the-tail case is designed, not accidental.** A child that dies
+  while parked files are outstanding fails them (normal mode), and `or
+  poser.parked` still lets each answer fold and `record_pose` before `flush` — the
+  pose is kept, the embed is lost, which is the `M4`/`N3` policy applied
+  consistently.
+
+## P8.4 Suggested order
+
+1. **`P1`** — the description, and the decision about whether warm-run survival
+   is a trade or an accident. Everything else is smaller.
+2. **`P3`** — the two `data_structures.md` amendments; the quiescence one is an
+   invariant.
+3. **`P2`, `P4`** — one clause and one method signature.
+4. **`P5`** — arithmetic in the write-up.
+
+Then stop. The protocol terminates, the failure paths close, the shapes have
+homes, and the remaining edits are prose.
