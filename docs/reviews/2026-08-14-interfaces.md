@@ -1107,3 +1107,186 @@ covered for the queue feeder.
 2. **`L2`** — same edit region; do them together, and the ordering is the whole
    fix.
 3. **`L3`, `L4`** — any time.
+
+---
+
+# Pass 5 — 2026-08-17, against `bdcf4f2`
+
+Two commits: `7b67a30` recorded pass 4, `bdcf4f2` is the response.
+
+New findings carry `M` IDs.
+
+## P5.0 Verdict
+
+**`L2`, `L3` and `L4` are clean, and `L1`'s mechanism is exactly right — but it
+was installed in one of the two blocking loops, and not the one that matters.**
+
+Failing the outstanding indices through `Failure` is the correct shape: it uses
+the one path Invariant 1 allows, needs no new message type, and lets the run keep
+its pose cache. The `drain`-then-check ordering is right too, so a child that
+dies after delivering its last result is not falsely blamed.
+
+The check sits in the quiescence loop. The other blocking loop — the admission
+gate, `while admission.in_flight() >= WINDOW: drain(block=True)` — has no check,
+and that is where the child spends essentially the entire run. A child that dies
+at model 200 of 1758 hangs there, exactly as before (`M1`). The note's claim that
+the hang table is "closed on all four causes" is not yet true, and my pass-4
+wording deserves part of the blame: I wrote "inside the loop" where I meant
+inside `drain`, which is the one place both callers share.
+
+Two supporting findings: `outstanding()` rests on a map that does not exist
+(`M2`), and the closed-table claim papers over a fifth cause — a child that
+**wedges** rather than dies (`M3`).
+
+## P5.1 Disposition of pass 4
+
+| finding | status |
+|---|---|
+| L1 | mechanism taken and correct; placement covers one of two loops — `M1`. Supporting gaps: `M2`, `M4` |
+| L2 | taken — flush-then-warn, `ChildDied` gone, and the reasoning about *why* the exitcode is only a diagnostic there is stated rather than implied |
+| L3 | taken — `Release` edge in the diagram, `src/done.py` named as the second parent-side writer on `tasks`. See `M5` for a cosmetic placement nit |
+| L4 | taken, and the `I1`/`os._exit` coupling is now explicit in the note — *"moving the sentinel earlier breaks both fixes at once"* is the sentence that keeps someone from undoing it |
+
+## P5.2 New findings
+
+### M1. The liveness check is in the wrong loop — HIGH
+
+Two loops in `run()` block on `drain(block=True)`. Only the second got the check:
+
+```python
+    for index, f in enumerate(walker):
+        while admission.in_flight() >= WINDOW:
+            drain(block=True)                 # <-- no liveness check
+        ...
+    while admission.in_flight() > 0:
+        drain(block=True)
+        if child.exitcode is not None:        # <-- here
+```
+
+The admission gate is where the child does all of its work. A cold run holds
+WINDOW files in flight essentially continuously for hours; the quiescence loop is
+the last few seconds plus the arbiter tail. So the check guards the window in
+which the child is least likely to die, and leaves the one where it actually
+does: child dies at model 200, `in_flight()` stays pinned at WINDOW, `drain`
+returns nothing every `SHORT`, and the driver spins forever with 199 finished
+files unflushed. That is the failure `L1` was raised for, unchanged.
+
+Fix: **put the check inside `drain`**, not in its callers. That is the single
+place the `SHORT`-timeout wake happens, both loops route through it, and it cannot
+be forgotten by a third caller later:
+
+```python
+def drain(block):
+    while (m := ...) is not None:
+        ...
+    for out in poser.poll():
+        dispatch(out)
+    if child.exitcode is not None:            # after draining: a result already
+        fail_outstanding(child.exitcode)      # in the pipe is never mis-blamed
+```
+
+`drain(block=False)` in the walker body then also carries it, which is free and
+harmless. One caveat to state where the check lands: `fail_outstanding` retires
+files, so it must not run while the caller is mid-iteration over something keyed
+by the same indices — at the end of `drain` it is not.
+
+### M2. `outstanding()` rests on a map that does not exist — MEDIUM
+
+> `outstanding()` is the driver's admitted `index → file` map minus `Done`'s
+> `retired_ids` — both already exist; no new bookkeeping.
+
+Half of that is true. `retired_ids` exists (`J2`). The admitted map does not:
+`Admission` is `admitted: int`, `retired: int`, and `in_flight()`
+(`data_structures.md` §Supervisor accounting), and the driver's loop is
+`for index, f in enumerate(walker)` with nothing retained. There is no
+parent-side structure mapping an admitted index back to its `Path`.
+
+It should exist — `Failure(file, index, …)` needs the file, and this is the only
+consumer that has to recover it after the fact. But it is new, it needs a home
+(the driver, beside `admission`), and it is worth one sentence that it is not
+pruned: unpruned it holds one `Path` per admitted file, ~1758 at the end of a full
+run, which is nothing — but "no new bookkeeping" will send an implementor looking
+for a map that isn't there.
+
+Pruning it properly would need `Done` to tell the driver when an index retires,
+which is the coupling `I10` deliberately avoided. Leave it unpruned and say so.
+
+### M3. A child that wedges is not covered, and the table now says it is — MEDIUM
+
+`child.exitcode is not None` detects **death**, not **hang**. A child stuck in a
+Filament call — an amdgpu reset, a GPU wedge, a driver deadlock — has
+`exitcode is None` forever, sends nothing, and both loops spin exactly as they did
+before `L1`. That is a fifth cause, and it is the one the closed-table sentence
+now discourages a reader from looking for:
+
+> The child-death table is now closed on all four causes
+
+The table is accurate about *death*. Rename it that, and then make an explicit
+call on the fifth, because both answers are defensible and only silence isn't:
+
+* **Accept it**, with the reason: the child's unit of work is one model, bounded
+  in practice at 34 ms–2 s, so a stall is a real fault rather than slow progress —
+  and Ctrl-C plus the abort path already recovers the pose cache, which is the
+  artifact that costs money.
+* **Or bound it**: `drain` already knows when it last received anything. A
+  no-progress deadline (generous — 60 s is ~30× the slowest observed model) turns
+  a wedge into the same `fail_outstanding` path `M1` installs, at the cost of one
+  timestamp.
+
+I lean toward bounding it, because `M1`'s fix puts the machinery one line away and
+this repo has a documented history of Filament aborting rather than returning.
+
+### M4. Failing parked files discards a paid arbiter call — LOW
+
+`outstanding()` is admitted-minus-retired, which includes files parked on an
+arbiter `Future`. A dead child has nothing to do with them: their ensemble pose is
+already in the store via `record_pose`, and their VLM answer — ~$0.30 and ~24 s
+in flight — is about to arrive.
+
+For most runs failing them is still correct, because the answer only matters if an
+`EmbedRenderTask` can follow it, and a dead child cannot serve one. The exception
+is `--skip-embed`, where a resolved file needs nothing further from the child and
+would retire as `Retired` on its own. So the honest policy is "fail the files that
+still need the child", and under `--skip-embed` that is none of the parked ones.
+
+Low value, one clause — but the arbiter answer is the one thing in this pipeline
+that costs money to reproduce, which is why it is worth not discarding by default.
+
+### M5. Two undefined names, and a diagram nit — LOW
+
+* `warn(...)` is introduced undefined, the same way `ChildDied` was last pass. A
+  `print` to stderr is presumably meant; say so, since the note's preamble claims
+  every named type is `data_structures.md`'s.
+* The new `Release` line in the wiring diagram sits between `TileEmbeds` and
+  `on_tile_embeds` and runs rightward off the parent's column, so it reads as
+  crossing the boundary at the ensemble rather than at the `tasks` queue drawn at
+  the top. The edge is correct; the routing is misleading in the one artifact
+  people check before believing the prose.
+
+## P5.3 What checked out — do not re-verify
+
+* **`drain`-then-check is the correct order.** A child that dies after sending its
+  last result has that result consumed by `drain` before the check runs, so it is
+  never blamed for work that actually completed. Keeping that order matters when
+  the check moves into `drain` (`M1`) — it must be after the recv loop *and* after
+  `poser.poll()`.
+* **The failure path composes with everything downstream.** Each `Failure`
+  retires idempotently (`J2`), emits a `Release` to a dead child (harmless on an
+  unbounded queue), and any later `poll()` output for the same index is a no-op.
+  `EndOfInput` to a dead child, `child.join()` on an already-dead child, and the
+  post-flush warning all behave.
+* **`L2`'s reasoning is sound**, and worth keeping verbatim: after quiescence the
+  exitcode genuinely is only a diagnostic, because the in-loop check has already
+  converted anything lost into rows.
+* **The untimed `child.join()` is still safe.** At quiescence the child is idle in
+  `tasks.recv` with an empty `results` queue, so it reads `EndOfInput`, flushes,
+  and `os._exit(0)`s. The `M3` wedge case reaches the join only if it resolves
+  first, in which case there is nothing to wait for.
+
+## P5.4 Suggested order
+
+1. **`M1`** — move the check into `drain`. Everything else this pass is text.
+2. **`M3`** — decide it while `M1`'s machinery is open; the bounded version is one
+   timestamp on top of `M1`.
+3. **`M2`** — name the map's home and that it is unpruned.
+4. **`M4`, `M5`** — any time.
