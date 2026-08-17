@@ -933,3 +933,177 @@ reader.
    before anyone builds on it.
 3. **`K3`, `K4`** — corrections; `K4` should end R7's third appearance.
 4. **`K5`, `K6`, `K7`** — any time.
+
+---
+
+# Pass 4 — 2026-08-17, against `e072d2e`
+
+Two commits: `c1e3664` recorded pass 3, `e072d2e` is the response — all seven
+`K` findings, `Release` as a control message, and the child's exit path rewritten.
+
+New findings carry `L` IDs. This pass follows the one thing pass 3 asked for that
+opened a new question: the child-death check that `K2` implied.
+
+## P4.0 Verdict
+
+**All seven taken, and `K1`'s fix is right down to the ordering argument.**
+`Release` as a *control* message keeps Invariant 4 unqualified rather than
+re-introducing a carve-out; the FIFO reasoning holds under every path I could
+walk, including the redraw case where a task and a retirement race; and `Done`
+holding the `tasks` transport is the correct answer to "who sends it", for the
+reason the note gives — "whoever retires it" is spread over three paths, which is
+how the leak hid. `K4` is taken with more honesty than asked for: the note now
+says a bounded `tasks` would never block *and* why it stays unbounded anyway.
+
+The finding is `K2`'s other half. Checking `child.exitcode` after the join is
+right in principle, but it is placed where it cannot do the job the note assigns
+it — *"the only signal the child died with tasks outstanding"* is unreachable
+there, because reaching that line means nothing was outstanding. The failure it
+names is real and still uncovered: **a child that dies mid-run hangs the
+quiescence loop forever** (`L1`). And where the check does fire, it discards a
+completed run's artifacts (`L2`).
+
+Two small ones round it out: the wiring diagram has no `Release` edge now that
+`Done` sends to the child (`L3`), and `os._exit(0)` skips stdio flushing (`L4`).
+
+## P4.1 Disposition of pass 3
+
+| finding | status |
+|---|---|
+| K1 | taken, and correctly — `Release` is a control message, `Done` is the sender, unconditional with a child-side no-op, FIFO ordering argued rather than assumed. `in_flight`'s two clears are documented in `data_structures.md` with all three leaking paths named |
+| K2 | half taken — `os._exit(0)` and the never-destroy rule are right (see `L4` for one gap). The `exitcode` check is in the wrong place: `L1`, `L2` |
+| K3 | taken — `dispatch` routes `Failure`, credited to `poll` |
+| K4 | taken, and better than asked — the R7 sentence is deleted, the argument re-pointed at defence-in-depth, and "a queue that *cannot* block the parent survives future contract mistakes" is the right reason to keep it |
+| K5 | taken — later `Failure` overwrites, parity stated |
+| K6 | taken — ack strictly after `save_renders`, with the untimed join named as what rests on it |
+| K7 | taken — `CacheContext.root` sanctioned, `RenderConfig`'s copy justified by the spawn boundary |
+
+## P4.2 New findings
+
+### L1. A child that dies mid-run hangs the quiescence loop — HIGH
+
+The check says what it is for:
+
+```python
+    if child.exitcode != 0:                   # ... the only
+        raise ChildDied(child.exitcode)       # signal the child died with tasks
+                                              # outstanding (K2)
+```
+
+It cannot be. Control reaches that line only after
+`while admission.in_flight() > 0: drain(block=True)` has exited, and that loop
+exits only when every admitted index has retired — i.e. when **no task is
+outstanding**. The stated purpose and the placement are mutually exclusive.
+
+The failure it names is real, and it is the one hang class the previous three
+passes did not close. If the child dies with tasks outstanding — the Filament
+abort if `os._exit(0)` is not reached, an OOM kill on a 4M-triangle mesh, the
+daemon reaped — those tasks never produce results, `in_flight()` never reaches
+zero, and `drain(block=True)` spins on a `results` queue that will never receive
+anything again. Forever, with no output: `done.flush()` is below the loop.
+
+This is `I1`'s hang with a different cause, and it is the last one reachable:
+
+| cause | closed by |
+|---|---|
+| arbiter tail after the sentinel | `I1` |
+| a file that produces no row | `I3`, `J1` |
+| double retirement (early exit) | `J2` |
+| **the child dies mid-run** | **nothing** |
+
+Fix: liveness belongs *inside* the loop, not after it. `drain(block=True)`
+already wakes every `SHORT` on the recv timeout, so the check is free — if
+`child.exitcode is not None` while `in_flight() > 0`, the child is gone and its
+outstanding work cannot complete. Convert the outstanding indices to `Failure`
+(the driver knows them: admitted-minus-retired, and `Done` has `retired_ids`),
+which retires them through the one path Invariant 1 allows, and let the run flush
+what it has. A collection where one mesh kills the child should lose one file's
+row, not the whole run's pose cache.
+
+That also gives the exitcode check a real job: after quiescence it becomes a
+diagnostic about *how* the child ended, which is `L2`.
+
+### L2. The raise discards a completed run's artifacts — MEDIUM
+
+`raise ChildDied(...)` sits between the join and `done.flush()`. At that point
+the run is *finished*: quiescence held, every file retired, every row collected,
+every pose resolved — and the pose cache is the artifact this design repeatedly
+singles out as the only one whose loss costs money (~$0.30 of Gemini calls per
+re-resolve, per the proposal's shutdown section).
+
+Worse, the only thing that can make the exitcode nonzero at that point is a child
+that died *after* all its work was delivered — most plausibly the very Filament
+teardown abort `K2` set out to prevent, if `os._exit(0)` is ever not reached. So
+the raise throws away a complete, correct run over a cosmetic death in a process
+that had nothing left to do.
+
+The note's own rule already answers this: *"`flush` is idempotent and runs on the
+main thread in a `finally`"*. If that outer `finally` exists, the pseudocode is
+merely misleading; if the epilogue is read literally — and it will be, it is the
+spec — the flush is skipped. Order it flush-then-report, and make it a warning
+rather than an exception unless `L1`'s in-loop check has already recorded lost
+work.
+
+Minor, same place: `ChildDied` is introduced with no definition, in a note whose
+preamble says types named here are `data_structures.md`'s.
+
+### L3. The wiring diagram has no `Release` edge — LOW
+
+`Done` now sends on `tasks`, which makes it the second parent-side writer to the
+child and changes the shape the diagram exists to convey — the diagram still
+shows `tasks` fed only from `route`/`dispatch`, and `done.on` as a pure sink at
+the bottom of the parent box. The module map line is also now incomplete:
+`src/done.py  scoring, rows, pose store, retirement, flush` — no mention that it
+talks to the child.
+
+Both are one edit. Worth doing because the diagram is what a reader checks
+against before believing prose, and "`Done` is the only writer" now has a second
+meaning it did not have three passes ago.
+
+### L4. `os._exit(0)` skips stdio flushing — LOW
+
+`os._exit` is the right call and it bypasses more than interpreter teardown: it
+does not flush Python's buffered stdout/stderr. The child does print — the
+`save_renders` failure path is a `print` on `OSError` (`classify_stls.py:383`),
+deliberately non-fatal — and on a pipe those buffers are block-buffered, not
+line-buffered. So the diagnostics for the last few files can vanish exactly when
+someone is debugging why renders are missing.
+
+`sys.stdout.flush(); sys.stderr.flush()` before `os._exit(0)`. One line, and it
+is the same class of "the fast exit skips the delivery guarantee" that `I6`
+covered for the queue feeder.
+
+## P4.3 What checked out — do not re-verify
+
+* **`Release`'s FIFO argument holds.** I walked every path where a retirement and
+  a task for the same index could race. The only one that gets close is
+  `Redraw` — but its hit carries `retires=False`, so no `Release` is emitted
+  before the task, and the `Rendered` ack that follows arrives after the child
+  has already processed the task. Retirement is terminal and idempotent, so no
+  task for an index can follow its `Release`.
+* **A redraw mesh is never marked `in_flight`**, so the unconditional `Release`
+  on that path is a genuine no-op rather than an accidental early unpin — the
+  flag means "awaiting a pose answer", and a redraw file's pose is already known.
+* **`os._exit(0)` does not lose results, and the reason is `I1`.** `os._exit`
+  skips the `mp.Queue` feeder's delivery guarantee, so an unflushed result would
+  be lost — but `EndOfInput` is only sent after quiescence, by which time the
+  parent has already received every result. The two fixes are load-bearing for
+  each other; if anyone ever moves the sentinel back before the drain, it breaks
+  `os._exit` as well as `I1`. Worth one sentence in the note so the coupling is
+  explicit rather than incidental.
+* **`Release` on a fully warm run** is ~1000 messages to a child with nothing
+  else to do — free on an unbounded queue with a child-side no-op, and cheaper
+  than tracking which files have an unanswered `PoseTiles`.
+* **`Retired` and `Release` are correctly distinct**: one retires a file at
+  `Done`, the other unpins a mesh in the child. On the `--skip-embed` cold path
+  both are emitted for the same file, in that order, and that is right.
+* **Invariant 4 stayed unqualified**, which was the point of making `Release` a
+  control message rather than a task with no result.
+
+## P4.4 Suggested order
+
+1. **`L1`** — the last hang, and the in-loop check is where `K2`'s intent
+   actually lands.
+2. **`L2`** — same edit region; do them together, and the ordering is the whole
+   fix.
+3. **`L3`, `L4`** — any time.
