@@ -1290,3 +1290,261 @@ that costs money to reproduce, which is why it is worth not discarding by defaul
    timestamp on top of `M1`.
 3. **`M2`** — name the map's home and that it is unpruned.
 4. **`M4`, `M5`** — any time.
+
+---
+
+# Pass 6 — 2026-08-17, against `35cb91e`
+
+Two commits: `24f8680` recorded pass 5, `35cb91e` is the response.
+
+New findings carry `N` IDs.
+
+## P6.0 Verdict
+
+**`M1` landed exactly right, and `M2`/`M4` are clean. `M3` — the one finding
+where I offered a lean instead of a fix — came back as a stall detector that
+cannot tell a wedged child from a healthy arbiter tail, which is the one thing
+this pipeline does by design.**
+
+The liveness check is now the last statement in `drain`, after the recv loop and
+after `poser.poll()`, and both blocking loops route through it. That is the fix,
+it is in the only place a third caller cannot forget, and the epilogue is
+correctly reduced to a diagnostic `print`. `M2` names `admitted_files` as new
+bookkeeping and argues the unpruned choice from `I10`; `M4` splits "still needs
+the child" out of admitted-minus-retired and protects the paid arbiter answer.
+
+The wedge bound is where it goes wrong, in three compounding ways:
+
+* the deadline treats **arbiter latency as child silence** (`N1`). In the
+  quiescence tail the child is idle *by construction* — that is `I1` — while
+  parked files sit outstanding. The arbiter is 24 s mean, **45 s p95**
+  (LEARNINGS, `2026-08-12-where-a-7-hour-run-went.md:853`) against a 60 s
+  deadline. The detector's own trigger condition is a normal end-of-run.
+* `STALL_S` kept the number pass 5 suggested but replaced the premise that
+  justified it (`N2`). I wrote "60 s is ~30× the slowest observed model" from a
+  wrong figure; the response correctly replaced it with the real one — and 60 s
+  against 28 s is **2.1×**, which is not "generous".
+* nothing stops admission after `fail_outstanding` (`N3`), so a false positive
+  does not cost the in-flight window — it converts **every remaining file** in
+  the walk to a `Failure` row and finishes with a complete-looking CSV.
+
+Those three multiply: a plausible mis-fire on a healthy run silently destroys the
+run. `N4` is the mechanical half — `last_progress` is a local, bound only inside
+the recv loop, so it is unbound in exactly the case the branch exists for.
+
+`M1`, `M2`, `M4`, `M5` need nothing further. This pass is the `M3` machinery.
+
+## P6.1 Disposition of pass 5
+
+| finding | status |
+|---|---|
+| M1 | **taken and correct** — check is the last statement in `drain`, after recv *and* `poll`; the caveat about not running mid-iteration is stated. The epilogue's inline check is gone. See `N4` for the timestamp's scope, not the placement |
+| M2 | taken — `admitted_files: dict[int, Path]`, named as new, homed beside `admission`, unpruned with the `I10` reason. Nothing further; `N5` is one clause the *filter* still needs |
+| M3 | bounded rather than accepted, which was my lean — but the bound does not hold: `N1`, `N2`, `N3`, `N4` |
+| M4 | taken, and the reasoning is better than my finding was: "the files that still need the child" is now the definition rather than a `--skip-embed` special case in prose. `N1` argues the same split belongs in the *stall* predicate, in every mode |
+| M5 | `warn` → `print(..., file=sys.stderr)` taken. The diagram edge moved to the top as asked and is now the correct edge — drawn one column short (`N7`) |
+
+## P6.2 New findings
+
+### N1. The stall deadline counts arbiter time as child silence — HIGH
+
+`last_progress` is bumped only by messages arriving on `results`, i.e. only by
+the child. The trigger is `outstanding() and now() - last_progress > STALL_S`.
+Both halves are satisfied by a *healthy* run's arbiter tail:
+
+* the walker is dry, so the only files left are parked on arbiter `Future`s —
+  this is `I1`, the reason the quiescence loop exists at all;
+* those files are admitted and not retired, and outside `--skip-embed` they still
+  need the child (an `EmbedRenderTask` follows the answer), so `M4`'s filter
+  keeps them: `outstanding()` is **non-empty by design**;
+* the child has an empty queue and sends nothing, so `last_progress` is frozen at
+  whenever the last render finished.
+
+The clock then runs against the arbiter, which the repo measures at **24 s mean,
+45 s p95** for 3.5-flash. A 60 s deadline sits 1.33× above p95 on a per-call
+basis, and a run makes ~350 arbiter calls (~20% of 1758). The tail only needs one
+answer to arrive more than 60 s after the last child result — and `fail_outstanding`
+then `kill()`s a perfectly healthy child and fails precisely the files whose
+~$0.30 answers were in flight. `M4` exists to avoid discarding that answer; this
+path discards it *and* kills the child.
+
+The same shape reaches mid-run whenever every file in the window is parked at
+once, which with a small `WINDOW` and a ~20% escalation rate happens a few times
+per full run.
+
+Note the irony: `--skip-embed` is the **safe** mode here, because `M4` excludes
+parked files from `outstanding()` and the trigger's first half goes false.
+
+Fix: the split `M4` already found is the right one, it is just applied to the
+wrong predicate. Keep the broad `outstanding()` for *who to fail on death*, and
+add the narrow one for *what counts as evidence of child liveness*:
+
+```python
+child_owed()   # admitted − retired − parked, in EVERY mode
+outstanding()  # admitted − retired − (parked if skip_embed)   [M4, unchanged]
+
+if child.exitcode is not None or \
+        (child_owed() and now() - last_progress > STALL_S):
+    fail_outstanding()
+```
+
+A wedged child always has `child_owed()` non-empty — a wedge means it is holding
+a task — so nothing is lost. A healthy arbiter tail has `child_owed()` empty, so
+the clock cannot run. That is the whole fix, and it makes `STALL_S` a statement
+about rendering rather than about the network.
+
+### N2. `STALL_S` kept a constant whose premise was withdrawn — MEDIUM
+
+The note justifies 60 s as "generous … against a p99 model's ~28 s of child
+work". Both halves need correcting, and the second is mine:
+
+* **The response is right and pass 5 was wrong.** I wrote that the child's unit
+  of work is "bounded in practice at 34 ms–2 s". 34 ms is a `show_geometry(True)`
+  **re-show of a resident mesh** (`renderer_alternatives.md:46`,
+  `actors_proposal.md:111`), not a model. The real figure is the one the response
+  found: **3–28 s of local work for a whole model** (`actors_proposal.md:196`),
+  with the p99 mesh load alone at 15.4 s. Good catch, and it should be cited in
+  the note rather than asserted — as written, "a p99 model's ~28 s" attributes a
+  p99 to a source that gives a range.
+* **But then 60 s is 2.1× the top of the documented range, not 30×.** The
+  constant was chosen under my wrong premise and kept under the corrected one.
+  "Generous" is no longer a fair description of a 2.1× margin on a box with a
+  documented thermal ceiling and a documented 1.17–1.21× overlap variance — and
+  the range is a sample, while the collection contains an 800k-triangle STL.
+
+The asymmetry decides the number. A wedge is **permanent**: detecting it in 300 s
+instead of 60 s costs four minutes of a multi-hour run, once. A false positive
+costs the run (`N3`). So `STALL_S` should be set where no healthy child can
+plausibly reach it — **~300 s**, ~10× the documented top-of-range — and the note
+should say that it is deliberately far above the work distribution because the
+error is one-sided. With `N1`'s `child_owed()` narrowing, a 300 s deadline still
+catches every wedge it was written for.
+
+### N3. Nothing stops admission after `fail_outstanding` — MEDIUM
+
+`fail_outstanding` retires the outstanding files, which drops `in_flight()` below
+`WINDOW` and releases the admission gate — so the walker **continues**, admitting
+the next file to a dead or killed child. It fills the window again, `drain` sees
+`exitcode is not None` again, fails those, and so on to the end of the walk.
+
+It terminates, so this is not `I1`'s hang. What it produces is worse to read: a
+run whose child died at model 200 walks all 1758, writes ~1558 `Failure` rows,
+prints one line to stderr, and `done.flush()`es a CSV that looks complete. The
+`L2` reasoning — "at this point the run is complete and correct" — is stated in
+the epilogue and is no longer true on that path.
+
+Two defensible answers; the note should pick one and say it:
+
+* **Stop admitting.** `fail_outstanding` sets a flag the walker checks; the loop
+  breaks and the remaining files are simply not in the CSV, which is what a
+  crashed run should look like. Note this still finishes the arbiter tail via
+  `poll`, so paid answers are not lost.
+* **Keep walking, deliberately** — because `route()` still serves warm
+  `CachedHit`s without the child, so a warm-cache run survives a child death
+  outright and a cold one degrades to rows-per-file. If this is the intent it is
+  a genuine feature, but it needs the sentence, and the epilogue's "complete and
+  correct" needs a qualifier.
+
+Either way `N1`'s false positive stops being run-fatal, which is why this is on
+the critical path and not a nit.
+
+### N4. `last_progress` is a local, unbound exactly when it is read — MEDIUM
+
+```python
+def drain(block):
+    while (m := ...) is not None:
+        last_progress = now()          # assigned only inside the loop
+        ...
+    if ... now() - last_progress > STALL_S:   # read after it
+```
+
+Read literally this is a `NameError` on any `drain` whose recv loop yields
+nothing — which is the *only* case in which the stall branch can be true. Read
+charitably as driver-level state, it is still wrong in two ways: it has no
+initialisation point, and it is not bumped by `poser.poll()` output.
+
+All three need stating:
+
+* **home**: driver state beside `admission` and `admitted_files`, not a local.
+* **initialised at spawn**, so the child's Filament/open3d startup is inside the
+  first interval rather than being measured against a timestamp that does not
+  exist.
+* **bumped by `poll()` output too**, not just by `results`. An arbiter answer
+  folding is progress; without this the tail's silence compounds `N1` even after
+  `child_owed()` narrows the predicate.
+
+### N5. The `M4` filter needs two names `M2` would have insisted on — LOW
+
+`outstanding()` is now "admitted map minus `retired_ids`, filtered to files that
+still need the child", and the filter reads two things the note does not name:
+the Poser's `parked` dict (`data_structures.md` §Poser continuation state — it
+exists, so this is a citation, not new state) and `cfg.skip_embed`, which makes
+`outstanding()` mode-dependent. `M2`'s lesson was that "both already exist" sends
+an implementor looking for something that isn't there; one clause naming
+`poser.parked` and the cfg flag closes the same gap one pass later. `N1`'s
+`child_owed()` reads the same dict, so both land in one edit.
+
+### N6. Undefined names, third pass running; and the check re-fires — LOW
+
+* `now()`, `STALL_S` and `kill()` are introduced undefined, the same way `warn`
+  was last pass and `ChildDied` the pass before. `STALL_S` is a config constant
+  and should sit with `WINDOW` and `SHORT`; `kill()` is `child.kill()`.
+* After the child dies, `child.exitcode is not None` is true on **every**
+  subsequent `drain`, so `fail_outstanding` runs each time over an empty set.
+  Harmless — retirement is idempotent (`J2`) — but the guard reads better and
+  self-documents as `if outstanding() and (dead or stalled)`, which also states
+  that there is nothing to do when nothing is owed.
+
+### N7. The `M5` diagram edge is drawn one column short — LOW
+
+The `Release` line moved to the top as asked, and it is now unambiguously the
+`tasks` edge. It is one character narrower than the box:
+
+```
+line 62  │  ...  │ ─────▶ │   borders at cols 0, 41, 50, 80
+line 63  │ done ─┼─────▶ │    borders at cols 0, 41, 49, 79   ← the new line
+```
+
+One more `─` (`┼──────▶ │`) and one more trailing space put the child box's walls
+back at 50 and 80. While there: line 65 (`│ bound- │ … LoadedMesh`) has the same
+off-by-one at the right wall and predates this pass — fix both in one edit, since
+the diagram is the artifact people check before believing the prose (`L3`).
+
+## P6.3 What checked out — do not re-verify
+
+* **`M1`'s placement is right, and for the stated reason.** The check is after
+  the recv loop *and* after `poser.poll()`, so a result already in the pipe is
+  consumed before the child can be blamed for it; both blocking loops route
+  through `drain`; `drain(block=False)` in the walker body carries it harmlessly;
+  and `fail_outstanding` at the end of `drain` is not inside any caller's
+  iteration over the same indices. Pass 5's `L1`/`M1` thread is closed.
+* **The response corrected the reviewer, and should be believed over pass 5.**
+  34 ms–2 s was my error; 3–28 s per whole model is the repo's number. `N2`
+  adjusts the constant, not the correction.
+* **`--skip-embed` with a dead child still terminates.** `M4` excludes parked
+  files from `outstanding()`, so `fail_outstanding` leaves them in flight — and
+  they retire on their own when the future folds through `poser.poll()` →
+  `dispatch` → `done.on(Retired)`, which needs no child. `in_flight()` reaches
+  zero. This looks like a leak and is not; leave it.
+* **Kill-before-join is the right order** (`M3`'s own reasoning). The untimed
+  `child.join()` cannot meet a live wedge because `fail_outstanding` kills first,
+  and a killed child's nonzero exitcode then prints as the diagnostic `M5`/`L2`
+  made it — which is the correct signal for that run.
+* **`M2`'s unpruned map is settled.** ~1758 `Path`s is nothing, and pruning needs
+  the `Done`→driver callback `I10` avoided. Do not revisit; if it ever matters,
+  the retirement callback is the cost, not the memory.
+* **`admitted_files` is written before `dispatch`, not after** — so a file that
+  raises in `route()` and retires through the `except` arm is still in the map
+  when `outstanding()` subtracts `retired_ids`. Correct as written.
+
+## P6.4 Suggested order
+
+1. **`N1`** — `child_owed()` for the stall predicate. Without it the detector
+   fires on healthy runs, and it is the same split `M4` already made.
+2. **`N4`** — the timestamp's home, initialisation, and `poll()` bump; same edit
+   region as `N1`.
+3. **`N3`** — decide whether the walk stops. It is what makes `N1`'s failure mode
+   run-fatal rather than window-sized.
+4. **`N2`** — raise `STALL_S` and state the one-sided-error reason; cite
+   `actors_proposal.md:196` for the 3–28 s.
+5. **`N5`, `N6`, `N7`** — any time.
