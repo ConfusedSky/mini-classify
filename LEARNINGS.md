@@ -57,6 +57,11 @@ notes at the bottom are amended in place. Open work is tracked separately in
   coin-toss margins; jpeg dilution and the compiled-tower-that-wasn't canary;
   max-autotune is GEMM-gated off this card; `--compile` ships with the
   numeric regime keyed into the embedding cache.
+- [2026-08-17 — the cache learned its schema, and the design was reviewed into shape](docs/learnings/2026-08-17-cache-schema-and-design-by-review.md)
+  — cache-meta.json and the up_str token (a rename, not a re-embed; the 144
+  the walk left behind); map-on-load beats version bumps; and what eleven
+  adversarial passes taught: walk protocols, remove carve-outs, make
+  invariants mechanical, guard the clean path.
 
 ## Evergreen notes
 
