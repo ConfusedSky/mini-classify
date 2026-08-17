@@ -316,10 +316,15 @@ Two paths:
 write → join.
 
 **Abort** (Ctrl-C, fatal error): a shared `stopping` event that every actor
-checks between messages. No new work starts, in-flight work is abandoned, and the
-`Arbiter` **drops** its queue rather than draining it — queued calls are ~24 s
-each, so joining them hangs Ctrl-C for minutes with nothing to show for it. Their
-files keep the ensemble's pose. A second Ctrl-C is a hard exit.
+checks between messages. No new work starts, and the `Arbiter` **drops** its
+queue rather than draining it — queued calls are ~24 s each, so joining them
+hangs Ctrl-C for minutes with nothing to show for it. In-flight calls are a
+different matter: they are billed already, and their non-daemon threads are
+joined at interpreter exit whether or not anyone reads the results, so the
+abort folds them instead of abandoning them — flush, wait out the calls,
+flush again. Files still unanswered at the deadline keep the ensemble's pose.
+A second Ctrl-C is a hard exit, and after the first flush it costs only the
+calls being waited on (the ordering is fixed in interfaces.md § Shutdown).
 
 **Flush runs on the main thread, not in the actors.** Durable state lives in
 structures the `Supervisor` can read (the pose dict under a lock, the row list);

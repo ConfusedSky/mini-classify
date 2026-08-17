@@ -232,7 +232,8 @@ terminates it. Conventions:
 ```python
 class Poser:
     parked: dict[int, ParkedFile]      # continuation state (data_structures.md),
-                                       # written only here — abandon() owns it —
+                                       # written only here — the abort pair
+                                       # fold_done()/settle() owns its emptying —
                                        # and READ by the driver (P4): the
                                        # quiescence loop and the M4/N1
                                        # subtractions need membership, which is
@@ -242,8 +243,13 @@ class Poser:
     def on_tiles(self, m: PoseTiles) -> EmbedTilesRequest
     def on_tile_embeds(self, m: TileEmbeds) -> EmbedRenderTask | Retired | None
     def poll(self) -> list[EmbedRenderTask | Retired | Failure]   # J3; O5
-    def abandon(self) -> None          # abort: parked files keep their
-                                       # ensemble pose, already recorded (I15)
+    def fold_done(self) -> int         # abort step 1: fold every ALREADY-resolved
+                                       # future. No wait, so no exposure. What it
+                                       # leaves in `parked` is the wait's size
+    def settle(self, timeout) -> int   # abort step 2: wait out the in-flight calls
+                                       # and fold them (I15). Returns how many were
+                                       # abandoned to their ensemble pose — the
+                                       # abort's closing line, when non-zero
 ```
 
 * `on_tiles` stashes `(geo_scores, tiles-grid)` keyed by index and returns
@@ -263,6 +269,18 @@ class Poser:
   itself raises yields `Failure` for that file rather than ending the run
   (J3) — `poll` is its own error boundary, because a raise inside it cannot
   be attributed by the driver.
+* `fold_done` and `settle` are `poll`'s abort-path siblings and reuse its
+  fold, minus the dispatch: a parked file resolved during shutdown wants its
+  `record_pose`, not the `EmbedRenderTask` it would normally yield to a child
+  that is about to be joined. Both inherit `poll`'s error boundary (J3) — a
+  fold that raises during abort costs that one file's answer, never the
+  flush behind it. `settle` skips futures that `shutdown` already cancelled
+  (they raise `CancelledError`); those were queued, never billed.
+* **Abandonment is `settle`'s fallback, not the abort policy** (I15
+  narrowed): a parked file that is still unanswered when `timeout` expires
+  keeps the ensemble pose it recorded at park time. That is the floor, and
+  before this ordering it was also the ceiling — see Shutdown for why every
+  in-flight answer was being paid for and then discarded.
 * The contact sheet is built here — `Image.fromarray` over the grid's first
   column — because arrays are what cross the boundary.
 
@@ -271,17 +289,29 @@ class Poser:
 ```python
 class Arbiter:
     def submit(self, call: Callable[[], int | None]) -> Future
-    def shutdown(self) -> None
+    def shutdown(self) -> None         # wait=False, cancel_futures=True
 ```
 
 Rate limiting and windowing live inside `submit`. `shutdown` cancels
 **queued** futures (`cancel_futures=True`); calls already running are not
-cancellable, and the pool's threads are joined at interpreter exit
-regardless — so Ctrl-C's residual wait is up to one in-flight call
-(~24 s) per worker, in parallel (I7). Today's comment draws exactly this
-queued-vs-running distinction; the second Ctrl-C (hard exit) is what
-bounds the residue, and anyone building on "Ctrl-C is instant" should know
-it is "instant except the in-flight calls".
+cancellable, and the pool's threads are **non-daemon, joined by
+`concurrent.futures`' atexit hook regardless** — so Ctrl-C's residual wait
+is up to one in-flight call (~24 s mean, 45 s p95) per worker, in parallel
+(I7). Today's comment (`classify_stls.py:1238-1241`) draws exactly this
+queued-vs-running distinction, and anyone building on "Ctrl-C is instant"
+should know it is "instant except the in-flight calls".
+
+**That atexit join is why the abort path folds rather than abandons.** The
+wait is not a cost the design gets to decline — the interpreter pays it
+whether or not anything reads the results — so waiting *deliberately*, on
+the parked futures, is free in wall-clock and recovers up to
+`--arbiter-workers` (default 8) answers already billed at ~$0.30 each. The
+one thing `shutdown` must keep doing first is dropping the **queue**:
+unbilled work, and left in place a free worker would pick up a new call
+mid-abort and extend the very wait being spent. `wait=False` over
+`wait=True` for the same reason the driver's constants exist — it hands the
+timeout to the caller (`FOLD_S`) instead of surrendering it to a pool that
+has no notion of the 300 s transport deadline.
 
 ### Embedder — synchronous, owns the GPU
 
@@ -562,7 +592,8 @@ harmlessly, and it runs at the end of `drain` where no caller is
 mid-iteration over the same indices. It also sets `drv.child_failed`, the
 flag that stops the walker admitting to a dead child (N3). Names, so
 nobody hunts for them (N6): `STALL_S` is a driver constant beside
-`WINDOW` and `SHORT`, and `now()` is `time.monotonic()`.
+`WINDOW`, `SHORT`, and the abort path's `FOLD_S`, and `now()` is
+`time.monotonic()`.
 
 (`results.recv` with a short timeout when blocking — the `Transport`
 protocol has no iterator, I16 — and every produced task flows through the
@@ -610,20 +641,71 @@ first, then `EndOfInput`, join, flush.
 Order matters and is fixed:
 
 ```
-arbiter.shutdown()          # cancels QUEUED calls; up to one in-flight
-                            #   ~24s call per worker still runs (I7)
-poser.abandon()             # parked files keep their ensemble pose (already
-                            #   recorded through record_pose)
+arbiter.shutdown()          # FIRST: drop QUEUED calls (unbilled) so no idle
+                            #   worker starts new work while we fold (I7)
+poser.fold_done()           # free: futures already resolved fold now, with no
+                            #   wait between the Ctrl-C and their record_pose
 done.flush()                # pose cache first (the artifact that costs money,
-                            #   temp+os.replace), then partial rows CSV
+                            #   temp+os.replace), then partial rows CSV.
+                            #   The run is durable from here on
+poser.settle(FOLD_S)        # wait out the in-flight calls and fold them —
+                            #   free in wall-clock (the atexit join blocks on
+                            #   these same threads regardless). Whatever misses
+                            #   FOLD_S abandons to its ensemble pose (I15)
+done.flush()                # AGAIN: idempotent, picks up what settle recovered
 tasks.close()               # cancel_join_thread: unflushed pickles must not
                             #   hold the process open (I6)
 child: daemon, join(timeout) — abandoned renders are debug artifacts
 ```
 
-Second Ctrl-C: hard exit — which is also what bounds the arbiter's
-in-flight residue. `flush` is idempotent and runs on the main thread in a
-`finally`, exactly as today's nested-finally chain does.
+**Why the wait is not a concession.** Cancelling the queue and abandoning
+the in-flight calls — the obvious shape, and today's — pays for up to eight
+VLM answers, waits ~24 s for them at interpreter exit, and then discards
+every one: today a Ctrl-C jumps past the deferred-fold loop
+(`classify_stls.py:1222-1236`) straight into the `finally`, and even
+futures that were *already resolved* die there. Since the atexit join makes
+the wait unavoidable, the choice is not "wait or don't" but "read the
+results or throw them away". `FOLD_S` sits above the arbiter's 45 s p95 and
+well under its 300 s transport deadline (`pose.py:456`) — a straggler past
+it loses its answer either way, and `FOLD_S` is a driver constant beside
+`WINDOW`, `SHORT`, and `STALL_S`.
+
+**Flushing twice is what makes waiting safe.** A single flush behind
+`settle` would put the pose cache — the only artifact whose loss costs
+money — behind a minute of silence, so a second Ctrl-C would forfeit the
+whole run's resolutions to recover eight. Flushing before the wait as well
+costs one extra `os.replace` (`flush` is idempotent by contract) and bounds
+the second Ctrl-C's damage to exactly the in-flight calls it interrupts.
+
+**The wind-down narrates itself** — the driver does; no module narrates its
+own shutdown. A stderr line before each step that can *take* time, which is
+`settle` and nothing else: the others are milliseconds or bounded by their
+own timeout. The line is printed before the wait, so its count is
+`len(poser.parked)` once `fold_done` has run — the dict the driver already
+reads by name (P4), no new plumbing:
+
+```
+saved 1203 rows + pose cache; folding 6 in-flight VLM calls already paid
+for (up to 60s) — Ctrl-C again forfeits only those 6
+```
+
+`settle`'s return is the closing line, printed only when it is non-zero:
+`N calls did not answer within 60s; those files keep their ensemble pose`.
+Silence otherwise — a clean abort should not editorialise.
+
+Load-bearing, not cosmetic, and specifically because the ordering above
+already did the hard part: `settle` is the abort's one long silent window,
+a quiet process reads as a hung one, and the reflex answer to a hang is the
+second Ctrl-C. The line's job is to price that keystroke honestly — the run
+is durable, the six are not — which turns it from a panic response into a
+choice. A narration that could only say "please wait" would not be worth
+the code.
+
+Second Ctrl-C: hard exit. Before `done.flush()` it forfeits the run's
+resolutions; after it, only whatever `settle` has not yet folded — which is
+the whole point of flushing on both sides of the wait. `flush` is
+idempotent and runs on the main thread in a `finally`, exactly as today's
+nested-finally chain does.
 
 ## Invariants (the contract the tests pin)
 
