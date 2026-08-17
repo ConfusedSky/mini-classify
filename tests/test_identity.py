@@ -1,8 +1,8 @@
 import argparse
 import os
 
-import identity
-import pose
+from src import identity
+from src import pose
 from classify_stls import cache_key, render_key
 
 

@@ -9,7 +9,7 @@ import torch
 from common import OUT, AX, IDX, load_labels, mark, score  # puts REPO on sys.path
 
 import classify_stls as C
-import pose
+from src import pose
 from siglip_up import PROBES, robust_geometry, geometry_scores
 
 DUMP = {}

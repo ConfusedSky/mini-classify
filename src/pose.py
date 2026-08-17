@@ -10,13 +10,14 @@ import json
 import os
 import time
 import subprocess
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 import open3d as o3d
 from PIL import Image, ImageDraw, ImageFont
 
-import identity
+from src import identity
 
 UP_CANDIDATES = [np.array(u, dtype=float) for u in
                  [(0, 0, 1), (0, 0, -1), (0, 1, 0), (0, -1, 0), (1, 0, 0), (-1, 0, 0)]]
@@ -48,6 +49,55 @@ GEO_FLOOR_POWER = 2
 # ensemble and the margin gate; v3 = geometry attenuated by its base evidence;
 # v4 = the arbiter's contact sheet doubled to 512 px with scaled numerals.
 POSE_CACHE_VERSION = 4
+
+
+@dataclass(frozen=True)
+class Pose:
+    """A resolved pose in flight, replacing the raw cache-entry dict
+    (docs/actor-refactor/data_structures.md). The on-disk pose cache stays
+    JSON dicts; `from_cache`/`to_cache` are the only crossing points.
+
+    The freeze is shallow and `Pose` is unhashable (`front_view` is a dict):
+    nothing may key on a `Pose` — `index` is the identity, everywhere."""
+    up: tuple[float, float, float]
+    confidence: float
+    source: str                    # "forced" | "geometry" | "siglip" | "vlm"
+    v: int                         # no default: from_cache carries it through,
+                                   # fresh resolutions pass POSE_CACHE_VERSION
+                                   # explicitly (D10)
+    margin: float | None = None
+    front_view: dict[str, int] = field(default_factory=dict)   # view_cfg -> index
+
+    @classmethod
+    def from_cache(cls, d):
+        """Absorb legacy *shapes*, not versions: bare-int front_view entries
+        carry no record of the config that produced them and are treated as
+        absent (matching `front_view` below); `margin` is absent from older
+        entries. `v` is carried through, never defaulted — a default of
+        POSE_CACHE_VERSION would stamp unversioned entries as freshly
+        resolved and defeat `load_pose_cache`'s drop rule (D10). Source
+        spellings are already mapped by `load_pose_cache` (RENAMED_SOURCES);
+        this constructor takes the entry as loaded."""
+        fv = d.get("front_view")
+        return cls(up=tuple(float(x) for x in d["up"]),
+                   confidence=float(d.get("confidence", 0.0)),
+                   source=d["source"],
+                   v=d.get("v", 0),
+                   margin=d.get("margin"),
+                   front_view=dict(fv) if isinstance(fv, dict) else {})
+
+    def to_cache(self):
+        """Today's JSON entry shape (classify_stls.py:1138-1141);
+        `front_view` is included only once something has been resolved,
+        matching entries that predate front-view caching."""
+        d = {"up": [float(x) for x in self.up],
+             "confidence": self.confidence,
+             "source": self.source,
+             "margin": self.margin,
+             "v": self.v}
+        if self.front_view:
+            d["front_view"] = dict(self.front_view)
+        return d
 
 
 def up_axis_scores(mesh, n_samples=4000):

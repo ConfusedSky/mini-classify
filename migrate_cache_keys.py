@@ -47,8 +47,8 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-import identity
-import pose
+from src import identity
+from src import pose
 from classify_stls import (CACHE_VERSION, DEFAULT_ELEVATIONS, EMBEDS_SUBDIR,
                            RENDERS_SUBDIR, add_cache_args, apply_run_params,
                            cache_key, cache_key_from_identity, cache_version,

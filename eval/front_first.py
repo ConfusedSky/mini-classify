@@ -23,7 +23,7 @@ import numpy as np
 
 from common import AX, OUT, build_tiles, load_labels  # puts REPO on sys.path
 
-import pose
+from src import pose
 
 BACKBONE = "google/siglip2-so400m-patch14-384"
 RENDER_PX = 384          # measured as good as 2048 for this, and ~3x faster to embed

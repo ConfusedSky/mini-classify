@@ -67,7 +67,7 @@ import numpy as np
 
 from common import AX, OUT, build_tiles, load_labels   # puts REPO on sys.path
 
-import pose
+from src import pose
 
 BACKBONE = "google/siglip2-so400m-patch14-384"   # what production runs
 RENDER_PX = 384                                  # what run_classify.sh renders at

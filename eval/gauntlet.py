@@ -20,7 +20,7 @@ import argparse, json, time
 from common import (AX, OUT, ask_claude, ask_gemma, build_sheets, build_tiles,  # sys.path
                     load_labels)
 
-import pose
+from src import pose
 
 BACKBONES = ["google/siglip2-so400m-patch14-384", "google/siglip2-so400m-patch16-512"]
 RENDER_SIZES = [384, 512, 1024, 2048]

@@ -42,7 +42,7 @@ import numpy as np
 from common import OUT  # puts REPO on sys.path
 
 import torch
-import pose
+from src import pose
 from classify_stls import (add_cache_args, apply_run_params, as_tensor,
                            embed_raw, load_mesh, make_renderer,
                            render_up_candidate_grid)

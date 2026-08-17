@@ -77,7 +77,7 @@ def load_baselines():
 def contact_sheet(tiles, thumb, cols=3):
     """The production sheet. pose.make_contact_sheet owns the layout and the
     scaled numerals now — this stays only so harnesses keep one import."""
-    import pose
+    from src import pose
     return pose.make_contact_sheet(tiles, thumb, cols)
 
 
@@ -85,7 +85,7 @@ def ask_claude(model, sheet, n_tiles=6):
     """Arbiter answer from a Claude model through the CLI. One retry, then None
     — the pipeline never hard-fails on the VLM, so neither does a harness."""
     import subprocess
-    import pose
+    from src import pose
     prompt = f"Read the image at {sheet}. {pose.UP_PROMPT}"
     for _ in range(2):
         try:
@@ -104,7 +104,7 @@ def ask_claude(model, sheet, n_tiles=6):
 
 def ask_gemma(sheet, model="gemma4:26b", n_tiles=6):
     """Arbiter answer from the local ollama VLM. Same contract as ask_claude."""
-    import pose
+    from src import pose
     for _ in range(2):
         try:
             v = pose._ask_ollama(sheet.read_bytes(), n_tiles, model)
@@ -126,7 +126,7 @@ def build_tiles(labels=None, render_px=2048):
     """
     import numpy as np
     import classify_stls as C
-    import pose as P
+    from src import pose as P
     labels = labels if labels is not None else load_labels()
     d = OUT / f"tiles{render_px}"
     d.mkdir(parents=True, exist_ok=True)

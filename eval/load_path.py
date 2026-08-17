@@ -25,7 +25,7 @@ from PIL import Image
 
 from common import OUT as EVAL_OUT  # puts REPO on sys.path for classify_stls
 from classify_stls import make_renderer, rotation_to_z_up, render_views, _upload
-import pose
+from src import pose
 
 STL = sys.argv[1] if len(sys.argv) > 1 else "test-stls/bunny.stl"
 SIZE = 512

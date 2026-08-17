@@ -143,7 +143,7 @@ class Rendered:                    # → Done: the needs_embed=False ack. The
 ```
 
 The arbiter path needs the six first-column tiles as PIL Images for
-`make_contact_sheet` (`pose.py:300`): **the Poser converts** with
+`make_contact_sheet` (`src/pose.py:376`): **the Poser converts** with
 `Image.fromarray` at sheet-build time — arrays are what cross the boundary.
 
 ### Poser ↔ Embedder (the ensemble) — D5
@@ -341,7 +341,7 @@ class Pose:
   per-config dicts — today merged at the *write* site
   (`classify_stls.py:1100-1103`, D3) — and `margin` is absent from older
   entries. Version filtering already has a home and keeps it:
-  `load_pose_cache` drops mismatched `v` before construction (`pose.py:126`).
+  `load_pose_cache` drops mismatched `v` before construction (`src/pose.py:182`).
   `from_cache` therefore carries `v` through rather than defaulting it — a
   field default of `POSE_CACHE_VERSION` would stamp unversioned entries as
   freshly resolved and silently defeat that drop rule (D10).
@@ -574,4 +574,4 @@ attempts all three artifacts (`classify_stls.py:1134-1169`), and a torn
 (`classify_stls.py:1086-1092`) — temp + `os.replace` would still be stronger
 against SIGKILL, but it is a hardening, not an open hole. What remains open is
 the one whose loss costs money: **`save_pose_cache` is a bare `write_text`**
-(`pose.py:133-138`); write temp + `os.replace` when `Done` takes it over.
+(`src/pose.py:200-205`); write temp + `os.replace` when `Done` takes it over.

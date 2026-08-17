@@ -18,7 +18,7 @@ import argparse, json, time
 
 from common import AX, OUT, build_tiles, load_labels  # puts REPO on sys.path
 
-import pose
+from src import pose
 
 BASE = "google/siglip2-so400m-patch14-384"       # what production runs today
 CANDIDATE = "google/siglip2-so400m-patch16-512"  # higher input resolution

@@ -40,11 +40,11 @@ import torch
 from PIL import Image
 from tqdm import tqdm
 
-import identity
 import instrument
-import pose
+from src import identity
+from src import pose
 from naming import SKIP_TAGS, skip
-from pose import detect_up_axis
+from src.pose import detect_up_axis
 from instrument import stage
 
 def as_tensor(feat):

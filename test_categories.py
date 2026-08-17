@@ -28,7 +28,7 @@ from urllib.parse import quote
 import numpy as np
 import torch
 
-import pose
+from src import pose
 from classify_stls import (add_cache_args, apply_run_params, as_tensor, cache_key,
                            cache_root, embed_raw, embed_texts, embeds_dir,
                            load_file_list,

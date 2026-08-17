@@ -1,9 +1,15 @@
+import subprocess
+import sys
+from pathlib import Path
+
 import numpy as np
 import open3d as o3d
 import pytest
 from PIL import Image
 
-import pose
+from src import pose
+
+REPO = Path(__file__).resolve().parent.parent
 
 
 def prepared(mesh):
@@ -188,6 +194,39 @@ def test_pose_cache_renames_legacy_sources(tmp_path):
     assert [got[k]["source"] for k in "abc"] == ["geometry", "siglip", "vlm"]
 
 
+def test_pose_from_cache_never_defaults_v():
+    # D10: `v` is carried through, never defaulted — a default of
+    # POSE_CACHE_VERSION would stamp unversioned entries as freshly resolved
+    # and defeat load_pose_cache's drop rule
+    p = pose.Pose.from_cache({"up": [0, 0, 1], "source": "geometry"})
+    assert p.v != pose.POSE_CACHE_VERSION
+    assert p.v == 0
+    assert p.margin is None                      # absent from older entries
+
+
+def test_pose_from_cache_treats_bare_int_front_view_as_absent():
+    # D3: pre-keying entries (real on disk: embed-cache3 is nearly all
+    # `front_view: 0`) carry no record of the config that produced them
+    entry = {"up": [0.0, 0.0, 1.0], "confidence": 0.17, "source": "geometry",
+             "margin": 1.6489, "v": 4, "front_view": 0}
+    assert pose.Pose.from_cache(entry).front_view == {}
+    # a per-config dict is preserved as-is
+    keyed = dict(entry, front_view={"8v-e20,-20": 5})
+    assert pose.Pose.from_cache(keyed).front_view == {"8v-e20,-20": 5}
+
+
+def test_pose_to_cache_round_trips_a_real_entry():
+    # the embed-cache2 shape (post-source-rename), all fields present
+    entry = {"up": [0.0, 0.0, 1.0], "confidence": 0.17, "source": "geometry",
+             "margin": 1.6512, "v": 4, "front_view": {"8v-e20,-20": 0}}
+    assert pose.Pose.from_cache(entry).to_cache() == entry
+    # `front_view` is omitted when nothing has been resolved, matching
+    # entries that predate front-view caching
+    bare = {k: v for k, v in entry.items() if k != "front_view"}
+    assert pose.Pose.from_cache(bare).to_cache() == bare
+    assert "front_view" not in pose.Pose.from_cache(dict(bare, front_view=0)).to_cache()
+
+
 def test_front_view_is_keyed_by_view_config():
     # an index cached at 8 views is out of range at 4, and silently wrong at
     # the same count with different elevations — so a config miss is a miss
@@ -235,6 +274,26 @@ def test_make_contact_sheet_grid():
 
 requires_ollama = pytest.mark.skipif(not pose.ollama_available(),
                                      reason="ollama not running")
+
+
+def test_importing_pose_does_not_import_torch_or_src_peers():
+    """The import-rule table's leaf rule (interfaces.md): `pose` must not
+    import torch or any other src/ module — it is the leaf both sides of the
+    process boundary import, so a back-import would make it a peer and a
+    torch import would hand the render child VRAM/startup cost for nothing.
+    `src.identity` is the table's one sanctioned dependency (the leaf below
+    the leaf). Mirrors test_messages.py's I8 guard: fresh interpreter, then
+    inspect sys.modules."""
+    allowed = "{'src', 'src.pose', 'src.identity'}"
+    code = ("import sys; from src import pose; "
+            "bad = [k for k in sys.modules if k == 'torch' "
+            "or k.startswith('torch.')]; "
+            "bad += [k for k in sys.modules if (k == 'src' "
+            f"or k.startswith('src.')) and k not in {allowed}]; "
+            "print(', '.join(bad)); sys.exit(1 if bad else 0)")
+    r = subprocess.run([sys.executable, "-c", code], cwd=REPO,
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, f"forbidden imports: {r.stdout}\n{r.stderr}"
 
 
 @requires_ollama

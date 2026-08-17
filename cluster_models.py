@@ -18,7 +18,7 @@ import numpy as np
 from PIL import Image
 from sklearn.cluster import KMeans
 
-import pose
+from src import pose
 from classify_stls import (add_cache_args, apply_run_params, cache_root,
                            load_file_list, render_index, render_key, renders_dir,
                            view_config)

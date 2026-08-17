@@ -17,7 +17,7 @@ from PIL import Image
 from common import OUT, AX, IDX, collection_root, load_labels, mark, score  # puts REPO on sys.path
 
 import classify_stls as C
-import pose
+from src import pose
 
 OUT = OUT / "siglip_up"
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 12

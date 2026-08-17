@@ -31,7 +31,7 @@ DIR = OUT / "gold_upright"
 def render(labels):
     """One JPEG per (model, azimuth), skipping pairs already on disk."""
     import classify_stls as C
-    import pose as P
+    from src import pose as P
 
     DIR.mkdir(parents=True, exist_ok=True)
     paths = {l["stem"]: [DIR / f"{l['stem']}_az{int(a)}.jpg" for a in AZIMUTHS]

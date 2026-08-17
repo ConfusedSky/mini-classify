@@ -52,7 +52,7 @@ accordingly: cache-building throughput and REPL quality first.
   contend; the split is a measured win — keep it.
 - **`render_to_image` holds the GIL** (~85–92%). Threads cannot overlap
   rendering; a child process can (measured 1.17–1.21×, thermally capped).
-- **`pose.py` never imports `classify_stls`** — no rendering or model code
+- **`src/pose.py` never imports `classify_stls`** — no rendering or model code
   in it.
 - **`read_binary_stl`: the file outvotes a lying header** (commit `bd6be81`,
   for Materialise Magics files). The remaining guards — ASCII detection,

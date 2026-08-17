@@ -37,7 +37,7 @@ from PIL import Image
 
 from common import AX, OUT, build_tiles, load_labels   # puts REPO on sys.path
 
-import pose
+from src import pose
 
 CONFIGS = ("padded-384", "filled-384", "native-512")
 

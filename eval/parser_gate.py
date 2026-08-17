@@ -50,7 +50,7 @@ import torch
 from common import AX, OUT, collection_root, load_labels   # puts REPO on sys.path
 
 import classify_stls as C
-import pose
+from src import pose
 
 PX = int(sys.argv[1]) if len(sys.argv) > 1 else 384
 MID = "google/siglip2-so400m-patch14-384"

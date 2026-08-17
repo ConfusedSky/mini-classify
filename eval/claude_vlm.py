@@ -6,7 +6,7 @@ from pathlib import Path
 
 from common import OUT, AX, IDX, ask_claude, load_labels, mark, score  # puts REPO on sys.path
 
-import pose
+from src import pose
 
 I = IDX
 SC = OUT

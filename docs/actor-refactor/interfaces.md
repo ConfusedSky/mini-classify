@@ -38,6 +38,7 @@ src/done.py          scoring, rows, pose store, retirement, Release, flush
                      — the second parent-side writer on tasks (L3)
 src/driver.py        the sequential loop; owns admission
 src/pose.py          math + Pose + caches                  [moves from the root]
+src/identity.py      cache keying: collection_root + keys  [moves from the root]
 classify_stls.py     CLI entry: args, run-params, cache guards -> driver
 ```
 
@@ -48,7 +49,8 @@ Import rules, and why each is load-bearing:
 | child side (`loader`, `renderer`, `render_child`) | open3d, PIL, numpy, `messages`, pose | **torch** | SigLIP lives in the parent; a torch import in the child costs VRAM and startup for nothing |
 | `poser` | torch (one conversion), numpy, pose, PIL (contact sheet) | open3d renderer calls | the Poser consumes geometry *scores* (computed child-side) and tiles, never the mesh itself |
 | `embedder` | torch, transformers | — | the only owner of models |
-| `pose` | numpy, open3d, PIL | torch, **any other `src/` module** | the standing rule, unchanged by the move: `pose` is the leaf both sides import (the child for `up_axis_scores`, the Poser for `combine_up`, `messages` for `Pose`), so it must depend on nothing in the pipeline. Living in `src/` makes it a sibling of its importers, not a peer that may import back |
+| `pose` | numpy, open3d, PIL, `identity` | torch, **any other `src/` module** | the standing rule, unchanged by the move: `pose` is the leaf both sides import (the child for `up_axis_scores`, the Poser for `combine_up`, `messages` for `Pose`), so it must depend on nothing in the pipeline. Living in `src/` makes it a sibling of its importers, not a peer that may import back |
+| `identity` | stdlib only | **anything in `src/`, and any third-party import** | the deepest leaf: every cache keys on it (invariant 2), `pose` imports it, and a leaf below the leaf must cost nothing to import anywhere — parent, child, or a bare test |
 | `messages` | pose, numpy; torch **under `TYPE_CHECKING` only**, with `from __future__ import annotations` | a module-scope `import torch` | the child unpickles its tasks from `messages` — a real torch import there hands the child exactly the dependency the first row forbids (I8). The two tensor-typed messages never cross a queue, so the name is annotation-only |
 
 (pose.py imports open3d for `up_axis_scores`, so the parent transitively
@@ -436,7 +438,7 @@ def run(cfg) -> None:
                                               # paid answers land before flush —
                                               # bounded by the arbiter's own
                                               # 300 s transport deadline
-                                              # (pose.py:456, :379 — O4), not by
+                                              # (src/pose.py:506, :429 — O4), not by
                                               # anything in this loop. A killed
                                               # child plus a just-submitted call
                                               # can mean five quiet minutes
@@ -533,7 +535,7 @@ permanent, so a four-minute detection costs four minutes of a multi-hour
 run exactly once, while a false positive kills a healthy child — so the
 deadline sits ~8.5× above the documented top of range, a statement about
 rendering, never about the network. And deliberately **not** 300 s: that
-is the arbiter's transport deadline (pose.py:456), an unrelated number
+is the arbiter's transport deadline (src/pose.py:506), an unrelated number
 `STALL_S` should not shadow. This repo's renderer has a documented
 history of aborting rather than returning; one timestamp is cheap
 insurance.
@@ -666,7 +668,7 @@ every one: today a Ctrl-C jumps past the deferred-fold loop
 futures that were *already resolved* die there. Since the atexit join makes
 the wait unavoidable, the choice is not "wait or don't" but "read the
 results or throw them away". `FOLD_S` sits above the arbiter's 45 s p95 and
-well under its 300 s transport deadline (`pose.py:456`) — a straggler past
+well under its 300 s transport deadline (`src/pose.py:506`) — a straggler past
 it loses its answer either way, and `FOLD_S` is a driver constant beside
 `WINDOW`, `SHORT`, and `STALL_S`.
 

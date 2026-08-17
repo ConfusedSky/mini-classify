@@ -6,7 +6,7 @@ import open3d.visualization.rendering as rendering
 from PIL import Image, ImageDraw
 
 from classify_stls import load_mesh, rotation_to_z_up
-import pose
+from src import pose
 
 from common import OUT, AX, IDX, load_labels, mark, score
 

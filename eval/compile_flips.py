@@ -34,7 +34,7 @@ from PIL import Image
 from common import OUT  # puts REPO on sys.path
 
 import torch
-import pose
+from src import pose
 from classify_stls import (add_cache_args, apply_run_params, as_tensor,
                            cache_key, cache_root, embed_texts, embeds_dir,
                            load_file_list, pool_sims, render_key, renders_dir)

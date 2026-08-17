@@ -16,7 +16,7 @@ from pathlib import Path
 
 from common import AX, OUT, build_sheets, load_baselines, load_labels  # puts REPO on sys.path
 
-import pose
+from src import pose
 
 PROJECT = "mini-classify"
 LOCATION = "global"

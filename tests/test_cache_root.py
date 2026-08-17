@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-import identity
+from src import identity
 from classify_stls import RUN_PARAMS_FILE, cache_root
 
 

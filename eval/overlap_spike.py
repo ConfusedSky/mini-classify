@@ -42,7 +42,7 @@ import numpy as np
 
 from common import OUT  # puts REPO on sys.path
 
-import pose
+from src import pose
 from classify_stls import (add_cache_args, apply_run_params, cache_root,
                            load_file_list, load_mesh, make_renderer,
                            render_up_candidate_grid, render_views,

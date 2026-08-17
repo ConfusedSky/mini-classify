@@ -24,7 +24,7 @@ import numpy as np
 
 from common import AX, IDX, OUT, RESULTS_FILE, build_tiles, load_labels  # sys.path
 
-import pose
+from src import pose
 
 BACKBONE = "google/siglip2-so400m-patch14-384"
 RENDER_PX = 2048
