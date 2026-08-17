@@ -1548,3 +1548,216 @@ the diagram is the artifact people check before believing the prose (`L3`).
 4. **`N2`** — raise `STALL_S` and state the one-sided-error reason; cite
    `actors_proposal.md:196` for the 3–28 s.
 5. **`N5`, `N6`, `N7`** — any time.
+
+---
+
+# Pass 7 — 2026-08-17, against `d45d8cb`
+
+Three commits: `d716017` recorded pass 6, `b1a7a79` is the schema/process
+write-up, `d45d8cb` is the response.
+
+New findings carry `O` IDs.
+
+## P7.0 Verdict
+
+**Every substantive finding is taken, and one of them is taken better than it
+was raised. What is left is scoping — the new state is described as driver state
+and written as if it were local, which is the same bug `N4` was about, one level
+up.**
+
+`child_owed()` is now a named subtraction sitting beside `outstanding()`, with
+the two roles spelled out where they differ ("who to fail" vs "what counts as
+evidence of child liveness"). That is `N1` exactly. `STALL_S` is ~300 s with the
+one-sided-error argument and the `actors_proposal.md:196` citation. `N7` verifies:
+all thirteen box rows now put the child walls at columns 50 and 80.
+
+`N3` came back **better than I asked for**. I offered "stop admitting" and
+accepted losing the in-flight arbiter answers as the price; the response took the
+option and then noticed that `in_flight() > 0` alone would drop the paid answers
+it had just spent `M4` protecting, and added `or poser.parked` so each fold still
+`record_pose()`s before `flush`. That is the finding's intent rather than its
+letter, and it is the right call.
+
+No HIGHs this pass. The remaining findings are plumbing (`O1`–`O3`), one citation
+the clause needs to look bounded (`O4`), one stale signature (`O5`), and one
+correction to the process write-up, which now contradicts itself (`O6`).
+
+`O1` is the only one on the critical path: as written, **both** the `N3` and `N4`
+fixes are inert.
+
+## P7.1 Disposition of pass 6
+
+| finding | status |
+|---|---|
+| N1 | **taken, and the shape is right** — `child_owed()` is a named subtraction with its role stated against `outstanding()`'s. See `O2`: it makes half of `N4` obsolete |
+| N2 | taken — ~300 s, the 3–28 s citation, and the one-sided-error reasoning stated as the reason rather than the conclusion |
+| N3 | taken, **and improved**: `child_failed` stops the walk, and `or poser.parked` keeps the paid answers that the letter of my finding would have discarded. Scoping is `O1`, an off-by-one is `O3`, the clause's bound is `O4` |
+| N4 | taken in prose — spawn init, `poll()` bump, "never a local" — but the pseudocode still assigns bare names inside `drain` (`O1`), and the `poll()` bump is now a liability rather than a fix (`O2`) |
+| N5 | taken — `poser.parked` cited as existing continuation state, `cfg.skip_embed` named as what makes `outstanding()` mode-dependent |
+| N6 | taken — `STALL_S` beside `WINDOW`/`SHORT`, `now()` is `time.monotonic()`, `child.kill()`, and the outer `outstanding()` guard. `child_failed` is the one new name that arrived undefined (`O1`) |
+| N7 | verified — columns 50/80 on every box row, `LoadedMesh` included |
+
+## P7.2 New findings
+
+### O1. The new driver state is written as locals — MEDIUM
+
+Two names are now read in `run` and written in `drain`/`fail_outstanding`:
+
+```python
+def run(cfg):
+    last_progress = now()
+    ...
+        if child_failed: break
+
+def drain(block):
+    last_progress = now()          # <-- rebinds a LOCAL of drain
+```
+
+If `drain` is a closure over `run` — which it must be, since it reads `child`,
+`poser`, `admission` and `done` — then in Python a bare assignment makes
+`last_progress` local to `drain`, and `now() - last_progress` two lines later
+raises `UnboundLocalError` on every call whose recv loop and poll both came back
+empty. That is `N4`'s bug, unchanged, one scope up: the note now *says* "driver
+state … never a local" while the code still shows the binding that makes it one.
+
+`child_failed` has it worse. `fail_outstanding` sets it, `run` reads it, and the
+write is invisible to the reader for the same reason — so the walker never
+breaks and `N3` silently does not happen. It is also never initialised anywhere.
+
+Pick a mechanism and show it, since this is the third pass in a row where a fix
+was correct in prose and unbound in code:
+
+* `nonlocal last_progress, child_failed` at the top of the functions that write
+  them, plus `child_failed = False` beside `admission` at spawn; or
+* the state these three names describe is really one object —
+  `admission`, `admitted_files`, `last_progress`, `child_failed` — so
+  `drv.last_progress = ...` and `if drv.child_failed: break` removes the class of
+  bug rather than patching this instance.
+
+I lean to the second: `M2`, `N4` and `O1` are all the same finding arriving
+three times, which is the signal that the container is missing and not the
+declaration.
+
+### O2. The `poll()` bump is now a wedge-detection weakener — LOW
+
+`N4` asked for `last_progress` to be bumped by `poll()` output, and the response
+took it. That request was written against the *old* predicate, where the tail's
+silence was what caused the false positive. `N1` fixed that at the source:
+`child_owed()` is empty in the tail, so the clock cannot run there no matter what
+the timestamp says. The bump now prevents nothing — and it costs something.
+
+A child that wedges mid-run while arbiter calls are still outstanding has its
+stall clock reset by every fold. Bounded, not unbounded: a wedged child sends no
+`PoseTiles`, so no new files park, and the set drains within the arbiter's own
+deadline. But the worst case doubles detection — a fold landing at 299 s buys
+another full `STALL_S` — for no remaining benefit.
+
+Drop it, or gate it (`if not child_owed(): last_progress = now()`). My finding,
+my error; `N1` and `N4` overlapped and only one of them was needed.
+
+### O3. The `break` lets exactly one more file through — LOW
+
+`if child_failed: break` sits at the top of the loop body, but the most likely
+place for `fail_outstanding` to fire is the admission gate *below* it:
+
+```python
+    for index, f in enumerate(walker):
+        if child_failed: break                 # checked here
+        while admission.in_flight() >= WINDOW:
+            drain(block=True)                  # ...set here
+        admission.admitted += 1                # ...so this file is still admitted
+```
+
+Retirement drops `in_flight()` to zero, the gate releases, and the current file is
+admitted and dispatched to a child already known to be dead — then failed on the
+next `drain`. So the CSV `N3` wanted cleanly truncated ends with one `Failure`
+row for a file nothing ever tried to render, which is the one row a reader would
+take seriously.
+
+`while not child_failed and admission.in_flight() >= WINDOW:` and a re-check
+after the gate, or hoist both into one `if child_failed: break` after the gate.
+
+### O4. The `or poser.parked` clause looks unbounded and is not — LOW
+
+On the death path the loop runs with `in_flight()` at zero, waiting on futures
+whose child is gone. Nothing in the note bounds that wait, and the reader who has
+just read six passes about hangs will look for the bound.
+
+It exists, in the code and not in the note: the arbiter's HTTP call carries
+`timeout=300` (`pose.py:456`, and `pose.py:379` for the ollama path). Cite it
+where the clause is introduced — *"bounded by the arbiter's own 300 s transport
+deadline, not by anything in this loop"* — and note that a killed child plus a
+just-submitted call means up to five minutes between the stderr line and the
+CSV, so nobody reads the tail as a hang.
+
+While there: that deadline and `STALL_S` are now both 300 s and mean unrelated
+things. Either say the collision is a coincidence, or move `STALL_S` off it
+(240 s is still ~8.5× the top of range).
+
+### O5. `poll()`'s signature omits `Failure`, and the walrus depends on it — LOW
+
+Line 220 declares `def poll(self) -> list[EmbedRenderTask | Retired]`; the prose
+eleven lines down declares `list[EmbedRenderTask | Retired | Failure]`, which is
+the true one (`J3`, `K3`). Pre-existing, but two things now lean on it: `dispatch`
+walks `polled` and must route the `Failure` arm, and `if polled := poser.poll()`
+is only correct because the return is a **list**.
+
+That second one is worth stating where the walrus is, because the prose describes
+`poll` with generator language ("each resumed file *yields* its task"). If anyone
+ever makes it a generator, `if polled:` is unconditionally true, `last_progress`
+is bumped on every `drain`, and the stall clock silently never fires again — a
+wedge goes back to hanging the run, with no symptom. Fix the signature, and say
+`poll` returns a list *because* the caller tests it.
+
+### O6. The process write-up's convergence claim contradicts its own data — LOW
+
+`docs/learnings/2026-08-17-cache-schema-and-design-by-review.md` is a good note,
+and two lines in it are now wrong:
+
+* **"Findings shrinking monotonically is the convergence signal"** — neither
+  sequence in the same bullet is monotonic: data structures `15 → 7 → 5 → 2 → 4
+  → 1`, interfaces `16 → 8 → 7 → 4 → 5`. Pass 6 then went `5 → 7`. The claim
+  matters because it is the stopping rule; on a count test this review would have
+  been called converged at `L4`, one pass before the liveness hang and two before
+  the stall clock. What actually fell monotonically is **severity and order**:
+  `I`/`J` were hangs in the protocol, `K`–`M` were failure-path holes, `N` was one
+  mechanism's arithmetic, `O` is scoping and citations. Amend to that.
+* **"eleven review passes"** (also in the header and `LEARNINGS.md` index line)
+  is twelve with pass 6, thirteen with this one.
+
+Also worth amending rather than deleting: *"Verify a reviewer's numbers before
+folding them in (all of them reproduced, every time)"* now has its first
+counter-example, and it is the best evidence for the lesson — pass 5's
+`34 ms–2 s` did **not** reproduce, the response checked it, found `3–28 s`, and
+corrected the reviewer. That is the convention working, not an exception to it.
+
+## P7.3 What checked out — do not re-verify
+
+* **`child_owed()` is the right cut, in the right place.** Empty in the tail
+  where the child is idle by construction (`I1`), never empty during a wedge
+  because a wedge means holding a task. The outer `outstanding()` guard makes
+  the dead-child arm idempotent-cheap. `N1` is closed.
+* **`or poser.parked` is correct on both paths, and non-obvious.** Outside
+  `--skip-embed` the parked files were already retired by `fail_outstanding`, so
+  `in_flight()` is zero while their answers are still in the air; the clause is
+  what makes `record_pose` run before `flush`. Inside `--skip-embed` they were
+  never failed, so `in_flight()` covers them and the clause is redundant but
+  harmless. Folding a task for an already-retired index dispatches to a dead
+  child and is a no-op (`J2`). Do not simplify this away.
+* **`N7` is verified mechanically**, not by eye: every box row of the wiring
+  diagram has its borders at columns 0, 41, 50, 80.
+* **The epilogue's qualifier is now accurate.** "Complete and correct" scoped to
+  the clean walk, with the death path's stderr line plus truncated CSV named as
+  the crash report, is the honest version of `L2`.
+* **`STALL_S` at ~300 s clears every documented child work unit** — 3–28 s per
+  model, 15.4 s p99 mesh load — by ~10×, and clears the arbiter entirely now that
+  the arbiter cannot start the clock at all.
+
+## P7.4 Suggested order
+
+1. **`O1`** — until the two names are scoped, `N3` never fires and `N4` raises.
+   Prefer the state object; it retires `M2`/`N4`/`O1` as a class.
+2. **`O3`** — same edit region, one line.
+3. **`O2`** — delete the bump, or gate it on `not child_owed()`.
+4. **`O4`, `O5`** — one citation and one signature.
+5. **`O6`** — amend the write-up in place, per the LEARNINGS convention.
