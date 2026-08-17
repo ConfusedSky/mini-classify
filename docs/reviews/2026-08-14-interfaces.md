@@ -1988,3 +1988,51 @@ has been wrong; get the arithmetic in it and it can stop being edited.
 
 Then stop. The protocol terminates, the failure paths close, the shapes have
 homes, and the remaining edits are prose.
+
+---
+
+# Close — 2026-08-17, against `3457a9e`
+
+Two commits: `6ebd50e` recorded pass 8, `3457a9e` is the response. **Not a ninth
+pass** — pass 8 called the stop and the response took it, so this is the
+verification of the closing edits and the sign-off. No new finding IDs.
+
+## Disposition of pass 8
+
+| finding | status |
+|---|---|
+| P1 | taken as recommended — code unchanged, the three clauses stated, and the inexact front edge recorded as the deliberate trade with its reason (warm-run survival outranks a crisp edge, because the caches are the product). The old sentence is gone from the pseudocode and replaced by a pointer, so there is one description, not two |
+| P2 | taken — `Admission()` constructed in `run`, the sharing contract stated where the container is declared, and the consequence of a second instance named as `I1`'s hang. See the one carry-over below |
+| P3 | taken, both halves. Quiescence in `data_structures.md` is now walker-exhausted **and** `admitted == retired` **and** no parked file, with the "differ only on the post-`fail_outstanding` path" clause and the healthy-run case that makes the counter sufficient; the "plain counter" sentence is replaced by `DriverState` with a pointer back here |
+| P4 | **deviated, correctly — my recommendation was wrong.** I wrote that the predicate "is the only thing either caller needs"; it is not. The quiescence loop needs truth, but `outstanding()` and `child_owed()` subtract the parked *set*, so `has_parked()` would have served one consumer of two and the second would have reached past it anyway. Exposing `parked` with the read named in the sketch is the right call, and deviating on the premise rather than the conclusion is the right way to have made it |
+| P5 | taken — the stop-on-first-rise test fires after pass 4, which is the accurate version, and the sequence, the pass counts (fourteen / eight) and the index line all agree |
+
+## One carry-over, one line
+
+`Admission()` is called with no arguments, but `Admission` is declared in
+`data_structures.md` §Supervisor accounting as two un-annotated-default fields
+and is the one class in that file **not** decorated `@dataclass` — every message
+type there is `@dataclass(frozen=True)`. As written the construction `P2` added
+does not run. Either give it `admitted: int = 0` / `retired: int = 0`, or write
+`Admission(0, 0)`. Not worth a pass; fold it into the next edit that touches
+either note.
+
+## Sign-off
+
+Eight passes, `I1`–`P5`, 58 findings. What the note looked like at `de5c7fe` and
+what it looks like now differ on every question that decides whether a run
+finishes: three of four run modes hung, both boundary queues were bounded around
+a cycle, the end-of-input sentinel preceded the arbiter tail, and files could
+retire twice or not at all. None of that is true any more, and each fix is
+mechanical rather than conventional — the property this review kept pushing for
+and the reason the last three passes found scoping and prose instead of hangs.
+
+The remaining work is implementation, and the note is now specific enough to
+implement from: every named type resolves, every constant has a home, every
+cross-module read is declared, and the two companion notes agree with it. Where
+this design is still a guess rather than a measurement — the child's true
+worst-case work unit against `STALL_S`, and whether `WINDOW` wants the depth the
+spikes suggested — the first cold run will say so, and that belongs in
+`docs/learnings/`, not here.
+
+Review closed.
