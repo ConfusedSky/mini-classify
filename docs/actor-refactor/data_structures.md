@@ -428,9 +428,11 @@ One counter doing three jobs — admission, quiescence, and bounding the
 in-flight window:
 
 ```python
-class Admission:
-    admitted: int                  # written only by the driver
-    retired: int                   # written only by Done — once per index,
+@dataclass                         # NOT frozen — the one mutable shape here —
+class Admission:                   # with defaults, so run's Admission()
+    admitted: int = 0              # constructs (sign-off carry-over).
+                                   # admitted: written only by the driver
+    retired: int = 0               # written only by Done — once per index,
                                    # whichever of Embedded / CachedHit(retires)
                                    # / Failure / Retired / Rendered arrives;
                                    # repeats ignored via retired_ids (J2)
