@@ -206,8 +206,9 @@ uniform contract won: the Embedder returns what it computes, and conversion
 is the consumer's business. `Done` keeps the tensor on device for its
 `img_embeds @ text_embeds.T`; the **Poser** does the one
 `.float().cpu().numpy()` before handing tiles to the ensemble math. The torch
-import that requires lives in the Poser module under `src/` — `pose.py`
-itself stays torch-free, receiving plain arrays as it always has. Both
+import that requires lives in `src/poser.py` — `src/pose.py` itself stays
+torch-free, receiving plain arrays as it always has (siblings once the
+refactor moves it; the no-torch rule was never about the directory). Both
 messages live entirely in the parent process, so nothing here is ever
 pickled and transport plays no part in the choice. Nor is "on device" a
 residency claim for `Done` (R5): it still lands on numpy for

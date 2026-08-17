@@ -37,7 +37,7 @@ src/embedder.py      SigLIP; the only module that owns torch models
 src/done.py          scoring, rows, pose store, retirement, Release, flush
                      — the second parent-side writer on tasks (L3)
 src/driver.py        the sequential loop; owns admission
-pose.py              math + Pose + caches (unchanged home)
+src/pose.py          math + Pose + caches                  [moves from the root]
 classify_stls.py     CLI entry: args, run-params, cache guards -> driver
 ```
 
@@ -46,9 +46,9 @@ Import rules, and why each is load-bearing:
 | module | may import | must NOT import | because |
 |---|---|---|---|
 | child side (`loader`, `renderer`, `render_child`) | open3d, PIL, numpy, `messages`, pose | **torch** | SigLIP lives in the parent; a torch import in the child costs VRAM and startup for nothing |
-| `poser` | torch (one conversion), numpy, pose, PIL (contact sheet) | open3d renderer calls | the Poser works on renders, never geometry |
+| `poser` | torch (one conversion), numpy, pose, PIL (contact sheet) | open3d renderer calls | the Poser consumes geometry *scores* (computed child-side) and tiles, never the mesh itself |
 | `embedder` | torch, transformers | — | the only owner of models |
-| pose.py | numpy, open3d, PIL | torch, anything in src/ | the standing rule, unchanged |
+| `pose` | numpy, open3d, PIL | torch, **any other `src/` module** | the standing rule, unchanged by the move: `pose` is the leaf both sides import (the child for `up_axis_scores`, the Poser for `combine_up`, `messages` for `Pose`), so it must depend on nothing in the pipeline. Living in `src/` makes it a sibling of its importers, not a peer that may import back |
 | `messages` | pose, numpy; torch **under `TYPE_CHECKING` only**, with `from __future__ import annotations` | a module-scope `import torch` | the child unpickles its tasks from `messages` — a real torch import there hands the child exactly the dependency the first row forbids (I8). The two tensor-typed messages never cross a queue, so the name is annotation-only |
 
 (pose.py imports open3d for `up_axis_scores`, so the parent transitively
@@ -58,37 +58,54 @@ imports open3d too — import only; no renderer is ever created parent-side.)
 
 ```
  PARENT PROCESS                                    CHILD PROCESS
-┌────────────────────────────────────────┐        ┌─────────────────────────────┐
-│ driver: sequential loop, admission     │  tasks │ run_child loop              │
-│                                        │ ─────▶ │                             │
-│ done ──Release (every retirement)──────┼──────▶ │  (control: unpins in_flight)│
-│ walker ─▶ cache_checker.route(f, i)    │ (un-   │  loader.get(file)           │
-│    │        │        │         │       │ bound- │      │ LoadedMesh           │
-│    │   CachedHit/  Redraw  *RenderTask─┼─ ed)   │      ▼                      │
-│    │   Retired    (both)               │        │  renderer.pose_tiles /      │
-│    │        │                          │        │  renderer.views (up in cam) │
-│    │        ▼                          │        │  save renders (child owns)  │
-│    │   done.on(CachedHit|Embedded|     │results │      │                      │
-│    │           Failure|Retired)        │(bound- │  resident LRU (bytes)       │
-│    │        ▲    ▲                     │  ed)   └─────────────────────────────┘
-│    │        │    │        ◀────────────┼─◀──── PoseTiles(geo,tiles) |
-│    │   Embedded  Failure/Retired       │        EmbedViews | Rendered |
-│    │        │                │         │        Failure
-│    │        │                │         │
-│    │   embedder.embed_views  ▼         │
-│    │        ▲       poser.on_tiles ──▶ embedder.embed_tiles
-│    │        │            │                   │
-│    │   EmbedViews   TileEmbeds ◀─────────────┘
-│    │        │            ▼
-│    │        │       poser.on_tile_embeds ──▶ EmbedRenderTask | Retired | None
-│    │        │            │ parked?
-│    │        │            ▼
-│    │        │       arbiter.submit(call) ── Future ──▶ poser.poll()
-└────┴────────┴─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────┐                      ┌─────────────────────────────┐
+│ driver: sequential loop, │                      │ run_child loop              │
+│ admission, drain         │  tasks (unbounded)   │                             │
+│                          ├────────────────────▶ │  (control: unpins in_flight)│
+│ everything else in the   │ *RenderTask | Release│  loader.get(file)           │
+│ parent is a function     │ | EndOfInput         │      │ LoadedMesh           │
+│ call — the next diagram  │                      │      ▼                      │
+│                          │  results (bounded)   │  renderer.pose_tiles /      │
+│                          │ ◀────────────────────┤  renderer.views (up in cam) │
+│                          │ PoseTiles(geo,tiles) │  save renders (child owns)  │
+│                          │ | EmbedViews         │      │                      │
+│                          │ | Rendered | Failure │  resident LRU (bytes)       │
+└──────────────────────────┘                      └─────────────────────────────┘
 ```
 
-Everything inside the parent is a **function call** in v1. The two arrows
-crossing the box edge are the only queues.
+The two arrows crossing the box edge are the only queues.
+
+The parent's internals — every arrow a function call or the message it
+returns, everything funneling into the two sinks: `tasks.send` (the `tasks`
+arrow above) and `done.on` (rows and retirement — not always both; the
+`Redraw` arm below writes its row with `retires=False`):
+
+```
+ walker ─▶ cache_checker.route(f, i) ─┬─ CachedHit | Retired ──────▶ done.on
+                                      ├─ Redraw(task, hit) ────────▶ done.on + tasks.send
+                                      ├─ *RenderTask ──────────────▶ tasks.send
+                                      └─ raises ─▶ Failure ────────▶ done.on  (J3)
+
+ results, drained every driver iteration — each arm an error boundary (I4):
+
+   Rendered | Failure ─────────────────────────────────────────────▶ done.on
+   EmbedViews ─▶ embedder.embed_views ── Embedded ─────────────────▶ done.on
+   PoseTiles ─▶ poser.on_tiles
+                     │ EmbedTilesRequest
+                     ▼
+                embedder.embed_tiles
+                     │ TileEmbeds
+                     ▼
+                poser.on_tile_embeds ─┬─ EmbedRenderTask ──────────▶ tasks.send
+                                      ├─ Retired ──────────────────▶ done.on
+                                      └─ None — parked on
+                                         arbiter.submit(call) ── Future ──┐
+                                                                          │
+   poser.poll(), every iteration — resumes parked files ◀─────────────────┘
+        └─▶ EmbedRenderTask ─▶ tasks.send;  Retired | Failure ─────▶ done.on
+
+ done ─▶ Release, every retirement ────────────────────────────────▶ tasks.send
+```
 
 ## The boundary protocol
 
