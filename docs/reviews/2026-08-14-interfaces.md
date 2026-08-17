@@ -719,3 +719,217 @@ contract is.
    §Supervisor accounting twice.
 4. **`J3`, `J6`** — both are one line, and `J6` blocks anyone writing the Poser.
 5. **`J7`, `J8`** — any time.
+
+---
+
+# Pass 3 — 2026-08-17, against `13b3e72`
+
+Two commits: `f6ec298` recorded pass 2, `13b3e72` is the response — §P2.3 taken
+in full, plus all eight `J` findings.
+
+New findings carry `K` IDs. This pass follows the uniform contract into the one
+place §P2.3 did not reach: the child's residency table.
+
+## P3.0 Verdict
+
+**§P2.3 taken in full, and it does what it was argued to do.** `Rendered` as the
+ack, `CachedHit.retires`, admission bounding the child again, the untimed
+drain-path join, `retired_ids`, three error boundaries instead of one — the four
+findings that were one defect are closed as one change, and Invariant 4 lost its
+exception rather than acquiring a second one. `results` occupancy is now provably
+≤ WINDOW, and the residency hard bound (`admission × heaviest mesh`) is true
+again rather than aspirational.
+
+One consequence went unnoticed, and it is the mirror image of the last two
+passes: they were about files that never retire, this is about **meshes that are
+never released**. Nothing clears the child's `ResidentMesh.in_flight` flag on the
+three paths where a `PoseTiles` is *not* followed by an `EmbedRenderTask` — and
+`in_flight` entries are exempt from eviction, so they are pinned for the process
+lifetime. Under `--skip-embed` that is every file in the collection (`K1`).
+
+Below that: the child's clean exit now runs straight into this repo's
+hardest-won constraint and the untimed join waits for it (`K2`); `dispatch`'s
+routing table does not cover a value `poll` can now return (`K3`); and the
+argument for unbounding `tasks` still rests on the R7 claim §P2.3 dissolved,
+two bullets above the sentence that dissolves it (`K4`).
+
+## P3.1 Disposition of pass 2
+
+| finding | status |
+|---|---|
+| §P2.3 | **taken in full** — `Rendered` ack, `CachedHit.retires: bool`, Invariant 4 uniform, and the `results`-depth/residency bounds true again as a result |
+| J1 | closed on both halves — cold retires on the ack, warm is a plain `needs_embed=False` task with no `Redraw` special case |
+| J2 | taken — `retired_ids: set[int]`, and Invariant 1 now says "mechanical". Composes correctly with the new boundaries (a guarded `done.on` that raises post-retirement is now a no-op) |
+| J3 | taken, and better than asked — the walker loop gets its own boundary *and* `poll` converts per-future fold failures rather than the driver guessing attribution. See `K3` |
+| J4 | taken — untimed drain-path join, timeout kept for abort only. See `K2` |
+| J5 | taken — "one window, two consumers", R7 dissolved, `in_flight()` on the shape, `retired`'s comment enumerates all five retiring messages. See `K4` for the one stale copy left in `interfaces.md` |
+| J6 | taken — `record_pose(file, index, pose)` and `CacheContext.root`. See `K7` |
+| J7 | taken — loaded by the CLI entry, handed to `Done` at construction, owned thereafter |
+| J8 | taken |
+
+## P3.2 New findings
+
+### K1. Nothing releases a resident mesh when no embed render follows — HIGH
+
+The child marks a mesh `in_flight` when it sends `PoseTiles` — *"awaiting a pose
+answer — exempt from eviction"* — and the answer is what clears it. Three paths
+never send one:
+
+* **`Retired` from `on_tile_embeds`** — `--skip-embed` with no renders wanted.
+  Pose resolution was the whole job, the file retires at `Done`, and no
+  `EmbedRenderTask` is ever sent. **Under `--skip-embed` this is every file**, so
+  the child accumulates the entire collection, all of it exempt from eviction,
+  until it is killed. `budget_bytes` cannot reclaim any of it — the note already
+  says the exemption makes it a soft bound.
+* **`Failure` from `poser.poll()`** — new in this pass (`J3`). A fold that raises
+  retires the file and pins its mesh.
+* **A drain-arm exception on the pose path** — `embedder.embed_tiles` raising is
+  the realistic one (CUDA OOM). The `except` retires via `Failure`; no task
+  follows; the mesh is pinned. This is the most likely of the three on a normal
+  run, and it pins a mesh on precisely the failure that suggests memory is
+  already tight.
+
+The design inherited an assumption its shape no longer guarantees. In the
+roundtrip spike the child owned the loop and every held mesh was popped by
+`finish_one()` (`eval/overlap_spike.py:100-101`) — there was no skip path, no
+retirement that wasn't a render, and no way for a mesh to be abandoned. The
+parent-owned admission this note chose (correctly, `I2`/Q1) makes abandonment
+reachable, and `in_flight` has no other clear.
+
+Fix, and it is small: a **`Release(file, index)` control message on `tasks`**,
+sent by whatever retires a file that has an outstanding `PoseTiles`. The child
+clears `in_flight` and drops the mesh to normal LRU eligibility.
+
+Note the interaction with Invariant 4 and treat it explicitly rather than as an
+exception: `Release` is a **control message, not a task** — the same category
+`EndOfInput` already occupies, which is why Invariant 4 can stay "one result per
+task, no exceptions" without qualification. Say that in the invariant, or the
+next pass will read `Release` as the carve-out coming back.
+
+`Done` is the natural sender (it is where all five retirements land and it
+already knows the index), which means `Done` needs the `tasks` transport — or
+the driver sends it from the one place retirement is observable. Either is fine;
+pick one, because "whoever retires it" is how this got missed.
+
+### K2. The child's clean exit runs into the teardown abort, and the join is now untimed — MEDIUM
+
+`EndOfInput` terminates `run_child`, which returns, which lets the interpreter
+tear down `src/renderer.py`'s `OffscreenRenderer`. That is the one thing this
+repo has a hard constraint about: *"`OffscreenRenderer` teardown aborts; creation
+does not … the abort is Filament throwing from a destructor. Keep renderers alive
+for the process lifetime; never destroy one"* (CLAUDE.md, measured in
+`docs/reviews/2026-08-13.md` §3.1).
+
+So the child's **clean** exit is its dangerous one, and `J4` just made the parent
+wait for it with no timeout. `join()` still returns — SIGABRT is process death —
+but every successful run ends with a Filament abort on stderr and
+`child.exitcode == -6`, which a reader will file as a bug in the refactor rather
+than the known constraint.
+
+Two lines close it: `run_child` ends with `os._exit(0)` after `EndOfInput`
+(skipping interpreter teardown, which is exactly the "never destroy one" rule
+expressed as code), and the note states that the child's renderers are never
+destroyed — the constraint is currently absent from a note that assigns
+renderer *creation* to a module and describes the child's whole lifecycle.
+
+Worth stating alongside it: `child.exitcode` is not checked anywhere in the
+driver. Under `os._exit(0)` it becomes meaningful, and a nonzero one is the only
+signal that the child died with tasks outstanding.
+
+### K3. `dispatch` does not route `Failure`, which `poll` now returns — MEDIUM
+
+`poll() -> list[EmbedRenderTask | Retired | Failure]` (new, `J3`), and the driver
+does `for out in poser.poll(): dispatch(out)`. `dispatch`'s stated table is
+*"`CachedHit`/`Retired` → `done.on`; tasks → `tasks.send`; `Redraw(task, hit)` →
+both."* No `Failure` arm.
+
+The intent is obvious and the fix is one word, but `dispatch` is the routing
+table the note holds up as the single place message types meet module calls, and
+it is now incomplete for a value produced two lines above it.
+
+### K4. The unbounded-`tasks` argument still rests on the dissolved R7 — MEDIUM
+
+Two adjacent bullets in §The boundary protocol now disagree. The first still
+argues:
+
+> An earlier draft bounded both and called a blocked `tasks.send` "a bug in the
+> window" — refuted by the `needs_embed=False` path (data-structures review R7),
+> where files retire while their render work is still queued
+
+The next one says the opposite, correctly:
+
+> With the uniform child contract (§P2.3), the ack restores **admission** as what
+> bounds the child's backlog — every task holds its slot until its result comes
+> back
+
+`data_structures.md` §Supervisor accounting was rewritten for this (`J5`); this
+copy was not. And the correction has a consequence the note should own rather
+than leave for someone to rediscover: **under the uniform contract, bounding
+`tasks` at the window would no longer block.** Admission caps in-flight files at
+WINDOW, each holds at most one outstanding task, and `EndOfInput` is sent when
+the queue is empty. So unbounding is no longer load-bearing for deadlock — it is
+defence in depth plus the threaded successor's back-edge rule, which is precisely
+what the second bullet says ("only for deadlock-freedom").
+
+Keep the decision. Re-point the argument, and delete the R7 sentence rather than
+leaving the dissolved claim as the stated reason — this is the third pass in
+which R7 has generated work.
+
+### K5. Row-overwrite semantics on the redraw-failure path — LOW
+
+On the redraw path `CachedHit(retires=False)` writes the row, then a failed
+render sends `Failure` *instead of* the ack — and `Failure` "doubles as the error
+row". So `rows[index]` is written twice and the note does not say which wins.
+
+Checked against today, because the answer should be parity and is: a render
+failure on the redraw path appends a `RENDER_ERROR` row and returns before
+scoring (`classify_stls.py:1160-1170`), so the file reports `RENDER_ERROR` rather
+than its cached score. "A later `Failure` overwrites the row" reproduces that.
+One clause in `Done.on`.
+
+### K6. Send-after-save is not stated — LOW
+
+"Quiescence means the child is idle" (the basis for the untimed join) holds only
+if the child sends its result *after* `save_renders` returns, not before. The
+child section lists saving and sending without fixing the order, and overlapping
+them is the obvious optimisation someone will reach for. One word: the ack is
+sent after the save completes.
+
+### K7. `root` now has three homes — LOW
+
+`CacheContext.root` (new, `J6`), `CacheContext.args` (which carries the input
+path), and `RenderConfig.collection_root`. The last is genuinely separate — it
+crosses the spawn boundary — but two copies in one dataclass invite drift. Drop
+`args`-derived root usage explicitly, or note that `root` is the only sanctioned
+reader.
+
+## P3.3 What checked out — do not re-verify
+
+* **`results` occupancy is now provably ≤ WINDOW.** Every task returns exactly
+  one result, admission caps in-flight files at WINDOW, and each holds at most
+  one outstanding task. The bound in the note is now a theorem rather than a
+  hope, and the failing-redraw case that broke it in pass 2 is gone.
+* **The residency hard bound is true again** — `in_flight` exemption × admission
+  window (~450 MB at 3 × 150 MB) holds now that admission bounds the child.
+  Subject to `K1`, which breaks it a different way.
+* **`retired_ids` composes with all three error boundaries.** A guarded `done.on`
+  that raises after retiring is now a no-op on retry; a `Rendered` ack arriving
+  after a `Failure` retired the file is ignored. Both were reachable in pass 2.
+* **`Retired` vs `Rendered` are genuinely different messages**, not a rename:
+  `Retired` is parent-originated (the Poser, or `route`), `Rendered` is the
+  child's ack. Collapsing them would have re-coupled the two.
+* **The `--skip-embed` decision table is complete now**: warm+nothing →
+  `Retired`; warm+renders → `EmbedRenderTask(needs_embed=False)`; cold+nothing →
+  Poser `Retired`; cold+renders → task, ack retires. All four reachable, all four
+  retire once.
+* **`in_flight()` on `Admission`**, `retired`'s five-message comment, and
+  Invariant 1's "mechanical" wording are all accurate to the new shape.
+
+## P3.4 Suggested order
+
+1. **`K1`** — the only one that costs a run. `Release` as a control message, and
+   say in Invariant 4 that control messages are not tasks.
+2. **`K2`** — two lines, and it decides what a nonzero `child.exitcode` means
+   before anyone builds on it.
+3. **`K3`, `K4`** — corrections; `K4` should end R7's third appearance.
+4. **`K5`, `K6`, `K7`** — any time.
