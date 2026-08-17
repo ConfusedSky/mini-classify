@@ -81,11 +81,21 @@ class EmbedRenderTask:             # pose resolved → render classification vie
                                    # the child renders, saves, returns nothing
 
 @dataclass(frozen=True)
+class Release:                     # control message (not a task — no result):
+    file: Path                     # clears a resident mesh's in_flight flag.
+    index: int                     # Done sends one per retirement,
+                                   # unconditionally; the child no-ops on
+                                   # cleared or unknown indices (K1)
+
+@dataclass(frozen=True)
 class EndOfInput:                  # terminates the child. A message, not None:
     pass                           # recv's None means "nothing arrived yet",
                                    # and a value meaning two things would make
                                    # the child exit on its first idle window
-                                   # (interfaces review I5)
+                                   # (interfaces review I5). The child then
+                                   # exits via os._exit(0) — interpreter
+                                   # teardown would destroy the renderer, the
+                                   # one hard-constraint abort (K2)
 ```
 
 The child owns saving renders in every case (Q2): the pixels are already in
@@ -245,7 +255,10 @@ class CacheContext:                # route()'s read-only world: the pose store
     args: argparse.Namespace       # cache keys derive from
     root: Path                     # the collection anchor — Done derives
                                    # file_identity from it, so the Poser
-                                   # never has to (J6)
+                                   # never has to (J6). The ONLY sanctioned
+                                   # parent-side root: never re-derive it
+                                   # from args (K7). RenderConfig carries
+                                   # its own copy because it crosses spawn.
 ```
 
 ## Inside the child: the Loader/Renderer seam
@@ -472,6 +485,15 @@ to come back). `in_flight` entries are never evicted, which makes
 `budget_bytes` a *soft* bound: the hard worst case is the admission window ×
 the heaviest mesh (~450 MB at 3 × 150 MB) — this is the proposal's
 residency-depth-follows-the-admission-window link, restored (D14).
+
+`in_flight` has **two** clears, and both are required (interfaces pass 3
+K1): the `EmbedRenderTask` that consumes the mesh, and the `Release`
+control message for the paths where no embed render ever follows — a
+`Retired` under `--skip-embed` (every file, on that mode), a fold `Failure`
+from `poser.poll`, or a drain-arm exception on the pose path (CUDA OOM
+being the realistic one, which would otherwise pin a mesh exactly when
+memory is tight). Without `Release`, those meshes are exempt from eviction
+for the process lifetime and `budget_bytes` cannot reclaim them.
 
 The rotate-into-the-camera rule still applies — residency only pays if the
 resident geometry is reusable as-is — and it is a **precondition to verify,

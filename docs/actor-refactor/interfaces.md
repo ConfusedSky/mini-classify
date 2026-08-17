@@ -6,11 +6,13 @@ shapes, this one fixes the **calling conventions** — who calls whom, with
 what signature, what blocks, and who converts errors into `Failure`. Revised
 the same day against
 [docs/reviews/2026-08-14-interfaces.md](../reviews/2026-08-14-interfaces.md)
-(findings I1–I16, then pass 2's J1–J8); the review's gating questions are
-answered inline — **Q1: the parent owns admission, and therefore `tasks` is
-unbounded; Q2: a `Retired` message is what retires a file that produces no
-row; §P2.3: taken — the child always sends exactly one result per task, and
-`Rendered(file, index)` is the ack that retires a render-only file.** Types
+(findings I1–I16, pass 2's J1–J8, pass 3's K1–K7); the review's gating
+questions are answered inline — **Q1: the parent owns admission, and
+therefore `tasks` is unbounded; Q2: a `Retired` message is what retires a
+file that produces no row; §P2.3: taken — the child always sends exactly one
+result per task, `Rendered(file, index)` is the ack that retires a
+render-only file, and `Release(file, index)` is the control message that
+unpins a resident mesh when retirement happens parent-side (K1).** Types
 named
 here are data_structures.md's, including the driver-side shapes it now
 carries (`RenderConfig`, `CacheContext`, `Redraw`, `Retired`, `EndOfInput`).
@@ -99,25 +101,21 @@ class Transport(Protocol):            # src/transport.py
 ```
 
 * **`tasks` (parent→child) is unbounded; `results` (child→parent) is bounded
-  at the admission window** (I2, Q1). This is the shape the overlap spike
-  measured and the deadlock rule already prescribes — `Poser → Renderer` is
-  a listed back-edge, and bounding both directions closes the
-  `Renderer → Poser → Renderer` cycle: child blocked in `results.send`,
-  parent blocked in `tasks.send`, nobody draining. The parent-owned
-  admission this note chooses (because `route` and `Done` live there) keeps
-  the measured property that made the spike deadlock-free: **the parent
-  never blocks on a send.** Admission is the *only* forward pressure; the
-  bounded `results` queue is what paces the child when the parent lags.
-  An earlier draft bounded both and called a blocked `tasks.send` "a bug in
-  the window" — refuted by the `needs_embed=False` path (data-structures
-  review R7), where files retire while their render work is still queued,
-  so admission does not bound the child's backlog on a redraw-heavy run.
-* `tasks` carries `PoseRenderTask | EmbedRenderTask | EndOfInput`;
-  `results` carries `PoseTiles | EmbedViews | Rendered | Failure`.
-* With the uniform child contract (§P2.3), the ack restores **admission** as
-  what bounds the child's backlog — every task holds its slot until its
-  result comes back — so the unbounded `tasks` queue is never load-bearing
-  for pressure, only for deadlock-freedom (J4).
+  at the admission window** (I2, Q1). The parent-owned admission this note
+  chooses (because `route` and `Done` live there) keeps the measured
+  property that made the overlap spike deadlock-free: **the parent never
+  blocks on a send.** Admission is the *only* forward pressure — every task
+  holds its slot until its result or ack comes back (§P2.3), so the child's
+  backlog is bounded by admission and `results` occupancy is provably
+  ≤ WINDOW. Under that contract, bounding `tasks` at the window would in
+  fact never block (K4) — unbounding is defence in depth plus the threaded
+  successor's back-edge rule (`Poser → Renderer` is a listed back-edge),
+  not load-bearing for deadlock. Kept anyway: a queue that *cannot* block
+  the parent survives future contract mistakes the way a provably-unfilled
+  bounded one does not.
+* `tasks` carries `PoseRenderTask | EmbedRenderTask` plus the **control
+  messages** `Release | EndOfInput`; `results` carries
+  `PoseTiles | EmbedViews | Rendered | Failure`.
 * **End of input is `EndOfInput()`, a frozen message** (I5) — `recv`'s
   `None` already means "nothing arrived within the timeout", and a value
   meaning two things would make the child exit on its first idle window.
@@ -181,9 +179,21 @@ terminates it. Conventions:
   8 azimuths × 2 elevations. Build `renderer.views`, then check it
   pixel-identical against `mesh.rotate` across the full view set (the
   harness pattern exists in `eval/render_determinism.py`); residency is
-  inert without it. `needs_embed=False` → save renders, send
-  **`Rendered(file, index)`** — the retirement ack (§P2.3). The child's
+  inert without it. `needs_embed=False` → save renders, then send
+  **`Rendered(file, index)`** — the retirement ack (§P2.3), sent strictly
+  **after** `save_renders` returns (K6): "quiescence means the child is
+  idle" and the untimed join both rest on the ack being last. The child's
   contract is uniform: exactly one result per task, always.
+* `Release(file, index)` clears a resident mesh's `in_flight` flag, dropping
+  it to normal LRU eligibility; unknown or already-cleared indices are a
+  no-op, which is what lets the parent send it unconditionally (K1).
+* `EndOfInput` terminates the loop — and `run_child` then exits with
+  **`os._exit(0)`**, never by returning (K2): interpreter teardown would
+  destroy the `OffscreenRenderer`, and teardown is the one thing this repo
+  has a hard constraint about (CLAUDE.md: renderers live for the process
+  lifetime, never destroyed — the abort is Filament throwing from a
+  destructor). The clean exit must not be the dangerous one, especially
+  under the untimed drain-path join.
 * **Every exception between `recv` and `send` becomes
   `Failure(file, index, str(e))`** — one bad mesh must not end the run, and
   the file must retire. The child never crashes on a per-file error; it
@@ -262,7 +272,8 @@ methods and nothing else changes.
 
 ```python
 class Done:
-    def __init__(self, admission: Admission, text_embeds, cache_ctx): ...
+    def __init__(self, admission: Admission, text_embeds, cache_ctx,
+                 tasks: Transport): ...        # for Release on retirement (K1)
     def record_pose(self, file: Path, index: int, pose: Pose) -> None
     def on(self, m: CachedHit | Embedded | Failure | Retired | Rendered) -> None
     def flush(self) -> None            # rows CSV + pose cache (temp+replace)
@@ -287,6 +298,17 @@ class Done:
   only by `Done.on`. `Retired` and `Rendered` retire without a row; a
   `CachedHit` with `retires=False` writes its row without retiring (`rows`
   legitimately has holes — settled in the data-structures review's pass 1).
+  On the redraw-failure path a later `Failure` **overwrites** the hit's row
+  (K5) — parity with today, where a render failure reports `RENDER_ERROR`
+  rather than the cached score.
+* **`Done` sends `Release(file, index)` on every retirement** (K1) — it
+  holds the `tasks` transport for exactly this. Unconditional, because
+  `Done` does not track which files have an unanswered `PoseTiles`; the
+  child's no-op on cleared indices makes that free, and FIFO ordering on
+  `tasks` means a `Release` can never overtake the task it follows.
+  Retirement was chosen as the sender precisely because "whoever retires
+  it" — spread over three paths — is how the pinned-mesh leak went
+  unnoticed.
 * `on` loads the `.npy` for `CachedHit`, scores, resolves `front_view`,
   writes fresh embeddings to the cache. `flush` is **called by the driver
   on the main thread**, on both the drain and abort paths.
@@ -309,16 +331,22 @@ def run(cfg) -> None:
                                               # cache-load ends the run too.
     while admission.in_flight() > 0:          # quiescence FIRST: the arbiter
         drain(block=True)                     # tail resolves files long after
-    tasks.send(EndOfInput())                  # the walker runs dry (I1)
-    child.join()                              # UNTIMED: quiescence already means
-    done.flush()                              # the child is idle (§P2.3) — the
-                                              # join timeout belongs to abort
-                                              # only (J4). Flush after join is
-                                              # deliberate; abort flushes first.
+    tasks.send(EndOfInput())                  # the walker runs dry (I1); every
+    child.join()                              # Release precedes it in FIFO.
+    if child.exitcode != 0:                   # UNTIMED join: quiescence means
+        raise ChildDied(child.exitcode)       # idle (§P2.3); timeout is abort's.
+    done.flush()                              # exitcode is meaningful under
+                                              # os._exit(0) and is the only
+                                              # signal the child died with tasks
+                                              # outstanding (K2). Flush after
+                                              # join is deliberate; abort
+                                              # flushes first.
 ```
 
-`dispatch` routes `route`'s return: `CachedHit`/`Retired` → `done.on`;
-tasks → `tasks.send`; `Redraw(task, hit)` → both. `drain` is the routing
+`dispatch` routes everything a decision can produce:
+`CachedHit`/`Retired`/`Failure` → `done.on` (the `Failure` arm is what
+`poser.poll` yields on a fold error — K3); tasks → `tasks.send`;
+`Redraw(task, hit)` → both. `drain` is the routing
 table, and **each arm is an error boundary** (I4): the parent runs four
 things that raise (the embedder, the poser, future folding, the `.npy`
 load), and today both halves of the pipeline convert those to error rows —
@@ -420,10 +448,12 @@ in-flight residue. `flush` is idempotent and runs on the main thread in a
    split `admitted`=driver / `retired`=`Done`, each field single-writer.
    Rows are `Done`'s alone; the scene and residency the Renderer's alone.
 4. **The child sends exactly one result per task — no exceptions** (§P2.3):
-   `PoseTiles`, `EmbedViews`, `Rendered`, or `Failure`; `EndOfInput`
-   terminates the loop. A task that raises sends `Failure` *instead of* its
-   result — the exception never crosses raw, and the blanket rule no longer
-   contradicts a carve-out.
+   `PoseTiles`, `EmbedViews`, `Rendered`, or `Failure`. `Release` and
+   `EndOfInput` are **control messages, not tasks** — no result is expected
+   for them, which is why this invariant needs no qualification (K1). A
+   task that raises sends `Failure` *instead of* its result — the exception
+   never crosses raw, and the blanket rule no longer contradicts a
+   carve-out.
 5. **The parent never blocks on a send** (`tasks` is unbounded — Q1), and
    never does a blocking `recv` while it holds work it could dispatch. No
    module blocks on the Arbiter.
