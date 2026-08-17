@@ -4,10 +4,10 @@ Design note, 2026-08-14. Third of the set: [actors_proposal.md](actors_proposal.
 argues the boundaries, [data_structures.md](data_structures.md) fixes the
 shapes, this one fixes the **calling conventions** — who calls whom, with
 what signature, what blocks, and who converts errors into `Failure`. Revised
-across six review passes against
+across seven review passes against
 [docs/reviews/2026-08-14-interfaces.md](../reviews/2026-08-14-interfaces.md)
 (findings I1–I16, pass 2's J1–J8, pass 3's K1–K7, pass 4's L1–L4, pass 5's
-M1–M5, pass 6's N1–N7); the review's gating
+M1–M5, pass 6's N1–N7, pass 7's O1–O6); the review's gating
 questions are answered inline — **Q1: the parent owns admission, and
 therefore `tasks` is unbounded; Q2: a `Retired` message is what retires a
 file that produces no row; §P2.3: taken — the child always sends exactly one
@@ -217,7 +217,7 @@ class Poser:
     def __init__(self, up_T, down_T, arbiter: Arbiter, record_pose, vlm_cfg): ...
     def on_tiles(self, m: PoseTiles) -> EmbedTilesRequest
     def on_tile_embeds(self, m: TileEmbeds) -> EmbedRenderTask | Retired | None
-    def poll(self) -> list[EmbedRenderTask | Retired]
+    def poll(self) -> list[EmbedRenderTask | Retired | Failure]   # J3; O5
     def abandon(self) -> None          # abort: parked files keep their
                                        # ensemble pose, already recorded (I15)
 ```
@@ -323,26 +323,47 @@ class Done:
 ### Driver — the loop that is the v1 architecture
 
 ```python
+@dataclass
+class DriverState:                            # the container three passes asked
+    admission: Admission                      # for one field at a time (M2, N4,
+    admitted_files: dict[int, Path]           # O1): drain and fail_outstanding
+    last_progress: float                      # write drv.* attributes, which
+    child_failed: bool = False                # Python scoping cannot silently
+                                              # rebind as locals. Lives in
+                                              # src/driver.py — bookkeeping,
+                                              # not a message.
+
 def run(cfg) -> None:
     child = spawn_render_child(cfg)
-    last_progress = now()                     # stall clock starts at spawn (N4),
-                                              # so the child's Filament/open3d
+    drv = DriverState(admission, {},          # stall clock starts at spawn (N4),
+                      last_progress=now())    # so the child's Filament/open3d
                                               # startup sits inside the first
                                               # interval instead of being measured
                                               # against a timestamp that does not
                                               # exist yet.
     for index, f in enumerate(walker):
-        if child_failed: break                # a dead child stops admission (N3):
+        while not drv.child_failed and \
+                drv.admission.in_flight() >= WINDOW:
+            drain(block=True)                 # liveness lives inside drain
+        if drv.child_failed: break            # (M1), so this gate — where the
+                                              # child spends the whole run — is
+                                              # covered too. The break sits AFTER
+                                              # the gate (O3): fail_outstanding
+                                              # fires inside it and releases it
+                                              # by retiring, so a break checked
+                                              # only at the loop top would admit
+                                              # one more file to a known-dead
+                                              # child — a Failure row for a file
+                                              # nothing ever tried to render. A
+                                              # dead child stops admission (N3):
                                               # un-walked files are simply absent
                                               # from the CSV, which is what a
                                               # crashed run should look like —
                                               # not ~1500 Failure rows flushed as
                                               # a complete-looking file.
-        while admission.in_flight() >= WINDOW:
-            drain(block=True)                 # liveness lives inside drain
-        admission.admitted += 1               # (M1), so this gate — where the
-        admitted_files[index] = f             # child spends the whole run — is
-        try:                                  # covered too.
+        drv.admission.admitted += 1
+        drv.admitted_files[index] = f
+        try:
             dispatch(route(f, index, ctx))    # The warm path's error boundary
         except Exception as e:                # (J3): route stats files the walk
             done.on(Failure(f, index, str(e)))  # cache may list but that
@@ -350,7 +371,7 @@ def run(cfg) -> None:
                                               # the .npy. An improvement, not
                                               # parity — today a corrupt .npy
                                               # at cache-load ends the run too.
-    while admission.in_flight() > 0 \
+    while drv.admission.in_flight() > 0 \
             or poser.parked:                  # quiescence FIRST: the arbiter
         drain(block=True)                     # tail resolves files long after
                                               # the walker runs dry (I1). The
@@ -358,7 +379,15 @@ def run(cfg) -> None:
                                               # fail_outstanding (N3): retirement
                                               # emptied in_flight, but each fold
                                               # still record_pose()s, so the
-                                              # paid answers land before flush.
+                                              # paid answers land before flush —
+                                              # bounded by the arbiter's own
+                                              # 300 s transport deadline
+                                              # (pose.py:456, :379 — O4), not by
+                                              # anything in this loop. A killed
+                                              # child plus a just-submitted call
+                                              # can mean five quiet minutes
+                                              # before flush and the exit line;
+                                              # that tail is not a hang.
     tasks.send(EndOfInput())                  # every Release precedes it (FIFO)
     child.join()                              # UNTIMED: quiescence means idle
     done.flush()                              # (§P2.3); timeout is abort's.
@@ -374,13 +403,19 @@ def run(cfg) -> None:
                                               # drain's check.
 ```
 
-`admitted_files: dict[int, Path]` and the stall clock's `last_progress`
-timestamp are driver state beside `admission` (M2, N4). The map is **new
-bookkeeping, deliberately unpruned** (M2): pruning would need `Done` to
-call back into the driver on retirement, the coupling I10 avoided, and
-unpruned it holds one `Path` per admitted file — ~1758 at the end of a
-full run, nothing. Two subtractions read it, and they differ by exactly
-the parked set:
+Driver state has a container: `DriverState` bundles `admission`,
+`admitted_files`, the stall clock's `last_progress`, and `child_failed`,
+and everything that mutates them does so through `drv.*` (O1). Three
+passes found the same bug arriving one field at a time — state called
+"driver state" in prose while the code showed the bare binding that makes
+it a local of whatever closure writes it (M2, N4, O1) — and that
+repetition is the signal the container was missing, not another
+declaration: an attribute write cannot be shadowed by Python's scoping
+the way a bare name can. The map is **new bookkeeping, deliberately
+unpruned** (M2): pruning would need `Done` to call back into the driver
+on retirement, the coupling I10 avoided, and unpruned it holds one `Path`
+per admitted file — ~1758 at the end of a full run, nothing. Two
+subtractions read it, and they differ by exactly the parked set:
 
 * `outstanding()` — the map minus `Done`'s `retired_ids`, **filtered to
   files that still need the child** (M4). The filter reads two things by
@@ -410,13 +445,15 @@ against `child_owed()`, never `outstanding()` (N1): gated on
 `outstanding()` it would count arbiter latency (24 s mean, **45 s p95** —
 LEARNINGS, where a 7-hour run went) as child silence and fire on a
 healthy run's quiescence tail — the one state this pipeline enters by
-design. `STALL_S` is **~300 s** (N2): the child's unit of work is
+design. `STALL_S` is **~240 s** (N2, O4): the child's unit of work is
 **3–28 s per model** (actors_proposal.md:196 — pass 5's 34 ms figure was
 a resident re-show, not a model), and the error is one-sided — a wedge is
-permanent, so a 300 s detection costs four minutes of a multi-hour run
-exactly once, while a false positive kills a healthy child — so the
-deadline sits ~10× above the documented top of range, a statement about
-rendering, never about the network. This repo's renderer has a documented
+permanent, so a four-minute detection costs four minutes of a multi-hour
+run exactly once, while a false positive kills a healthy child — so the
+deadline sits ~8.5× above the documented top of range, a statement about
+rendering, never about the network. And deliberately **not** 300 s: that
+is the arbiter's transport deadline (pose.py:456), an unrelated number
+`STALL_S` should not shadow. This repo's renderer has a documented
 history of aborting rather than returning; one timestamp is cheap
 insurance.
 
@@ -431,13 +468,12 @@ an unguarded drain would regress that, and a naive guard would admit
 without retiring, which is I1's hang wearing a different hat.
 
 ```python
-def drain(block):                   # last_progress is driver state (N4), set at
-                                    # spawn — never a local, which would be
-                                    # unbound in exactly the empty-recv case
-                                    # the stall branch exists for
+def drain(block):                   # driver state is written as drv.* (O1): an
+                                    # attribute write cannot become a shadowing
+                                    # local the way N4's bare name did
     while (m := results.recv(SHORT) if block else results.recv_nowait()) \
             is not None:                                   # not truthiness (J8)
-        last_progress = now()
+        drv.last_progress = now()
         try:
             match m:
                 case PoseTiles():
@@ -447,12 +483,15 @@ def drain(block):                   # last_progress is driver state (N4), set at
                 case Rendered() | Failure(): done.on(m)
         except Exception as e:
             done.on(Failure(m.file, m.index, str(e)))      # retire, never crash
-    if polled := poser.poll():      # arbiter answers; poll is its own error
-        last_progress = now()       # boundary, yields Failure per file (J3) —
-    for out in polled:              # and a fold is progress too (N4): the
-        dispatch(out)               # tail's silence must not read as a stall
+    for out in poser.poll():        # arbiter answers; poll is its own error
+        dispatch(out)               # boundary, yields Failure per file (J3).
+                                    # NO progress bump here (O2): child_owed()
+                                    # already silences the clock in the tail
+                                    # (N1), so the bump N4 asked for protected
+                                    # nothing — and it let a mid-run fold reset
+                                    # a wedged child's deadline.
     if outstanding() and (child.exitcode is not None or
-            (child_owed() and now() - last_progress > STALL_S)):
+            (child_owed() and now() - drv.last_progress > STALL_S)):
         fail_outstanding()          # LAST, after the recv loop AND poll (M1):
                                     # a result already in the pipe is consumed
                                     # first and never mis-blamed, and both
@@ -469,7 +508,7 @@ def drain(block):                   # last_progress is driver state (N4), set at
 M3); then `done.on(Failure(f, i, ...))` for each of `outstanding()` —
 retirement is idempotent (J2), the `Release`s go to a dead child
 harmlessly, and it runs at the end of `drain` where no caller is
-mid-iteration over the same indices. It also sets `child_failed`, the
+mid-iteration over the same indices. It also sets `drv.child_failed`, the
 flag that stops the walker admitting to a dead child (N3). Names, so
 nobody hunts for them (N6): `STALL_S` is a driver constant beside
 `WINDOW` and `SHORT`, and `now()` is `time.monotonic()`.

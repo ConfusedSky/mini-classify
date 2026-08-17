@@ -2,10 +2,10 @@
 
 Two arcs from the actor-refactor design session that the 08-14 write-ups
 (ipc-transport, precision-and-compile) did not cover: the cache-key migration
-that shipped mid-review, and what eleven adversarial review passes over two
+that shipped mid-review, and what thirteen adversarial review passes over two
 design notes taught about designing protocols on paper. The full finding
 trail is `docs/reviews/2026-08-14-data-structures.md` (six passes) and
-`docs/reviews/2026-08-14-interfaces.md` (five).
+`docs/reviews/2026-08-14-interfaces.md` (seven).
 
 ### The cache schema migration (shipped, both live caches)
 
@@ -39,7 +39,7 @@ trail is `docs/reviews/2026-08-14-data-structures.md` (six passes) and
   `load_pose_cache` would hand it new-spelling sources, `old_embed_cache_token`
   would miss every override, and 1531 embeddings would quietly orphan.
 
-### What eleven review passes taught about designing on paper
+### What thirteen review passes taught about designing on paper
 
 * **Protocols must be walked, not read.** The interfaces note's seams
   survived every pass; its *termination* did not — three of four run modes
@@ -74,11 +74,16 @@ trail is `docs/reviews/2026-08-14-data-structures.md` (six passes) and
   crosses, its geometry evidence must) — a gap six data-structures passes
   had not surfaced, because it only exists when you ask *who computes what
   where*. Design layers find each other's holes; sequence them.
-* **Findings shrinking monotonically is the convergence signal.** Data
-  structures: 15 → 7 → 5 → 2 → 4 → 1-plus-good-news. Interfaces: 16 → 8 →
-  7 → 4 → 5-mostly-relocations. Every post-uniform-contract finding was a
-  second-order consequence of a prior fix, not a new hole — the shape held
-  for three passes while the failure handling was pushed to completeness.
+* **Severity falling is the convergence signal — counts are not** (amended
+  after pass 7's O6 caught the original claim contradicting its own data).
+  Neither sequence is monotonic: data structures 15 → 7 → 5 → 2 → 4 →
+  1-plus-good-news, interfaces 16 → 8 → 7 → 4 → 5 → 7 → 6 — and a count
+  test would have called the interfaces review converged one pass before
+  the liveness hang and two before the stall clock. What fell
+  monotonically is what the findings were *about*: protocol hangs (I/J),
+  then failure-path holes (K–M), then one mechanism's arithmetic (N), then
+  scoping and citations (O). Stop when the findings stop being about the
+  design.
 
 ### Conventions that made the loop work
 
@@ -88,7 +93,10 @@ the note, so the decision survives the conversation. When the reviewer
 states a lean (bound the wedge, drive from the pose cache), taking it is
 usually right — they have walked the failure; when they offer either-or
 (T1's reword-vs-compute), decide on what exists in this tree and say so.
-Verify a reviewer's numbers before folding them in (all of them reproduced,
-every time — which is itself worth knowing about this reviewer). And the
+Verify a reviewer's numbers before folding them in: they reproduced every
+time until pass 5's "34 ms–2 s of child work" did not (the real range is
+3–28 s, `actors_proposal.md`), and checking is what kept a stall deadline
+from shipping at ~2× the work it was bounding — the one failure is the
+best evidence for the convention. And the
 asides matter: three of the most-cited harnesses had no README rows until a
 reviewer had to find them the hard way.
