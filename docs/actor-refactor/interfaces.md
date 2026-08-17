@@ -4,9 +4,10 @@ Design note, 2026-08-14. Third of the set: [actors_proposal.md](actors_proposal.
 argues the boundaries, [data_structures.md](data_structures.md) fixes the
 shapes, this one fixes the **calling conventions** — who calls whom, with
 what signature, what blocks, and who converts errors into `Failure`. Revised
-the same day against
+across six review passes against
 [docs/reviews/2026-08-14-interfaces.md](../reviews/2026-08-14-interfaces.md)
-(findings I1–I16, pass 2's J1–J8, pass 3's K1–K7); the review's gating
+(findings I1–I16, pass 2's J1–J8, pass 3's K1–K7, pass 4's L1–L4, pass 5's
+M1–M5, pass 6's N1–N7); the review's gating
 questions are answered inline — **Q1: the parent owns admission, and
 therefore `tasks` is unbounded; Q2: a `Retired` message is what retires a
 file that produces no row; §P2.3: taken — the child always sends exactly one
@@ -60,9 +61,9 @@ imports open3d too — import only; no renderer is ever created parent-side.)
 ┌────────────────────────────────────────┐        ┌─────────────────────────────┐
 │ driver: sequential loop, admission     │  tasks │ run_child loop              │
 │                                        │ ─────▶ │                             │
-│ done ──Release (every retirement)──────┼─────▶ │  (control: unpins in_flight)│
+│ done ──Release (every retirement)──────┼──────▶ │  (control: unpins in_flight)│
 │ walker ─▶ cache_checker.route(f, i)    │ (un-   │  loader.get(file)           │
-│    │        │        │         │       │ bound- │      │ LoadedMesh          │
+│    │        │        │         │       │ bound- │      │ LoadedMesh           │
 │    │   CachedHit/  Redraw  *RenderTask─┼─ ed)   │      ▼                      │
 │    │   Retired    (both)               │        │  renderer.pose_tiles /      │
 │    │        │                          │        │  renderer.views (up in cam) │
@@ -324,7 +325,19 @@ class Done:
 ```python
 def run(cfg) -> None:
     child = spawn_render_child(cfg)
+    last_progress = now()                     # stall clock starts at spawn (N4),
+                                              # so the child's Filament/open3d
+                                              # startup sits inside the first
+                                              # interval instead of being measured
+                                              # against a timestamp that does not
+                                              # exist yet.
     for index, f in enumerate(walker):
+        if child_failed: break                # a dead child stops admission (N3):
+                                              # un-walked files are simply absent
+                                              # from the CSV, which is what a
+                                              # crashed run should look like —
+                                              # not ~1500 Failure rows flushed as
+                                              # a complete-looking file.
         while admission.in_flight() >= WINDOW:
             drain(block=True)                 # liveness lives inside drain
         admission.admitted += 1               # (M1), so this gate — where the
@@ -337,43 +350,75 @@ def run(cfg) -> None:
                                               # the .npy. An improvement, not
                                               # parity — today a corrupt .npy
                                               # at cache-load ends the run too.
-    while admission.in_flight() > 0:          # quiescence FIRST: the arbiter
+    while admission.in_flight() > 0 \
+            or poser.parked:                  # quiescence FIRST: the arbiter
         drain(block=True)                     # tail resolves files long after
-                                              # the walker runs dry (I1)
+                                              # the walker runs dry (I1). The
+                                              # parked clause only differs after
+                                              # fail_outstanding (N3): retirement
+                                              # emptied in_flight, but each fold
+                                              # still record_pose()s, so the
+                                              # paid answers land before flush.
     tasks.send(EndOfInput())                  # every Release precedes it (FIFO)
     child.join()                              # UNTIMED: quiescence means idle
     done.flush()                              # (§P2.3); timeout is abort's.
     if child.exitcode != 0:                   # AFTER flush, to stderr, never a
-        print(f"child exit {child.exitcode}", # raise (M5, L2): the run is
-              file=sys.stderr)                # complete and correct here, the
-                                              # exitcode is a diagnostic about
-                                              # HOW the child ended, and any
-                                              # lost work is already Failure
-                                              # rows from drain's check.
+        print(f"child exit {child.exitcode}", # raise (M5, L2): on a clean walk
+              file=sys.stderr)                # the run is complete and correct
+                                              # here and the exitcode is only a
+                                              # diagnostic about HOW the child
+                                              # ended; on the N3 path this line
+                                              # plus the truncated CSV IS the
+                                              # crash report — lost work is
+                                              # already Failure rows from
+                                              # drain's check.
 ```
 
-`admitted_files: dict[int, Path]` lives in the driver beside `admission`
-and is **new bookkeeping, deliberately unpruned** (M2): pruning would need
-`Done` to call back into the driver on retirement, the coupling I10
-avoided, and unpruned it holds one `Path` per admitted file — ~1758 at the
-end of a full run, nothing. `outstanding()` is that map minus `Done`'s
-`retired_ids`, **filtered to files that still need the child** (M4):
-under `--skip-embed` a file parked on an arbiter `Future` needs nothing
-further from the child — its ~$0.30 answer will fold and retire it as
-`Retired` on its own — so it is excluded; on every other mode a parked
-file's next step is an `EmbedRenderTask` a dead child cannot serve, and
-failing it is correct.
+`admitted_files: dict[int, Path]` and the stall clock's `last_progress`
+timestamp are driver state beside `admission` (M2, N4). The map is **new
+bookkeeping, deliberately unpruned** (M2): pruning would need `Done` to
+call back into the driver on retirement, the coupling I10 avoided, and
+unpruned it holds one `Path` per admitted file — ~1758 at the end of a
+full run, nothing. Two subtractions read it, and they differ by exactly
+the parked set:
+
+* `outstanding()` — the map minus `Done`'s `retired_ids`, **filtered to
+  files that still need the child** (M4). The filter reads two things by
+  name (N5): the Poser's `parked` dict (data_structures.md's continuation
+  state — a citation, not new state) and `cfg.skip_embed`, which makes
+  `outstanding()` mode-dependent. Under `--skip-embed` a parked file needs
+  nothing further from the child — its ~$0.30 answer will fold and retire
+  it as `Retired` on its own — so it is excluded; in every other mode a
+  parked file's next step is an `EmbedRenderTask` a dead child cannot
+  serve, and failing it is correct. This is **who to fail** when the
+  child is gone.
+* `child_owed()` — the map minus `retired_ids` minus **all** parked
+  files, in every mode (N1). This is **what counts as evidence of child
+  liveness**: a wedged child is always holding a task, so a wedge never
+  empties it — and a healthy arbiter tail, where the child is idle by
+  construction (I1), always does, so the stall clock cannot run against
+  arbiter latency.
 
 The hang table, honestly labelled: **death** is closed on all four causes —
 the arbiter tail (I1), row-less files (I3/J1), double retirement (J2), a
 child dying mid-run (L1/M1) — and the fifth cause, a child that **wedges**
 without dying (a Filament stall, an amdgpu reset), is **bounded rather
-than accepted** (M3): `drain` keeps a last-progress timestamp and treats a
-generous no-progress deadline (`STALL_S`, ~60 s against a p99 model's
-~28 s of child work) as death — kill the child first, so the untimed join
-stays safe, then fail the outstanding files the same way. This repo's
-renderer has a documented history of aborting rather than returning; one
-timestamp is cheap insurance.
+than accepted** (M3): no progress on work the child owes, past a deadline,
+is treated as death — kill the child first, so the untimed join stays
+safe, then fail the outstanding files the same way. The deadline runs
+against `child_owed()`, never `outstanding()` (N1): gated on
+`outstanding()` it would count arbiter latency (24 s mean, **45 s p95** —
+LEARNINGS, where a 7-hour run went) as child silence and fire on a
+healthy run's quiescence tail — the one state this pipeline enters by
+design. `STALL_S` is **~300 s** (N2): the child's unit of work is
+**3–28 s per model** (actors_proposal.md:196 — pass 5's 34 ms figure was
+a resident re-show, not a model), and the error is one-sided — a wedge is
+permanent, so a 300 s detection costs four minutes of a multi-hour run
+exactly once, while a false positive kills a healthy child — so the
+deadline sits ~10× above the documented top of range, a statement about
+rendering, never about the network. This repo's renderer has a documented
+history of aborting rather than returning; one timestamp is cheap
+insurance.
 
 `dispatch` routes everything a decision can produce:
 `CachedHit`/`Retired`/`Failure` → `done.on` (the `Failure` arm is what
@@ -386,7 +431,10 @@ an unguarded drain would regress that, and a naive guard would admit
 without retiring, which is I1's hang wearing a different hat.
 
 ```python
-def drain(block):
+def drain(block):                   # last_progress is driver state (N4), set at
+                                    # spawn — never a local, which would be
+                                    # unbound in exactly the empty-recv case
+                                    # the stall branch exists for
     while (m := results.recv(SHORT) if block else results.recv_nowait()) \
             is not None:                                   # not truthiness (J8)
         last_progress = now()
@@ -399,24 +447,32 @@ def drain(block):
                 case Rendered() | Failure(): done.on(m)
         except Exception as e:
             done.on(Failure(m.file, m.index, str(e)))      # retire, never crash
-    for out in poser.poll():        # arbiter answers; poll is its own error
-        dispatch(out)               # boundary and yields Failure per file (J3)
-    if child.exitcode is not None or \
-            (outstanding() and now() - last_progress > STALL_S):
+    if polled := poser.poll():      # arbiter answers; poll is its own error
+        last_progress = now()       # boundary, yields Failure per file (J3) —
+    for out in polled:              # and a fold is progress too (N4): the
+        dispatch(out)               # tail's silence must not read as a stall
+    if outstanding() and (child.exitcode is not None or
+            (child_owed() and now() - last_progress > STALL_S)):
         fail_outstanding()          # LAST, after the recv loop AND poll (M1):
                                     # a result already in the pipe is consumed
-                                    # first and never mis-blamed. Both blocking
-                                    # loops route through drain, so neither
-                                    # gate can hang — and a third caller
-                                    # cannot forget the check.
+                                    # first and never mis-blamed, and both
+                                    # blocking loops route through drain. The
+                                    # stall half watches child_owed() (N1); the
+                                    # outer outstanding() guard keeps a dead
+                                    # child's exitcode from re-firing over an
+                                    # empty set every drain (N6), and reads as
+                                    # what it is: nothing owed, nothing to do.
 ```
 
-`fail_outstanding()`: if the child is wedged rather than dead, `kill()` it
-first (the untimed join must never meet a live wedge — M3); then
-`done.on(Failure(f, i, ...))` for each of `outstanding()` — retirement is
-idempotent (J2), the `Release`s go to a dead child harmlessly, and it runs
-at the end of `drain` where no caller is mid-iteration over the same
-indices.
+`fail_outstanding()`: if the child is wedged rather than dead,
+`child.kill()` it first (the untimed join must never meet a live wedge —
+M3); then `done.on(Failure(f, i, ...))` for each of `outstanding()` —
+retirement is idempotent (J2), the `Release`s go to a dead child
+harmlessly, and it runs at the end of `drain` where no caller is
+mid-iteration over the same indices. It also sets `child_failed`, the
+flag that stops the walker admitting to a dead child (N3). Names, so
+nobody hunts for them (N6): `STALL_S` is a driver constant beside
+`WINDOW` and `SHORT`, and `now()` is `time.monotonic()`.
 
 (`results.recv` with a short timeout when blocking — the `Transport`
 protocol has no iterator, I16 — and every produced task flows through the
