@@ -206,7 +206,9 @@ terminates it. Conventions:
 * `PoseRenderTask` → `loader.get` → `up_axis_scores` → `renderer.pose_tiles`
   → `PoseTiles(geo_scores, tiles)`. The geometry evidence crosses with the
   tiles because the mesh does not.
-* `EmbedRenderTask` → `renderer.views(lm, pose.up)` — **`mesh.rotate` on a
+* `EmbedRenderTask` → `renderer.views(lm, index, pose.up)` (`index` because
+  residency and `Release` key on it, invariant 2; `lm=None` on a resident
+  hit) — **`mesh.rotate` on a
   copy of the resident mesh, never in the camera** (I11 resolved
   2026-08-17, reversing this note's draft rule). Measured:
   `eval/views_camera_rotation.py` compared camera-carried rotation against

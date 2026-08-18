@@ -137,12 +137,40 @@ the final review:
   ⇒ `pose_changed=True` (the cell that distinguishes read-the-source from
   confirmation-means-unchanged).
 
-## Track A — child side: review pending
+## Track A — child side (`src/loader.py`, `src/renderer.py`, `src/render_child.py`): CLEAN-WITH-NOTES
 
 Implementation round measured the I11 failure (camera rotation vs
-`mesh.rotate`, world-fixed IBL; see the dated learnings entry) which led to
-the rotated-copy decision now in interfaces.md; the rework and its review
-land after this record's first commit and append here as `A-R1-*`.
+`mesh.rotate`, world-fixed IBL; the dated learnings entry has the numbers)
+which drove the rotated-copy decision; a rework round rebuilt `views()` to
+it, byte-identical to the reference in 16/18 nopost cases with the two
+exceptions exactly matching their own repeat floor (18/18 with IBL off).
+Review verified the loader extraction byte-for-byte (every
+`read_binary_stl` guard intact), walked the exception boundary (no
+reachable gap), and closed a gap the eval structurally cannot see:
+hidden resident originals left in the scene are **pixel-neutral**
+(controlled interleaved rerun on the iGPU — hidden-present vs churn-only
+byte-identical in every pairing). All eight flagged interpretations
+sustained, including `save_renders` never raising (production parity; a
+failed save self-heals via the next run's redraw).
+
+- **A-R1-1** (minor, applied) — `mesh_nbytes` omitted `triangle_normals`
+  (populated by `compute_vertex_normals`), undercounting residency ~13%
+  (bunny: 86.7% of real bytes); the test had pinned the undercount as the
+  contract. One term added.
+- **A-R1-2** (minor, applied) — attribution counts were off: 11 (not 12)
+  noibl cases collapse to 1/255, and the four that don't are bunny ±Y
+  (7–8/255) and ±X (17–18/255), not "three at ±X". Deltas/percentages were
+  correct; learnings entry + renderer docstring corrected.
+- **A-R1-3** (minor, applied) — learnings self-contradiction ("all 18" vs
+  its own 16/18 heading) fixed to name the two floor-bounded cases.
+- **A-R1-4** (minor, applied) — interfaces.md still wrote
+  `renderer.views(lm, pose.up)`; now `views(lm, index, up)` with the
+  invariant-2 reason (residency and Release key on index).
+- **A-R1-5** (minor, applied) — the eval's PASS criterion excluded
+  repeat-unstable cases unconditionally, which could swallow a real
+  difference riding on an unstable case; exclusion now requires the path
+  delta to stay within the case's own repeat floor (today's data
+  satisfies it: 27/27 and 70/70 exactly).
 
 ## Track E — done (`src/done.py`): CHANGES REQUESTED
 

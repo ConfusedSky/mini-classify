@@ -63,6 +63,13 @@ notes at the bottom are amended in place. Open work is tracked separately in
   adversarial passes taught: walk protocols, remove carve-outs, make
   invariants mechanical, guard the clean path; convergence is severity
   falling, not counts.
+- [2026-08-17 — camera rotation and the world-fixed fill](docs/learnings/2026-08-17-camera-rotation-and-the-world-fixed-fill.md)
+  — the refactor's "rotate into the camera, never the mesh" rule measured and
+  reversed (I11): the ambient fill is a world-fixed environment map, so a
+  rotated rig lights the model differently — 75/255 on half the pixels under
+  the production config. `views` rotates a copy instead; the caches stay valid,
+  residency keeps the parse and pays the ~275 ms upload, and the roundtrip
+  spike's 1.11× was always measured on this design.
 
 ## Evergreen notes
 
