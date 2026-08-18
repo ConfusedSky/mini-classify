@@ -54,14 +54,30 @@ tests. They used to live in `classify_stls.py`, which made a script the
 project's de-facto library; the eval-debt cleanup (2026-08-18) moved them here
 so the CLI imports them like everyone else and imports nothing back.
 
-Import rules, and why each is load-bearing:
+Import rules, and why each is load-bearing.
+
+Two conventions, because both have already caused confusion between sessions:
+
+* **Module counts are the number a fresh `import` *adds*,** measured against a
+  bare interpreter's 48. Quote `len(sys.modules) - baseline`, never the total —
+  "186" and "138" are the same measurement of `classify_stls` and reading one
+  as the other is a 48-module error every time.
+* **A deferred import is only a fix when the function's own signature already
+  implies the dependency.** That is the reviewable test, not "module X defers
+  Y": deferral does not remove a cost, it moves it onto callers — and the set
+  of newly-charged callers is empty exactly when they could not have called the
+  function without the dependency in the first place. `up_axis_scores(mesh)`
+  qualifies (you cannot hold an Open3D mesh without open3d); a function taking
+  a *path* and reaching for open3d would not, and would reintroduce the
+  `DEFAULT_MODEL` shape while looking compliant. Check the argument type, not
+  the import's position.
 
 | module | may import | must NOT import | because |
 |---|---|---|---|
-| child side (`loader`, `renderer`, `render_child`) | open3d, PIL, numpy, `messages`, pose | **torch** | SigLIP lives in the parent; a torch import in the child costs VRAM and startup for nothing. **This binds `classify_stls.py` too** (wave 2, measured): `spawn` re-executes `__main__` in the child, so a module-scope torch import in the CLI would land in the render child — the CLI imports torch only inside function bodies. Since the eval-debt cleanup the CLI goes further and keeps open3d/numpy/PIL out of its module scope too (`pose` and `renderer` are imported inside `main`/`resolve_pose_vlm`), so `import classify_stls` leaves `sys.modules` at 186 rather than 2653 (138 added over a bare interpreter's 48 — phase 2's commit message counts it that way) |
+| child side (`loader`, `renderer`, `render_child`) | open3d, PIL, numpy, `messages`, pose | **torch** | SigLIP lives in the parent; a torch import in the child costs VRAM and startup for nothing. **This binds `classify_stls.py` too** (wave 2, measured): `spawn` re-executes `__main__` in the child, so a module-scope torch import in the CLI would land in the render child — the CLI imports torch only inside function bodies. Since the eval-debt cleanup the CLI goes further and keeps open3d/numpy/PIL out of its module scope too (`pose` and `renderer` are imported inside `main`/`resolve_pose_vlm`), so `import classify_stls` adds 138 modules rather than 2605 |
 | `poser` | torch (one conversion), numpy, pose, PIL (contact sheet) | open3d renderer calls | the Poser consumes geometry *scores* (computed child-side) and tiles, never the mesh itself |
 | `embedder` | torch, transformers | — | the only owner of models |
-| `pose` | numpy, PIL, `identity`; **open3d only inside `up_axis_scores`** | torch, **any other `src/` module** | the standing rule, unchanged by the move: `pose` is the leaf both sides import (the child for `up_axis_scores`, the Poser for `combine_up`, `messages` for `Pose`), so it must depend on nothing in the pipeline. Living in `src/` makes it a sibling of its importers, not a peer that may import back. open3d is *deferred* because it was charging 2596 modules to every light consumer — `embed_store` → `cluster_models` loaded a rendering library to read `.npy` files. Deferral is normally the wrong fix (it moves the cost to the caller; `DEFAULT_MODEL` had to move instead) and is free only here: every caller of `up_axis_scores` passes a mesh, so it already imported open3d to have one. `import src.pose` costs 196 modules, not ~2600 |
+| `pose` | numpy, PIL, `identity`; **open3d only inside `up_axis_scores`** | torch, **any other `src/` module** | the standing rule, unchanged by the move: `pose` is the leaf both sides import (the child for `up_axis_scores`, the Poser for `combine_up`, `messages` for `Pose`), so it must depend on nothing in the pipeline. Living in `src/` makes it a sibling of its importers, not a peer that may import back. open3d is *deferred* because it was charging 2596 modules to every light consumer — `embed_store` → `cluster_models` loaded a rendering library to read `.npy` files. It qualifies under the signature-implies-dependency test above, and **only `up_axis_scores` does**: any new open3d user here must take a mesh, or the import moves to the caller and the rule is broken without the deferred import moving at all. `import src.pose` adds 196 modules, not 2596 |
 | `identity` | stdlib only | **anything in `src/`, and any third-party import** | the deepest leaf: every cache keys on it (invariant 2), `pose` imports it, and a leaf below the leaf must cost nothing to import anywhere — parent, child, or a bare test |
 | `cachedir` | stdlib, `naming`, `identity` | **torch, open3d, numpy, PIL** | the CLI imports it at module scope, so the first row's `spawn` argument binds it too; and the read-only tools (`cluster_models.py`) must be able to find their way around a cache without loading a model. The rule binds this module's *callers*, not only its module scope: a deferred import still lands in whoever calls the function, so `add_cache_args` importing `--model`'s default from `embedder` put torch into `cluster_models.py` and `migrate_cache_keys.py` the moment they built a parser (836 modules, ~0.9 s — measured and fixed 2026-08-18). `DEFAULT_MODEL` lives in `identity` with `DEFAULT_ELEVATIONS` now, one copy on the stdlib side of the line, and nothing here imports outside the rule at any scope. `done` imports `view_config` from here rather than owning it, for the same reason |
 | `embed_store` | numpy, `pose`, `cachedir` | **torch** | the read side of what `done` writes. `cluster_models.py` clusters cached vectors and never loads SigLIP; keeping torch out of this module is what lets it stay that way |
