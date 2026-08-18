@@ -151,3 +151,17 @@ dict, so the `Pose.from_cache` copy hazard does not apply.
   `cache_key_from_identity` points the terminal stage at the admission
   module; the keying helper's natural home is the `identity` leaf. Later
   wave.
+
+**Delta round E-R2**: CLEAN-WITH-NOTES, loop closed. E-R1-1's fix verified
+structurally: `up_str(Pose.from_cache(d).up) == embed_cache_token(d,
+"auto")` for anything `float()` accepts (9 entry shapes through a real
+json round-trip, 0 mismatches), legacy from-disk entries DO reach
+`_save_embeds` via the warm-pose/cold-`.npy` arm and agree end-to-end
+against the real `route()`; the `_score` gate and flush guard agree by
+construction (`not in FORCED_UPS` ≡ `== "auto"`); forced runs touch the
+store on no path. E-R1-2's `finally` chaining matches the source's
+`__context__` semantics. **E-R2-1** (minor, applied): the E-R1-4 doc fix
+had named `front_T`/`back_T` where the code takes `front_embeds`/
+`back_embeds`; ruling — keep the code's names (they are `pose.py`'s
+`front_view_index` parameter names; `front_T`/`back_T` is the Embedder's
+attribute), fix the doc.
