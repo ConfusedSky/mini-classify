@@ -141,6 +141,25 @@ def trap_exit(monkeypatch):
     return log
 
 
+# --- Ctrl-C is the parent's (the child must not die of it) ------------------
+
+def test_the_child_ignores_sigint(monkeypatch, trap_exit):
+    """A terminal delivers SIGINT to the whole foreground process group, so
+    this child gets it too — and the loop's `except Exception` cannot catch a
+    KeyboardInterrupt, so an un-shielded child dies mid-render. The parent then
+    sees an exitcode and writes every outstanding file to the CSV as a render
+    failure it never had. The parent owns the lifecycle: EndOfInput on the
+    drain path, kill() on the abort path."""
+    import signal
+    before = signal.getsignal(signal.SIGINT)
+    try:
+        with pytest.raises(ExitCalled):
+            run(monkeypatch, [EndOfInput()])
+        assert signal.getsignal(signal.SIGINT) is signal.SIG_IGN
+    finally:
+        signal.signal(signal.SIGINT, before)      # never leave it ignored
+
+
 # --- one result per task, always (§P2.3) ------------------------------------
 
 def test_one_result_per_task_types_and_order(monkeypatch, trap_exit):

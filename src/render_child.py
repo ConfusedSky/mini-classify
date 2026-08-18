@@ -35,6 +35,7 @@ Import rule (interfaces.md row 1): child side imports open3d/PIL/numpy/
 messages/pose — never torch.
 """
 import os
+import signal
 import sys
 
 import instrument
@@ -81,6 +82,17 @@ def _handle(msg, renderer: Renderer):
 def run_child(tasks: Transport, results: Transport, cfg: RenderConfig) -> None:
     """Spawned once per run (spawn context, daemon — the parent's job). Loops
     until `EndOfInput`; never returns."""
+    # Ctrl-C is the parent's to handle. A terminal delivers SIGINT to the whole
+    # foreground process group, which includes this child, and the loop's
+    # `except Exception` cannot catch the resulting KeyboardInterrupt (it is a
+    # BaseException) — so an un-shielded child dies mid-render, the parent's
+    # liveness check sees an exitcode, and every outstanding file is written to
+    # the CSV as a render failure it never had. Measured: an unshielded spawn
+    # child raises KeyboardInterrupt and exits 1; SIG_IGN leaves it untouched.
+    # The parent still owns the lifecycle — EndOfInput on the drain path,
+    # kill() on the abort path — and this is a daemon, so a hard second Ctrl-C
+    # still takes it down with the parent.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     if cfg.instrument_path:
         # times stages, samples nothing: one nvidia-smi per run is the parent's
         # (instrument.py), and the child's totals go home on EndOfInput

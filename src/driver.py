@@ -337,10 +337,17 @@ def run(cfg: DriverConfig) -> None:
                                           # — the wedge O2 protects — owed is
                                           # non-empty and no reset happens, so a
                                           # mid-run fold still cannot save one.
-        if outstanding() and (child.exitcode is not None
-                              or (owed
-                                  and now() - drv.last_progress > STALL_S)):
+        if (outstanding() and not stopping.is_set()
+                and (child.exitcode is not None
+                     or (owed
+                         and now() - drv.last_progress > STALL_S))):
             fail_outstanding(wedged=child.exitcode is None)
+            # `not stopping`: once the user has aborted, a file still in flight
+            # was *interrupted*, not broken, and must not be written to the CSV
+            # as a failure — the abort discards in-flight work by design and
+            # the next run picks those files up. Without this guard a Ctrl-C
+            # that races the liveness check manufactures error rows, which are
+            # retirements and therefore outlive the run that invented them.
             # LAST, after the recv loop AND poll (M1): a result already in the
             # pipe is consumed first and never mis-blamed. The outer
             # outstanding() guard keeps a dead child's exitcode from re-firing

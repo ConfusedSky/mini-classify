@@ -159,6 +159,18 @@ class Transport(Protocol):            # src/transport.py
   config whole (`RenderConfig`, shape in data_structures.md; it crosses the
   spawn boundary, so it must stay picklable). The child never reads argv or
   run-params.
+* **The child ignores `SIGINT`; Ctrl-C is the parent's alone.** A terminal
+  delivers SIGINT to the whole foreground process group, so the child gets it
+  too — and `run_child`'s `except Exception` cannot catch the resulting
+  `KeyboardInterrupt` (a `BaseException`), so an unshielded child dies
+  mid-render. The parent then sees an exitcode, and `fail_outstanding` writes
+  every in-flight file to the CSV as a render failure it never had — rows that
+  are retirements, so they outlive the run that invented them. `run_child`
+  therefore installs `SIG_IGN` before anything else, and the parent keeps the
+  lifecycle it already owned: `EndOfInput` on the drain path, `kill()` on the
+  abort path, and a daemon child dies with a hard second Ctrl-C regardless.
+  The driver's liveness check is guarded to match — once `stopping` is set,
+  an in-flight file was *interrupted*, not broken, and gets no row at all.
 * The shm variant changes only what `send`/`recv` carry (`(block_id,
   shapes)` + a free-list back-queue) — the signatures above do not move,
   and `EndOfInput` being a message rather than `None` is what survives that

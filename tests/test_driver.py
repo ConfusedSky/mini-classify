@@ -755,6 +755,28 @@ def abort_on_second_poll(rig):
     rig.results.on_empty = on_empty
 
 
+def test_a_ctrl_c_that_kills_the_child_writes_no_failure_rows(monkeypatch):
+    """A terminal Ctrl-C reaches the whole foreground process group, so the
+    render child takes the SIGINT too. Whatever it was mid-render on was
+    *interrupted*, not broken: the abort discards in-flight work by design and
+    the next run picks those files up, so nothing may be written to the CSV as
+    a render failure. Error rows are retirements — they would outlive the run
+    that invented them."""
+    rig = Rig(monkeypatch, files=3, window=1,
+              routes={i: PoseRenderTask(f(i), i) for i in range(3)})
+
+    def on_empty():                      # the real sequence: signal first,
+        if rig.results.empties == 1:     # then the child dies of it, then the
+            signal.raise_signal(signal.SIGINT)   # parent's liveness check runs
+            rig.child.exitcode = 1
+    rig.results.on_empty = on_empty
+
+    rig.run()
+    assert not any(isinstance(r, Failure) for r in rig.done.rows.values()), \
+        "an interrupted file was recorded as a render failure"
+    assert ("child.kill",) not in rig.log        # it died of the signal, not a wedge
+
+
 def test_abort_runs_the_fixed_order_with_a_flush_on_both_sides(monkeypatch,
                                                                capsys):
     rig = Rig(monkeypatch, files=3, window=1,
