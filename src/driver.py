@@ -199,10 +199,16 @@ def spawn_render_child(tasks: Transport, results: Transport, cfg: RenderConfig,
     """The one child: spawn context, daemon, handed its config whole.
 
     Spawn is load-bearing with CUDA initialised in the parent, and `daemon`
-    means an aborting parent is never held open by it. `run_child` is imported
-    here rather than at module scope so the parent does not pull
-    `open3d.visualization.rendering` in just to spawn (no renderer is ever
-    created parent-side)."""
+    means an aborting parent is never held open by it.
+
+    `run_child` is imported here rather than at module scope, but not for the
+    reason this docstring used to give: it claimed the parent avoids pulling
+    `open3d.visualization.rendering` in just to spawn, and the parent pulls it
+    anyway — this import runs *in the parent*, in the only function that
+    spawns, on every run, and `classify_stls.main()` has already imported
+    `src.renderer` for `RENDER_FORMATS` by then. What the deferral does buy is
+    real but narrower: `import src.driver` stays light for anything that never
+    spawns, which is `tests/test_driver.py` and every fake-child test in it."""
     import multiprocessing as mp
 
     from src.render_child import run_child

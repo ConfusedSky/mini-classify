@@ -6,9 +6,16 @@ and `cluster_models.py` both load the whole collection into one array before
 they do anything else, and they used to do it by one REPL tool importing the
 function out of the other.
 
-Deliberately numpy-only: loading cached vectors is not a reason to load
-SigLIP. `cluster_models.py` never touches torch, and this is the module that
-lets it stay that way.
+Deliberately light: loading cached vectors is not a reason to load SigLIP —
+or a renderer. numpy and the three cache-identity functions it takes from
+`pose`, and nothing else; `cluster_models.py` reads the whole collection
+without importing torch or open3d.
+
+That second half was false when this module was written (2026-08-18): `from
+src import pose` pulled open3d at module scope, so a tool that reads `.npy`
+files off disk loaded a rendering library — 2602 modules, found by review.
+The fix was in `pose`, which now defers its one open3d use into
+`up_axis_scores`; this import costs 201 modules.
 """
 import numpy as np
 

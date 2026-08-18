@@ -14,7 +14,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
-import open3d as o3d
 from PIL import Image, ImageDraw, ImageFont
 
 from src import identity
@@ -107,6 +106,17 @@ def up_axis_scores(mesh, n_samples=4000):
     Seeded, because the winner can rest on ~30 of the 4000 points and an
     unseeded draw moves picks between runs on identical input — which would
     make the pose cache irreproducible and the ensemble below unstable."""
+    # The only open3d in this module, and the reason it is deferred: importing
+    # it at module scope charged 2596 modules to everything that imports
+    # `pose`, including the read-only tools that only want the cache functions
+    # — `embed_store` -> `cluster_models` paid for a rendering library to load
+    # `.npy` files. Deferring an import usually just moves the cost to the
+    # caller (see `DEFAULT_MODEL`, which had to move rather than defer); it is
+    # genuinely free *here* because every caller of this function passes a
+    # mesh, and you cannot hold an Open3D mesh without having imported open3d.
+    # The argument type already implies the import.
+    import open3d as o3d
+
     o3d.utility.random.seed(SAMPLE_SEED)
     pcd = mesh.sample_points_uniformly(n_samples, use_triangle_normal=True)
     pts = np.asarray(pcd.points)
