@@ -66,6 +66,9 @@ def parent_only():
         M.Embedded(file=Path("a.stl"), index=8, pose=pose(), embeds=object()),
         hit,
         M.Retired(file=Path("a.stl"), index=9),
+        # driver-side: the Poser hands it straight to the driver, which
+        # re-routes it through route() — it never goes near a queue
+        M.Resolved(file=Path("a.stl"), index=9, pose_changed=True),
         M.Redraw(task=task, hit=hit),
         M.ResultRow(index=10, file="a.stl", up="0,0,1", pose_conf=0.83,
                     pose_source="geometry", front_view=3,
@@ -130,6 +133,13 @@ def test_importing_messages_does_not_import_torch():
     r = subprocess.run([sys.executable, "-c", code], cwd=REPO,
                        capture_output=True, text=True, timeout=120)
     assert r.returncode == 0, r.stderr
+
+
+def test_resolved_requires_its_pose_changed_verdict():
+    """No default: the driver hands this straight to route(), and a silent
+    False is a fresh override whose stale renders never get redrawn."""
+    with pytest.raises(TypeError):
+        M.Resolved(file=Path("a.stl"), index=0)
 
 
 def test_cache_context_is_deliberately_mutable():

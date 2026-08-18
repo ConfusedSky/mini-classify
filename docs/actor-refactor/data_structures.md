@@ -244,6 +244,13 @@ class Resolved:                    # Poser → driver: this file's pose is settl
                                    # warm-.npy and redraw arms apply (the
                                    # second-call rule, interfaces §route). The
                                    # Poser decides poses, never cache admission
+    pose_changed: bool             # true when the fresh source is vlm/siglip
+                                   # (classify_stls.py:1146). The Poser knows
+                                   # the source it just recorded, so it rides
+                                   # here and the driver passes it straight to
+                                   # route rather than re-deriving it from the
+                                   # store. No default: guessing it False is a
+                                   # silently un-redrawn override
 
 @dataclass(frozen=True)
 class Redraw:                      # route's redraw return: both halves of the
@@ -503,10 +510,19 @@ spike resolved it to three resident meshes at 88% busy.
 ```python
 @dataclass
 class ResidentMesh:
+    mesh: o3d.geometry.TriangleMesh  # the host-side original, NEVER mutated —
+                                   # retaining it is what a residency hit
+                                   # saves (the parse+load); views() rotates
+                                   # a COPY of it (I11 resolution)
     center: np.ndarray             # framing from _upload, kept to avoid recompute
     radius: float
     nbytes: int
     in_flight: bool                # awaiting a pose answer — exempt from eviction
+    uploaded: bool                 # the ORIGINAL is in the scene only if the
+                                   # pose path put it there; an embed-only
+                                   # visit uploads just its rotated copy (and
+                                   # removes it), so eviction must know
+                                   # whether there is scene geometry to drop
 
 resident: OrderedDict[str, ResidentMesh]   # keyed by scene name
 budget_bytes: int
@@ -529,14 +545,18 @@ being the realistic one, which would otherwise pin a mesh exactly when
 memory is tight). Without `Release`, those meshes are exempt from eviction
 for the process lifetime and `budget_bytes` cannot reclaim them.
 
-The rotate-into-the-camera rule still applies — residency only pays if the
-resident geometry is reusable as-is — and it is a **precondition to verify,
-not a settled fact** (interfaces review I11): `R.T` is proven
-pixel-identical only for the tile grid at one elevation, the roundtrip
-spike that produced the residency numbers *rotated held meshes*, and the
-classification views span 8 azimuths × 2 elevations. Building
-`renderer.views` includes a pixel-identity check against `mesh.rotate`
-across the full view set; residency is inert until that check passes.
+I11 is resolved against the camera rule (2026-08-17; the learnings entry
+"camera rotation and the world-fixed fill" has the numbers): `views()`
+rotates a copy of the resident mesh, uploads it for the visit, and removes
+it after — byte-identical to `mesh.rotate` across the full view set,
+which the camera path is not (the IBL fill is world-fixed and cannot be
+rotated in this Open3D build). What residency saves is the parse+load;
+the revisit pays the ~275 ms copy re-upload — which is the design the
+roundtrip spike actually measured (it rotated held meshes), so the 1.11×
+number carries over unchanged. A warm-pose file can therefore be resident
+with no scene geometry at all (`uploaded=False`): the pose path is the
+only thing that uploads the original, and `pose_tiles` keeps its
+camera-carried rotation (production parity; one upload, twelve tiles).
 
 ## Queues
 

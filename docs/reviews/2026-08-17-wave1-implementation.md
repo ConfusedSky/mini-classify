@@ -112,6 +112,31 @@ Untested branches to pin (verified by hand this round): poll on a cancelled
 future; settle when the call raises `TimeoutError`; settle folding a failed
 call; submit under a saturated pool; `min_interval` with `workers>1`.
 
+**Delta round C-R2** (fix round + the `Resolved.pose_changed` addendum):
+CLEAN-WITH-NOTES, loop closed. All six C-R1 findings verified resolved
+(the five hand-checked branches now pinned as tests); the retirement of
+`--no-up-ensemble` confirmed complete in `src/` and the design notes;
+the `wrap` placement ruled structurally identical to today's `timed`
+closure. The `pose_changed` mapping matched `classify_stls.py:1146`
+across the full eight-cell truth table — exact because it reads the
+*recorded source*, not the exit taken (a paid confirmation of a SigLIP
+pick is correctly `True`; that quadrant is the one unpinned cell). No
+re-route loop (`_make_pose` always writes a margin). Minors riding to
+the final review:
+- **C-R2-1** (applied) — one §Poser sentence still named the deleted
+  `EmbedRenderTask` return; now reads `Resolved`/driver.
+- **C-R2-2** (applied, doc+docstring) — `drop` cancels the parked future,
+  so wave 2's `fail_outstanding` must never call it: N3 depends on parked
+  files surviving a dead child so their paid answers fold before flush.
+  Spelled out at both the spec comment and the method docstring.
+- **C-R2-3** (deferred; inert at `min_interval=0`) — the pacing sleep is
+  uninterruptible: a worker parked in it at abort isn't `done()`, inflates
+  the narration count, and burns `FOLD_S` on rate-limit wait. Fix when
+  pacing goes live: `self._stopping.wait(wait)` instead of `sleep`.
+- Untested quadrant worth one assertion: confirmation on a SigLIP park
+  ⇒ `pose_changed=True` (the cell that distinguishes read-the-source from
+  confirmation-means-unchanged).
+
 ## Track A — child side: review pending
 
 Implementation round measured the I11 failure (camera rotation vs

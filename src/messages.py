@@ -154,6 +154,23 @@ class Retired:                     # → Done: retire with no row (interfaces
 # --- Driver-side shapes (never cross a queue) -------------------------------
 
 @dataclass(frozen=True)
+class Resolved:                    # Poser → driver: this file's pose is settled
+    file: Path                     # and recorded. The driver re-routes it
+    index: int                     # through route(f, index, pose_changed=...) —
+                                   # the pose store is warm by then, so the
+                                   # warm-.npy and redraw arms apply (the
+                                   # second-call rule, interfaces §route). The
+                                   # Poser decides poses, never cache admission
+    pose_changed: bool             # true when the fresh source is vlm/siglip
+                                   # (classify_stls.py:1146). The Poser knows
+                                   # the source it just recorded, so it rides
+                                   # here and the driver passes it straight to
+                                   # route rather than re-deriving it from the
+                                   # store. No default: guessing it False is a
+                                   # silently un-redrawn override
+
+
+@dataclass(frozen=True)
 class Redraw:                      # route's redraw return: both halves of the
     task: EmbedRenderTask          # decision in one value, so a test of route
     hit: CachedHit                 # covers what the driver dispatches (I14)

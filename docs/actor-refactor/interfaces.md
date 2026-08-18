@@ -172,9 +172,10 @@ def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False) \
 (→ `PoseRenderTask`), and again on the Poser's `Resolved` — the pose store
 is warm by then, so the same table serves the warm-`.npy` shortcut instead
 of a re-embed (today's post-resolution check, `classify_stls.py:1148-1155`;
-its loss was the regression B's reviewer escalated). `pose_changed` is the
-driver's one extra input on that second call — true when the fresh source
-is `vlm`/`siglip` — and the renders-wanted arm treats it like missing
+its loss was the regression B's reviewer escalated). `pose_changed` rides
+on `Resolved` — the Poser knows the source it just recorded, so the driver
+never re-derives it from the store (true when the fresh source is
+`vlm`/`siglip`) — and the renders-wanted arm treats it like missing
 renders: the redraw is forced even when the render set is complete.
 
 `CacheContext` (shape in data_structures.md) bundles what today is closure
@@ -267,6 +268,14 @@ class Poser:
     def fold_done(self) -> int         # abort step 1: fold every ALREADY-resolved
                                        # future. No wait, so no exposure. What it
                                        # leaves in `parked` is the wait's size
+    def drop(self, index) -> None      # forget a file: pops the tile stash and
+                                       # parked (cancelling its future); no-op on
+                                       # unknown. The driver's Failure arm calls
+                                       # it so an embed error can't pin ~9 MB of
+                                       # tiles forever (C-R1-5). NEVER called
+                                       # from fail_outstanding: a parked file's
+                                       # in-flight answer is already paid for
+                                       # and must still fold (N3, C-R2-2)
     def settle(self, timeout) -> int   # abort step 2: wait out the in-flight calls
                                        # and fold them (I15). Returns how many were
                                        # abandoned to their ensemble pose — the
@@ -294,8 +303,8 @@ class Poser:
   be attributed by the driver.
 * `fold_done` and `settle` are `poll`'s abort-path siblings and reuse its
   fold, minus the dispatch: a parked file resolved during shutdown wants its
-  `record_pose`, not the `EmbedRenderTask` it would normally yield to a child
-  that is about to be joined. Both inherit `poll`'s error boundary (J3) — a
+  `record_pose`, not the `Resolved` it would normally yield to a driver
+  that is about to flush (C-R2-1). Both inherit `poll`'s error boundary (J3) — a
   fold that raises during abort costs that one file's answer, never the
   flush behind it. `settle` skips futures that `shutdown` already cancelled
   (they raise `CancelledError`); those were queued, never billed.
@@ -315,6 +324,12 @@ class Poser:
 
 ```python
 class Arbiter:
+    def __init__(self, workers=8, min_interval=0.0,
+                 wrap=None): ...        # wrap: the driver passes
+                                        # instrument.arbiter_call (C-R1-2) —
+                                        # applied on the worker after the pacing
+                                        # sleep, so it times the call, not the
+                                        # rate-limit wait
     def submit(self, call: Callable[[], int | None]) -> Future
     def shutdown(self) -> None         # wait=False, cancel_futures=True
 ```
@@ -363,7 +378,14 @@ methods and nothing else changes.
 ```python
 class Done:
     def __init__(self, admission: Admission, text_embeds, cache_ctx,
-                 tasks: Transport): ...        # for Release on retirement (K1)
+                 tasks: Transport,             # for Release on retirement (K1)
+                 *, categories=None,           # scoring inputs (E-R1-4): absent
+                 front_embeds=None,            # under --skip-embed. The banks
+                 back_embeds=None): ...        # are the Embedder's front_T/
+                                               # back_T (§Embedder, D-R1-2);
+                                               # here they take pose.py's
+                                               # front_view_index param names
+                                               # (E-R2-1)
     def record_pose(self, file: Path, index: int, pose: Pose) -> None
     def on(self, m: CachedHit | Embedded | Failure | Retired | Rendered) -> None
     def flush(self) -> None            # rows CSV + pose cache (temp+replace)
@@ -593,6 +615,9 @@ def drain(block):                   # driver state is written as drv.* (O1): an
                 case Rendered() | Failure(): done.on(m)
         except Exception as e:
             done.on(Failure(m.file, m.index, str(e)))      # retire, never crash
+            poser.drop(m.index)                            # and unpin its tiles
+                                                           # (C-R1-5; no-op if
+                                                           # never stashed)
     for out in poser.poll():        # arbiter answers; poll is its own error
         dispatch(out)               # boundary, yields Failure per file (J3).
                                     # NO progress bump here (O2): child_owed()
