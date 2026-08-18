@@ -414,11 +414,17 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   (`render_key`, `cache_key_from_identity`, `EMBED_CACHE_VERSION`) move to
   `src/identity.py` — the stdlib-only leaf both sides import (E-R1-5's
   recorded direction; the leaf's stdlib-only import rule must survive the
-  move). Everything else duplicated is `src/`-vs-`classify_stls.py`
-  (`pool_sims`, `view_config`, `orbit_camera`, `view_angles`,
-  `RENDER_FORMATS`, `DEFAULT_ELEVATIONS`, prompt constants) and dissolves
-  when the wave-2 CLI rewrite delegates to `src/`; retire each pair's
-  parity-pin test together with its copy, not before.
+  move). Everything else duplicated is `src/`-vs-`classify_stls.py` and
+  dissolves when the wave-2 CLI rewrite delegates to `src/` — functions
+  `pool_sims`, `view_config`, `orbit_camera`, `view_angles`, the key
+  builders; constants `STL_RECORD`, `RENDER_FORMATS`, `DEFAULT_ELEVATIONS`,
+  `EMBED_CACHE_VERSION`, `FILL_INTENSITY`, `SUN_INTENSITY`,
+  `UP_TILE_AZIMUTHS`, `UP_TILE_ELEVATION`, the prompt constants (full
+  constant sweep 2026-08-17; each already has exactly one `src/` home).
+  Retire each pair's parity-pin test together with its copy, not before.
+  Exit check: an AST sweep for same-named module-level constants or
+  functions across `src/` + `classify_stls.py` comes back empty (bar
+  `__init__`).
 
 - **Renders are not reproducible across pose-cache states.** A cold pose cache
   renders the six up-candidate tiles through the same `OffscreenRenderer` first,
