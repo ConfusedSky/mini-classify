@@ -107,9 +107,15 @@ atexit hook joins those same non-daemon threads regardless (I7), so the choice
 is not "wait or don't" but "read the answers or throw them away"."""
 
 JOIN_S = 5.0
-"""Abort-path join on the child. Timed, unlike the drain path's: quiescence
-means the child is idle (§P2.3), an abort means nothing of the sort, and its
-half-finished renders are debug artifacts."""
+"""Every join on the child, on every path (F-8). It used to be the abort
+path's only, on the reasoning that "quiescence means the child is idle
+(§P2.3)" made the drain path's join safe untimed. That reasoning is false on
+exactly one path and it is the one that matters: `fail_outstanding` reaches
+`in_flight() == 0` by *killing* the child, not by the child going idle, so the
+drain path can arrive at the join with a child that SIGKILL did not reap — and
+an untimed `join()` then blocks the parent past the `finally: done.flush()`,
+losing results.csv and pose-cache.json for a run whose work was already
+done."""
 
 STAGES_S = 5.0
 """How long the parent waits for the child's stage totals after `EndOfInput`
@@ -435,17 +441,78 @@ def run(cfg: DriverConfig) -> None:
                 return
             tasks.send(EndOfInput())      # every Release precedes it (FIFO)
             _collect_child_stages(results)   # its reply, under --instrument
-            child.join()                  # UNTIMED: quiescence means idle
+            _join_child(child, tasks)     # TIMED, like every other join (F-8)
         finally:
             done.flush()                  # main thread, both paths — and in a
                                           # finally, so a bug above still leaves
                                           # the pose cache and the partial CSV
-    if child.exitcode != 0:               # AFTER flush, to stderr, never a
+    if child.exitcode not in (0, None):   # AFTER flush, to stderr, never a
+        # None means _join_child gave up on an unreapable child and has already
+        # said so in more detail; "child exit None" would only muddy it.
         print(f"child exit {child.exitcode}", file=sys.stderr)   # raise (M5,
         # L2): on a clean walk the run is complete and correct here and the
         # exitcode only says HOW the child ended; on the dead-child path this
         # line plus the truncated CSV IS the crash report — the lost work is
         # already Failure rows from drain's check.
+
+
+def _abandon(child, tasks: Transport) -> None:
+    """Stop waiting on a child that will not reap, on every wait there is.
+
+    Bounding the driver's own join is not enough, because two more untimed
+    joins run after `run` returns and neither is ours:
+
+    * `multiprocessing.util._exit_function` walks `active_children()` and calls
+      `p.join()` — no timeout — for each. Dropping the child from the
+      bookkeeping set is the only way to leave that loop; `terminate()` has
+      already been tried by then and, on the case that gets us here, did
+      nothing. The child is a `daemon` process the kernel will reap when it
+      finally leaves its ioctl, so what is dropped is the *wait*, not cleanup.
+    * `tasks`' feeder thread is joined untimed by `Queue._finalize_join`. It is
+      only ever stuck when the pipe is full and the reader is alive but not
+      reading — precisely the wedged child — so `close()` (cancel_join_thread,
+      the abort path's I6 move) is the same abandonment applied to the queue.
+
+    Both are best-effort by construction: a fake child in the tests is in no
+    `_children` set and a fake transport may have no `close`, and neither may
+    turn giving up on a wedge into an exception on the way out."""
+    try:
+        from multiprocessing import process as _mp_process
+        _mp_process._children.discard(child)
+    except Exception:
+        pass
+    try:
+        tasks.close()
+    except Exception:
+        pass
+
+
+def _join_child(child, tasks: Transport) -> None:
+    """Wait JOIN_S for the child, kill it, wait JOIN_S more, then give up.
+
+    The clean path arrives here two ways. After a real quiescence the child is
+    idle, has been sent `EndOfInput`, and exits inside milliseconds — the first
+    join returns and nothing else in here runs. After `fail_outstanding` it has
+    already been `kill()`ed and quiescence was manufactured out of its
+    `Failure` rows; if SIGKILL did not take, no length of waiting will change
+    that, because the realistic way a render child stops responding *and*
+    survives SIGKILL is one uninterruptible kernel wait — the amdgpu/DRM
+    ioctls the Filament renderer lives inside are exactly that, and a process
+    in D state does not die and does not reap.
+
+    Giving up is safe and losing the child is not: every result it owed is
+    already a `Failure` row, `done.flush()` runs next, and the run's product
+    (the caches) is written. The line goes to stderr next to the exitcode line
+    for the same reason that one does — it is the crash report, not a raise."""
+    child.join(JOIN_S)
+    if child.exitcode is None:
+        child.kill()                  # a no-op if fail_outstanding got here
+        child.join(JOIN_S)            # first; SIGKILL is not idempotency-shy
+    if child.exitcode is None:
+        _abandon(child, tasks)
+        print(f"render child {getattr(child, 'pid', '?')} did not exit after "
+              f"SIGKILL (stuck in the kernel); abandoning it — it is a daemon "
+              f"and the run's caches are written below", file=sys.stderr)
 
 
 def _collect_child_stages(results: Transport) -> None:
@@ -495,4 +562,8 @@ def _abort(cfg: DriverConfig) -> None:
         print(f"{abandoned} calls did not answer within {FOLD_S:g}s; those "
               f"files keep their ensemble pose", file=sys.stderr)
     cfg.tasks.close()                 # cancel_join_thread: unflushed pickles
-    cfg.child.join(JOIN_S)            # must not hold the process open (I6)
+    _join_child(cfg.child, cfg.tasks)  # must not hold the process open (I6) —
+                                      # one join policy on both paths (F-8),
+                                      # because _exit_function's own untimed
+                                      # join is waiting on the far side of
+                                      # either one

@@ -433,6 +433,28 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
 
 ## Structural questions
 
+- **`MpQueueTransport.recv(timeout)` is not bounded once a partial message is
+  in the pipe** (2026-08-18, found while diagnosing the untimed-join hang —
+  see the dated learnings entry). `_poll` succeeding only proves the *first*
+  bytes arrived; the read of the remainder has no deadline, so a writer that
+  dies mid-message leaves the parent blocked in `Connection._recv_bytes`, and
+  that wait sits in the drain, *upstream* of the join the hang fix bounded. It
+  needs a completed render to reach, so it cannot explain the observed stall,
+  but it is reachable on a long run. A proper fix is a length-prefixed read
+  with its own deadline — not a wrapper timeout, which would leave the
+  half-message in the pipe and desynchronise the stream.
+- **A wedged child still ends the run.** `fail_outstanding` sets
+  `child_failed`, which stops the walk, so one wedge at model 500 of 1000
+  retires the outstanding files and quits — now in ~250 s with durable caches
+  and honest `Failure` rows (so a warm rerun resumes) rather than hanging
+  forever with nothing flushed. Respawning the child instead would let the run
+  continue; deliberately out of scope for the hang fix.
+- **Faster failure detection: a child `Ready` handshake.** Considered and
+  rejected as part of the hang fix (reasoning in the learnings entry): it moves
+  detection from `STALL_S` to ~60 s but arrives at the same place, and adds a
+  false-positive mode where a slow-but-healthy cold start is killed by a tight
+  deadline. Worth doing on its own if 240 s to first diagnosis is too slow.
+
 - **Dedup pass over the wave-1 `src/` modules** (2026-08-17, after wave 2
   lands and before the whole-branch review). AST-level scan found one true
   src-internal duplicate: `render_key` byte-identical in

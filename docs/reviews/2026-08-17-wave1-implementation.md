@@ -387,3 +387,44 @@ All ten taken; the branch's test count goes 395 → 405.
   reproducibility entry (generalised by the parity run) all amended in place.
   `eval/README.md` no longer claims a top-level `pose` or that its harnesses
   measure the pipeline's scheduling.
+
+## The intermittent hang (2026-08-18): diagnosed and bounded
+
+The wave-3 parity run's 1-in-17 stall. **Not reproduced in 92 watched runs**
+across seven campaigns; diagnosed by elimination at ~85% confidence, and the
+fix makes the symptom impossible either way. Full write-up in
+`docs/learnings/2026-08-18-the-untimed-join-and-the-missing-egl-line.md`.
+
+Both premises the investigation was handed turned out to be wrong, which is
+the transferable part: `classifying: 100%` proves only that the parent reached
+quiescence (the bar advances on admission), and the missing
+`[Open3D INFO] EGL headless mode enabled.` line is a **fingerprint of SIGKILL**
+— that line is block-buffered and only reaches a piped log at exit, so a child
+whose renderer was fully up and was later killed produces exactly the observed
+log. A negative control (a child that stalls forever but stays killable, at
+`STALL_S=12`) exits cleanly and writes both artifacts, proving the liveness
+check was never the broken part.
+
+**Diagnosis**: `child.join()` on the drain path was untimed, and
+`fail_outstanding` reaches `in_flight() == 0` by *killing* the child rather
+than by it going idle — so the comment licensing the untimed join ("quiescence
+means idle") is false on exactly that path. A child wedged in Filament's
+EGL/amdgpu ioctls sits in uninterruptible `D` state, where SIGKILL neither
+kills nor reaps, and the join blocks forever on the far side of
+`finally: done.flush()` — which is why only `cache-meta.json` was written.
+
+**Fix**: every join on the child is bounded by `JOIN_S`; `_join_child` joins,
+kills, joins again, then abandons; `_abandon` discards the child from
+`multiprocessing`'s `_children` and closes `tasks` with `cancel_join_thread`,
+escaping the two further untimed joins in the stdlib (`_exit_function` and
+`Queue._finalize_join`) that would otherwise relocate the hang to interpreter
+exit. `_abort` routes through the same helper, so there is one join policy.
+`test_an_unreapable_child_does_not_hang_the_run` was confirmed to hang ~30 s
+and fail against the unfixed driver. One existing assertion changed —
+`test_end_of_input_follows_quiescence` pinned `joins == [None]`; that
+assertion *was* the bug.
+
+A `Ready` handshake was evaluated and rejected (it arrives at the same untimed
+join); recorded in OPEN_QUESTIONS as separable work, along with the unbounded
+partial-message read in `MpQueueTransport.recv` that the investigation found
+but that cannot explain this hang.

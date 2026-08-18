@@ -3,7 +3,7 @@
 Usage:
   python classify_stls.py /path/to/stls --categories categories.txt --out results.csv
   python classify_stls.py model.stl --save-renders   # single file, keep debug renders
-                                    # (they land under <cache-dir>/renders/<camera config>/)
+                                                     # under <cache-dir>/renders/<camera config>/
 
 Renders each mesh from several viewpoints (Open3D offscreen, in a render child
 process), embeds the views with SigLIP in this process, and ranks the pooled

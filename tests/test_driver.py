@@ -606,8 +606,10 @@ def test_end_of_input_follows_quiescence(monkeypatch):
     eoi = [i for i, m in enumerate(rig.tasks.sent) if isinstance(m, EndOfInput)]
     assert len(eoi) == 1 and eoi[0] == len(rig.tasks.sent) - 1
     assert rig.tasks.at_send[eoi[0]] == (0, 0)     # nothing in flight, none parked
-    assert rig.child.joins == [None]               # UNTIMED on the drain path
-    assert rig.done.flushes >= 1
+    assert rig.child.joins == [driver.JOIN_S]      # TIMED, and exactly once: a
+    assert rig.done.flushes >= 1                   # child that answers the
+                                                   # first join is never killed
+                                                   # or joined again (F-8)
 
 
 def test_flush_follows_the_join_on_the_drain_path(monkeypatch):
@@ -658,6 +660,108 @@ def test_a_wedged_child_is_killed_after_stall_s(monkeypatch):
     assert all(j > kill for j in joins)            # a live wedge (M3)
     assert all(isinstance(r, Failure) for r in rig.done.rows.values())
     assert "stopped responding" in rig.done.rows[0].error
+
+
+class UnreapableChild:
+    """The child SIGKILL cannot reap.
+
+    `FakeChild.kill()` sets `exitcode = -9`, which quietly assumes the signal
+    lands — true of every child that is running Python. The render child spends
+    its life inside Filament's EGL/amdgpu ioctls, and a process in an
+    uninterruptible kernel wait neither dies on SIGKILL nor reaps: `kill()`
+    returns, `exitcode` stays None, and `join()` returns only when its own
+    timeout does. An untimed `join()` never returns at all — which is the whole
+    hang."""
+
+    def __init__(self, log):
+        self.log = log
+        self.exitcode = None            # the kill never takes
+        self.pid = 4242
+        self.joins = []
+        self._never = threading.Event()  # nothing ever sets it
+
+    def kill(self):
+        self.log.append(("child.kill",))
+
+    def join(self, timeout=None):
+        self.log.append(("child.join", timeout))
+        self.joins.append(timeout)
+        self._never.wait(timeout)       # timeout=None: forever
+
+
+def test_an_unreapable_child_does_not_hang_the_run(monkeypatch):
+    """F-8, the intermittent-hang bug: the drain path's join was untimed on the
+    reasoning that "quiescence means the child is idle". `fail_outstanding`
+    breaks that reasoning — it reaches `in_flight() == 0` by *killing* the
+    child, so the drain path can arrive at the join with a child that SIGKILL
+    did not reap. Untimed, the parent then blocks in `child.join()` forever,
+    past the `finally: done.flush()` — which is exactly the observed failure:
+    a run whose every result was already accounted for, that wrote neither
+    results.csv nor pose-cache.json, and sat there until it was killed.
+
+    Without the bounded join this test does not fail, it hangs — so the wait
+    is what is asserted, and `driver.run` is put on a thread to make the hang
+    catchable rather than inherited."""
+    monkeypatch.setattr(driver, "JOIN_S", 0.05)     # two joins, not ten seconds
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(driver, "now", lambda: clock["t"])
+
+    def on_empty():
+        clock["t"] += driver.STALL_S / 2 + 1        # two empty polls cross it
+
+    rig = Rig(monkeypatch, files=1, window=1,
+              routes={0: PoseRenderTask(f(0), 0)}, on_empty=on_empty)
+    rig.child = rig.cfg.child = UnreapableChild(rig.log)
+
+    returned, boom = threading.Event(), []
+
+    def go():
+        try:
+            driver.run(rig.cfg)
+        except BaseException as e:      # reported by the assert, not swallowed
+            boom.append(e)
+        finally:
+            returned.set()
+
+    threading.Thread(target=go, daemon=True).start()
+    assert returned.wait(30), ("driver.run never returned: it is blocked in an "
+                               "untimed child.join() on a child SIGKILL cannot "
+                               "reap, and done.flush() is on the far side of it")
+    assert not boom, boom
+    # the wedge was detected and the run's work was made durable anyway
+    assert ("child.kill",) in rig.log
+    assert isinstance(rig.done.rows[0], Failure)
+    assert rig.done.flushes >= 1
+    # every join bounded, and the unreapable child gets exactly two of them —
+    # one before the kill, one after — and is then abandoned rather than waited
+    # on a third time
+    assert rig.child.joins == [driver.JOIN_S, driver.JOIN_S]
+
+
+def test_abandon_removes_the_child_from_every_remaining_untimed_wait():
+    """F-8's other half. Bounding the driver's own join is not enough: two more
+    untimed joins run after `run` returns, and both are in the stdlib —
+    `multiprocessing.util._exit_function` calls `p.join()` with no timeout for
+    every process still in `_children`, and `Queue._finalize_join` does the
+    same for the tasks feeder thread. A bounded join that left those two in
+    place would move the hang from `run` to `atexit`, which is the same hang
+    with a worse stack."""
+    from multiprocessing import process as mp_process
+
+    class Tasks:
+        closed = 0
+
+        def close(self):
+            type(self).closed += 1
+
+    child, tasks = UnreapableChild([]), Tasks()
+    mp_process._children.add(child)
+    try:
+        driver._abandon(child, tasks)
+        assert child not in mp_process._children   # _exit_function skips it
+        assert Tasks.closed == 1                   # cancel_join_thread (I6)
+    finally:
+        mp_process._children.discard(child)
 
 
 def test_the_stall_clock_ignores_a_healthy_arbiter_tail(monkeypatch):

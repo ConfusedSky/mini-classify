@@ -78,6 +78,13 @@ notes at the bottom are amended in place. Open work is tracked separately in
   the same old binary differs from itself by as much (7.0e-03) when a model is
   rendered in company rather than alone, which generalises the pose-cache-state
   entry to any change in the preceding draw sequence.
+- [2026-08-18 — the untimed join, and why a missing EGL line is not evidence](docs/learnings/2026-08-18-the-untimed-join-and-the-missing-egl-line.md)
+  — a 1-in-17 stall traced by elimination to `child.join()` being untimed on
+  the one path that reaches quiescence by *killing* the child rather than
+  waiting for it to idle. Two pieces of evidence read as damning and are
+  worthless: the progress bar hits 100% at admission, and Open3D's EGL line is
+  block-buffered, so its *absence* is a fingerprint of SIGKILL rather than of a
+  stall before renderer startup.
 
 ## Evergreen notes
 
