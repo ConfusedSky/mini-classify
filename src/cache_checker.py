@@ -69,10 +69,16 @@ def render_key(f, root):
 
 # --- The decision ------------------------------------------------------------
 
-def route(f: Path, index: int, ctx: CacheContext) \
+def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False) \
         -> PoseRenderTask | EmbedRenderTask | CachedHit | Redraw | Retired:
     """One file's cache decision. Raises on I/O errors (a vanished file, an
-    unreadable directory) — the driver converts to `Failure` (J3)."""
+    unreadable directory) — the driver converts to `Failure` (J3).
+
+    `route` runs twice for a file that needed a fresh pose: cold (→
+    `PoseRenderTask`), then again on the Poser's `Resolved` with the pose
+    store warm. `pose_changed` is the driver's one extra input on that second
+    call — true when the fresh source is `vlm`/`siglip` — and only the
+    renders-wanted arm reads it (interfaces.md §Cache Checker)."""
     args = ctx.args
 
     # Pose: forced axis skips the pose-cache lookup entirely (migration-notes
@@ -84,7 +90,12 @@ def route(f: Path, index: int, ctx: CacheContext) \
                              source="forced", v=pose.POSE_CACHE_VERSION)
     else:
         entry = ctx.poses.get(pose.file_identity(f, ctx.root))
-        if not pose.pose_is_sufficient(entry, bool(args.up_ensemble)):
+        # The ensemble always runs now (`--no-up-ensemble`/`--up-conf` retired
+        # 2026-08-17, actors_proposal.md Migration notes), so sufficiency is
+        # always evaluated with it available: a geometry-only entry — margin
+        # None, written by some older pass — always reads insufficient and is
+        # upgraded in place.
+        if not pose.pose_is_sufficient(entry, True):
             return PoseRenderTask(file=f, index=index)
         resolved = pose.Pose.from_cache(entry)
 
@@ -100,17 +111,17 @@ def route(f: Path, index: int, ctx: CacheContext) \
     cached = cache_file is not None and cache_file.exists()
     need_embeds = not cached and not args.skip_embed
 
-    # Renders: today's need_renders rule (classify_stls.py:1157) minus
-    # pose_changed, which is always False here — every pose route sees came
-    # from the cache or the flag, and a fresh resolution's redraw is the
-    # Poser's path, not this one.
+    # Renders: today's need_renders rule verbatim (classify_stls.py:1157) —
+    # `pose_changed or not renders_ok`. Saved renders predate a fresh
+    # override, so they show the old pose; the embedding re-keys on its own
+    # because the override moves up_token, but the debug files do not.
     renders_wanted = bool(args.save_renders) and bool(args.cache_dir)
     need_renders = False
     if renders_wanted:
         rkey = render_key(f, ctx.root)
         n_views = args.views * len(args.elevations)
-        need_renders = not all(f"{rkey}_view{i}" in ctx.render_index
-                               for i in range(n_views))
+        need_renders = pose_changed or not all(
+            f"{rkey}_view{i}" in ctx.render_index for i in range(n_views))
 
     if need_embeds:
         # The child saves renders whenever it renders (config at spawn), so a

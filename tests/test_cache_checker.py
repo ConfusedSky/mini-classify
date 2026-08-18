@@ -3,17 +3,24 @@
 Table-driven over the cache-state cube: pose cached (absent / geometry-only /
 siglip / vlm / forced axis) x embedding `.npy` present or not x saved renders
 present/partial/absent x `--skip-embed` / `--save-renders` / `--up-axis`
-combinations. Cache states are fabricated on tmp_path; no GPU, no models, no
-renderer.
+combinations x `pose_changed`, the driver's extra input on the re-route after
+a fresh resolution. Cache states are fabricated on tmp_path; no GPU, no
+models, no renderer.
 """
 import argparse
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
 
+# Hard import, not importorskip (B-R1-1): the key-parity pin below is the only
+# thing holding the extracted key builders byte-identical to the originals, and
+# a skip would retire that guarantee silently. classify_stls pulls in torch and
+# open3d.rendering — that is why *route* may not import it, and why this test
+# module is the one place that does.
+import classify_stls
 from src import cache_checker, pose
 from src.cache_checker import route
 from src.messages import (
@@ -50,8 +57,11 @@ class ForbiddenPoses(dict):
 
 
 def make_args(**over):
+    # No up_ensemble: --no-up-ensemble/--up-conf are retired (actors_proposal.md
+    # Migration notes) — the ensemble always runs, so route evaluates pose
+    # sufficiency with it enabled unconditionally and reads no flag for it.
     d = dict(views=4, elevations=[20.0], render_size=512, model="test-model",
-             compile=False, up_axis="auto", up_ensemble=True, skip_embed=False,
+             compile=False, up_axis="auto", skip_embed=False,
              save_renders=False, cache_dir="embed-cache")
     d.update(over)
     return argparse.Namespace(**d)
@@ -62,13 +72,14 @@ class Case:
     id: str
     expect: type
     up_axis: str = "auto"
-    up_ensemble: bool = True
     skip_embed: bool = False
     save_renders: bool = False
     cache_dir: bool = True          # False: caching off entirely (embeds_dir None)
     pose_state: str = "siglip"      # key into ENTRIES | "absent" | "forced"
     embed_cached: bool = False
-    renders: str = "none"           # "none" | "partial" | "all"
+    renders: str = "none"           # "none" | "partial" | "last-ring" | "all"
+    elevations: list = field(default_factory=lambda: [20.0])
+    pose_changed: bool = False      # the driver's second-call input
     needs_embed: bool | None = None  # asserted on EmbedRenderTask / Redraw.task
     retires: bool | None = None      # asserted on CachedHit
 
@@ -78,10 +89,12 @@ CASES = [
     Case("pose-miss-cold", PoseRenderTask, pose_state="absent"),
     Case("pose-miss-under-skip-embed", PoseRenderTask, pose_state="absent",
          skip_embed=True),
-    Case("geo-only-upgraded-by-ensemble", PoseRenderTask, pose_state="geo"),
+    # geometry-only entries are always upgraded now: the ensemble always runs,
+    # so sufficiency is never evaluated with it off (no ensemble-off arm left)
+    Case("geo-only-always-upgraded", PoseRenderTask, pose_state="geo"),
+    Case("geo-only-upgraded-even-when-warm", PoseRenderTask, pose_state="geo",
+         embed_cached=True),
     # --- pose sufficient, embedding owed: EmbedRenderTask(needs_embed=True) -
-    Case("geo-accepted-without-ensemble", EmbedRenderTask, pose_state="geo",
-         up_ensemble=False, needs_embed=True),
     Case("vlm-sufficient-despite-ensemble", EmbedRenderTask, pose_state="vlm",
          needs_embed=True),
     Case("cold-embed", EmbedRenderTask, needs_embed=True),
@@ -98,6 +111,32 @@ CASES = [
          renders="partial", needs_embed=False, retires=False),
     Case("redraw-none", Redraw, embed_cached=True, save_renders=True,
          renders="none", needs_embed=False, retires=False),
+    # n_views spans every elevation ring (B-R1-2): with two elevations the
+    # render set is views*len(elevations), and a gap in the *second* ring is
+    # invisible to anything that counted only args.views
+    Case("redraw-missing-view-in-second-ring", Redraw, embed_cached=True,
+         save_renders=True, elevations=[20.0, -10.0], renders="last-ring",
+         needs_embed=False, retires=False),
+    # --- pose_changed: the driver's re-route after a fresh resolution --------
+    # renders wanted + complete: forced anyway, exactly today's
+    # `pose_changed or not renders_ok` (classify_stls.py:1157) — the saved
+    # renders show the old pose, while the embedding re-keyed itself
+    Case("pose-changed-forces-redraw-despite-complete-renders", Redraw,
+         embed_cached=True, save_renders=True, renders="all",
+         pose_changed=True, needs_embed=False, retires=False),
+    Case("pose-changed-forces-render-under-skip-embed", EmbedRenderTask,
+         skip_embed=True, save_renders=True, renders="all", pose_changed=True,
+         needs_embed=False),
+    # no renders wanted: pose_changed changes nothing at all
+    Case("pose-changed-no-renders-wanted-warm", CachedHit, embed_cached=True,
+         pose_changed=True, retires=True),
+    Case("pose-changed-no-renders-wanted-cold", EmbedRenderTask,
+         pose_changed=True, needs_embed=True),
+    Case("pose-changed-no-renders-wanted-skip-embed", Retired, skip_embed=True,
+         pose_changed=True),
+    # --save-renders without a cache dir wants no renders either
+    Case("pose-changed-save-renders-without-cache-dir", Retired, skip_embed=True,
+         save_renders=True, cache_dir=False, pose_changed=True),
     # --- --skip-embed warm paths (interfaces.md J1/Q2) ------------------------
     Case("skip-embed-nothing-wanted", Retired, skip_embed=True),
     Case("skip-embed-ignores-cached-npy", Retired, skip_embed=True,
@@ -131,7 +170,7 @@ def build(tmp_path, case):
     f = root / "kit" / "Baal_Flaming_Sword_L.stl"
     f.write_bytes(b"solid not-really\n")
 
-    args = make_args(up_axis=case.up_axis, up_ensemble=case.up_ensemble,
+    args = make_args(up_axis=case.up_axis, elevations=list(case.elevations),
                      skip_embed=case.skip_embed, save_renders=case.save_renders,
                      cache_dir=str(tmp_path / "cache") if case.cache_dir else None)
 
@@ -165,6 +204,9 @@ def build(tmp_path, case):
     rkey = cache_checker.render_key(f, root)
     present = {"all": range(n_views),
                "partial": [i for i in range(n_views) if i != 2],
+               # the only gap is the last ring's — present under a views-only
+               # count, missing under views*len(elevations)
+               "last-ring": range(n_views - 1),
                "none": ()}[case.renders]
     render_index = {f"{rkey}_view{i}": tmp_path / f"r{i}.jpg" for i in present}
 
@@ -176,7 +218,7 @@ def build(tmp_path, case):
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
 def test_route_decision_table(tmp_path, case):
     f, ctx, expected_pose, cache_file = build(tmp_path, case)
-    out = route(f, 7, ctx)
+    out = route(f, 7, ctx, case.pose_changed)
 
     assert type(out) is case.expect
     if isinstance(out, Redraw):
@@ -210,6 +252,17 @@ def test_route_keys_embed_cache_on_the_pose_up(tmp_path):
     assert route(f, 0, ctx).cache_file == cache_file
 
 
+def test_pose_changed_defaults_to_false(tmp_path):
+    """The first (cold) call passes no flag, so one complete render set is one
+    decision either way: hit by default, redraw only when the driver says the
+    pose moved. Same ctx, both calls — nothing else can explain the split."""
+    case = Case("d", CachedHit, embed_cached=True, save_renders=True,
+                renders="all", retires=True)
+    f, ctx, _, _ = build(tmp_path, case)
+    assert type(route(f, 0, ctx)) is CachedHit
+    assert type(route(f, 0, ctx, True)) is Redraw
+
+
 def test_route_raises_on_vanished_file(tmp_path):
     """J3: the error boundary is the driver's — route raises, never guards."""
     case = Case("gone", PoseRenderTask, pose_state="absent")
@@ -226,7 +279,6 @@ def test_route_raises_on_vanished_file(tmp_path):
 def test_key_composition_matches_classify_stls(tmp_path):
     """The extracted key builders stay byte-identical to the originals in
     classify_stls.py (which route cannot import: it pulls in torch)."""
-    classify_stls = pytest.importorskip("classify_stls")
     ident = "kit/model.stl|1723600000|4096"
     for over in (dict(),
                  dict(elevations=[20.0, -10.0]),
@@ -244,12 +296,35 @@ def test_key_composition_matches_classify_stls(tmp_path):
 
 
 def test_import_pulls_no_torch_and_no_renderer():
-    """Fresh interpreter: importing route must not import torch, and must not
-    touch open3d's rendering module (no renderer parent-side)."""
+    """Fresh interpreter: importing route must not import torch, and must
+    bring no renderer parent-side.
+
+    B-R1-3 asked for `'open3d.visualization.rendering' not in sys.modules`.
+    That cannot hold and never could: `src.pose` imports `open3d` for the
+    geometry pass, and open3d's package `__init__` eagerly imports its whole
+    visualization tree — the second subprocess below pins that cause, so the
+    day open3d stops doing it (or `pose` stops needing open3d) this test says
+    so and the stronger assertion can come back. What B-R1-3 was reaching for
+    is pinned here instead: the rendering *module* being reachable is open3d's
+    doing, not ours, and reaching a class is not constructing one — no
+    `src.renderer` — and a constructed `OffscreenRenderer` would abort this
+    subprocess on exit, which `check=True` catches, so "no renderer object"
+    rests on that backstop (a gc scan cannot pin it: pybind11 instances are
+    not GC-tracked, B-R2-1)."""
     code = (
         "import sys\n"
         "import src.cache_checker\n"
         "assert 'torch' not in sys.modules, 'torch imported'\n"
         "assert 'classify_stls' not in sys.modules, 'classify_stls imported'\n"
+        "assert 'src.renderer' not in sys.modules, 'renderer imported'\n"
     )
     subprocess.run([sys.executable, "-c", code], cwd=REPO, check=True)
+
+    why = (
+        "import sys\n"
+        "import open3d\n"
+        "assert 'open3d.visualization.rendering' in sys.modules, (\n"
+        "    'open3d no longer imports its rendering module eagerly — the "
+        "stronger no-renderer-module assertion is available again')\n"
+    )
+    subprocess.run([sys.executable, "-c", why], cwd=REPO, check=True)

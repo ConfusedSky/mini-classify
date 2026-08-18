@@ -52,6 +52,20 @@ condition; key builders byte-identical; `--up-axis z|y` shortcut and
   `pose_is_sufficient` subscript entries). **The doc was wrong; D11
   amended same day.**
 
+**Delta round B-R2** (pose_changed + flag retirement + B-R1 minors):
+CLEAN-WITH-NOTES. `pose_changed` verified against `:1157` including the
+one leak path (cannot escape the renders_wanted guard — case-pinned);
+the second-call termination invariant confirmed (ensemble-always means a
+re-routed file is always sufficient, no loop back to `PoseRenderTask`).
+**B-R1-3 retracted with measurement**: `import open3d` eagerly imports the
+visualization tree, so the specified assertion could never hold; the
+substitution (no torch/classify_stls/src.renderer + an eager-import canary)
+accepted. Forced-axis `pose_changed` ruled unreachable-by-construction and
+harmless — no guard, since raising would convert a driver bug into a lost
+row. **B-R2-1** (minor, applied): the gc scan for renderer objects could
+never fail (pybind11 instances are not GC-tracked); deleted, with "no
+renderer object" resting on the documented abort backstop.
+
 Escalation (out of scope, against the then-landed Poser): after a fresh
 resolution the Poser returned `EmbedRenderTask` unconditionally — losing
 today's post-resolution cache check (:1148-1155): the warm-`.npy` skip
@@ -105,6 +119,35 @@ Implementation round measured the I11 failure (camera rotation vs
 the rotated-copy decision now in interfaces.md; the rework and its review
 land after this record's first commit and append here as `A-R1-*`.
 
-## Track E — done: review pending
+## Track E — done (`src/done.py`): CHANGES REQUESTED
 
-Appends here as `E-R1-*`.
+Scoring/flush/retirement parity verified line-by-line (pool_sims,
+view_config, error rows, BaseException-unlink, J2/Release single choke
+point all exact); the front_view write goes through the store's entry
+dict, so the `Pose.from_cache` copy hazard does not apply.
+
+- **E-R1-1** (MAJOR) — forced `--up-axis z|y` reads a stale auto pose from
+  the store: `_save_embeds` files fresh embeddings under the auto
+  up-token (route looks under the forced token → every forced run
+  re-embeds and strands `.npy`s), and `_score` returns the auto entry's
+  cached `front_view`. Today's code never consults the store on the
+  forced path (`classify_stls.py:1101-1102` ephemeral entry). Fix: derive
+  the token from the message's authoritative `m.pose.up` in
+  `_save_embeds`; gate `_score`'s lookup on `up_axis not in FORCED_UPS`.
+  The one existing forced-axis test ran against an empty store — exactly
+  the case that hides this.
+- **E-R1-2** (MAJOR) — `flush` dropped today's nested-finally chaining
+  (`classify_stls.py:1249-1268`, the full-disk incident): a pose-cache
+  `os.replace` failure propagates before the CSV is written, and on the
+  abort path takes `settle` + the second flush + `tasks.close` with it.
+  Fix: `try: pose cache / finally: CSV`, last failure re-raises after
+  every write has had its try.
+- **E-R1-3** (minor) — `pose-cache.json.tmp` left behind when
+  `os.replace` fails; `finally: tmp.unlink(missing_ok=True)`.
+- **E-R1-4** (minor) — interfaces.md §Done `__init__` behind the code
+  (categories + front/back banks are spec-sanctioned in substance).
+  **Applied to interfaces.md same day.**
+- **E-R1-5** (minor, deferred) — `done → cache_checker` import for
+  `cache_key_from_identity` points the terminal stage at the admission
+  module; the keying helper's natural home is the `identity` leaf. Later
+  wave.
