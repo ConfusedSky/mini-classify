@@ -61,8 +61,8 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-import instrument
-from instrument import stage
+from src import instrument
+from src.instrument import stage
 from src.cachedir import (RUN_PARAMS_FILE, add_cache_args, apply_run_params,
                           cache_root, embeds_dir, load_file_list,
                           render_index, renders_dir, require_cache_version,

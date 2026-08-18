@@ -44,7 +44,7 @@ import zlib
 from collections import Counter, defaultdict
 from pathlib import Path
 
-import naming
+from src import naming
 
 
 def entries_escaping(names):

@@ -43,7 +43,7 @@ import sys
 import time
 from pathlib import Path
 
-from naming import SKIP_TAGS, skip
+from src.naming import SKIP_TAGS, skip
 from src import identity
 from src.identity import (DEFAULT_ELEVATIONS, DEFAULT_MODEL,
                           cache_key_from_identity)

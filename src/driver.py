@@ -56,8 +56,8 @@ if TYPE_CHECKING:
     from src.embedder import Embedder
     from src.poser import Poser
 
-import instrument
-from instrument import arbiter_call, stage
+from src import instrument
+from src.instrument import arbiter_call, stage
 from src.cache_checker import route
 from src.messages import (
     CachedHit,

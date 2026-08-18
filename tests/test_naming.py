@@ -1,6 +1,6 @@
 import pytest
 
-from naming import SKIP_TAGS, skip
+from src.naming import SKIP_TAGS, skip
 
 
 # every spelling that actually appears across the collection and its archives
@@ -95,5 +95,5 @@ def test_matching_ignores_case():
 
 
 def test_the_two_groups_make_up_the_tag_list():
-    from naming import NON_MODEL_TAGS, SUPPORT_TAGS
+    from src.naming import NON_MODEL_TAGS, SUPPORT_TAGS
     assert SKIP_TAGS == SUPPORT_TAGS + NON_MODEL_TAGS

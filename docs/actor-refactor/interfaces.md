@@ -45,14 +45,23 @@ src/identity.py      cache keying: collection_root + keys  [moves from the root]
 src/cachedir.py      the cache-dir layout: subdirs, cache_key, the version
                      stamp, run-params, and the shared argparse block
 src/embed_store.py   reading the cached .npy embeddings back (Done writes them)
+src/instrument.py    stage timers, the device sampler, --instrument's report
+src/naming.py        the support/non-model tag lists and the skip rule
 classify_stls.py     CLI entry: args, run-params, cache guards -> driver
 ```
 
-The last three are the parts every *tool* needs — the CLI, `cluster_models.py`,
-`test_categories.py`, `migrate_cache_keys.py`, the eval harnesses and the
-tests. They used to live in `classify_stls.py`, which made a script the
-project's de-facto library; the eval-debt cleanup (2026-08-18) moved them here
-so the CLI imports them like everyone else and imports nothing back.
+`cachedir`, `embed_store` and `identity` are the parts every *tool* needs —
+the CLI, `cluster_models.py`, `test_categories.py`, `migrate_cache_keys.py`,
+the eval harnesses and the tests. They used to live in `classify_stls.py`,
+which made a script the project's de-facto library; the eval-debt cleanup
+(2026-08-18) moved them here so the CLI imports them like everyone else and
+imports nothing back.
+
+`instrument` and `naming` came in the same day for a different reason: four
+`src/` modules imported them from the repo root, so **the package was not
+self-contained** — `import src.done` resolved only because the root happened
+to be on `sys.path`. Nothing under `src/` now reaches outside it, and the
+root is on the path for the *tools*, not for the library.
 
 Import rules, and why each is load-bearing.
 

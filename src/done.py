@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 
-from instrument import stage
+from src.instrument import stage
 # `view_config` keys the front_view entries this module writes, but it is a
 # piece of cache identity rather than scoring — its home is the module that
 # owns the cache layout, so the CLI and the read-only tools can name a view

@@ -34,7 +34,7 @@ from typing import Sequence
 import numpy as np
 import torch
 
-from instrument import stage
+from src.instrument import stage
 from src import pose
 # The one copy, kept in `identity` because it is part of every embedding key
 # and `cachedir.add_cache_args` declares `--model` with it — reading it there

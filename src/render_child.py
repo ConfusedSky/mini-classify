@@ -38,8 +38,8 @@ import os
 import signal
 import sys
 
-import instrument
-from instrument import stage
+from src import instrument
+from src.instrument import stage
 from src import loader
 from src import pose
 from src.messages import (ChildStages, EmbedRenderTask, EmbedViews, EndOfInput,
