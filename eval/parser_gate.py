@@ -24,8 +24,8 @@ This used to call `classify_stls.resolve_up`, a single-process re-arrangement
 of the same three tiers kept alive in the CLI for this one caller. Two things
 went with it: geometry's ratio gate (`pose.needs_arbiter`, reached only when
 no SigLIP scorer is supplied — which this harness never does, so it was dead
-code behind a dead `--up-conf`), and the inline arbiter tier, which this
-harness switched off anyway.
+code behind a dead `--up-conf`; the function itself was deleted 2026-08-18),
+and the inline arbiter tier, which this harness switched off anyway.
 
 Two modes run per invocation over the same models:
 

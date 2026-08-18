@@ -99,6 +99,30 @@ def load_baselines():
     return {p["stem"]: p for p in json.loads(RESULTS_FILE.read_text())["predictions"]}
 
 
+def load_arbiters(stems):
+    """{arbiter: {stem: idx}} from every recorded VLM run that covers these
+    models — the published 2026-08-12 predictions plus any `gauntlet_hard`
+    dump on disk. Answers already paid for, so a harness can score a gate
+    against real arbiters without an API key.
+
+    Lived in `arbiter_gate.py` until that harness was retired (2026-08-18);
+    `tile_count.py` is the remaining caller."""
+    picks = {}
+    published = {p["stem"]: p for p in json.loads(RESULTS_FILE.read_text())["predictions"]}
+    for stem, rec in published.items():
+        for k, v in rec.items():
+            if "_sheet" in k and isinstance(v, str):
+                picks.setdefault(k, {})[stem] = IDX[v]
+    g = OUT / "gauntlet_hard.json"
+    if g.exists():
+        for k, per in json.loads(g.read_text())["vlm"].items():
+            m, t = k.rsplit("@", 1)
+            for stem, v in per.items():
+                if v is not None:
+                    picks.setdefault(f"{m}_sheet{t}", {})[stem] = IDX[v]
+    return {k: v for k, v in picks.items() if any(s in v for s in stems)}
+
+
 def contact_sheet(tiles, thumb, cols=3):
     """The production sheet. pose.make_contact_sheet owns the layout and the
     scaled numerals now — this stays only so harnesses keep one import."""
@@ -223,8 +247,9 @@ def build_sheets(thumbs, labels=None, render_px=2048):
 # --- the 24-tile orbit set --------------------------------------------------
 #
 # Lived in `front_first.py` until that harness was retired (a recorded negative
-# result; git history keeps it). Three surviving scorers read these pixels —
-# `tile_count.py --source orbit`, `arbiter_gate.py`, `geo_floor.py` — and every
+# result; git history keeps it). Two surviving scorers read these pixels —
+# `tile_count.py --source orbit` and `geo_floor.py` (`arbiter_gate.py` was the
+# third until it was retired the same day) — and every
 # published azimuth number in LEARNINGS was measured on them, so the cache and
 # the code that fills it outlive the harness they were written for.
 #

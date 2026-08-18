@@ -72,7 +72,7 @@ import time
 import numpy as np
 
 from common import (AX, ORBIT_N_AZ, OUT, build_orbit_tiles,  # puts REPO on sys.path
-                    build_tiles, load_labels)
+                    build_tiles, load_arbiters, load_labels)
 
 from src import pose
 
@@ -431,8 +431,7 @@ def main():
 
     # An escalation change is only a cost or a saving once the arbiter answers, so
     # replay the recorded VLM runs through the production gate. No API access —
-    # arbiter_gate.load_arbiters reads answers already on disk.
-    from arbiter_gate import load_arbiters
+    # common.load_arbiters reads answers already on disk.
     arbiters = {a: p for a, p in load_arbiters(order).items()
                 if all(s in p for s in order)}      # full coverage only
     pipeline = {}

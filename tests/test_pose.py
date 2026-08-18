@@ -24,7 +24,6 @@ def test_cone_up_is_decisive():
     assert np.allclose(up, [0, 0, 1])
     assert best > pose.ABS_SCORE_FLOOR
     assert ratio < 0.6
-    assert not pose.needs_arbiter(ratio, best)
 
 
 def test_rotated_cone_finds_new_up():
@@ -42,7 +41,6 @@ def test_cylinder_is_ambiguous():
     up, ratio, best = pose.detect_up_axis(cyl)
     assert abs(float(up @ np.array([0.0, 0.0, 1.0]))) > 0.99  # either cap wins
     assert ratio > 0.6
-    assert pose.needs_arbiter(ratio, best)
 
 
 def test_pose_cache_roundtrip(tmp_path):

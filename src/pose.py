@@ -138,19 +138,6 @@ def detect_up_axis(mesh, n_samples=4000):
     return UP_CANDIDATES[idx], ratio, best
 
 
-def needs_arbiter(ratio, best_score, threshold=0.6):
-    """Geometry's own doubt. Superseded by needs_arbiter_margin, which is the
-    production gate (`poser.py`) and the only one on any live path — the CLI
-    arm that fell back to this went with `resolve_up` (2026-08-18) and
-    `--no-up-ensemble` was retired before it.
-
-    Kept because it is still a *measured* quantity: `eval/arbiter_gate.py`
-    scores this gate against the margin gate on the hand-labelled set, which is
-    the evidence for preferring the margin. Delete it and that comparison
-    becomes unreproducible."""
-    return ratio > threshold or best_score < ABS_SCORE_FLOOR
-
-
 def needs_arbiter_margin(margin, threshold=MARGIN_THRESHOLD):
     """The *ensemble's* doubt: how far the winning candidate leads the runner-up
     in the combined score. Geometry having no print base says nothing about

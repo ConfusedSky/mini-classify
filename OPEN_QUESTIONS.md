@@ -56,11 +56,19 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
 - **Gate the VLM on the ensemble's margin** — measured, then ~~still to be
   *written*~~ **written** (2026-08-17, the actor refactor): the escalation gate
   is `pose.needs_arbiter_margin(margin, threshold)`, the threshold is
-  `MARGIN_THRESHOLD = 0.45` and `--up-margin` exposes it; `needs_arbiter(ratio,
-  best)` survives only for the geometry-only arm no production path takes. The
-  measurement stands: `margin < 0.4` matched the geometry gate's accuracy on 9
-  calls instead of 24 and stopped a weak arbiter going net negative (haiku@256:
-  30/44 → 39/44). `eval/arbiter_gate.py`. The *pairing* the entry below insists
+  `MARGIN_THRESHOLD = 0.45` and `--up-margin` exposes it; ~~`needs_arbiter(ratio,
+  best)` survives only for the geometry-only arm no production path takes~~ —
+  **the geometry gate itself was deleted 2026-08-18**, along with
+  `eval/arbiter_gate.py`, the harness that scored the two against each other.
+  The measurement stands: `margin < 0.4` matched the geometry gate's accuracy
+  on 9 calls instead of 24 and stopped a weak arbiter going net negative
+  (haiku@256: 30/44 → 39/44). Reproducing that *comparison* now means
+  recovering both from git history (`git show 4a34009:src/pose.py` for
+  `needs_arbiter`, `git show 4a34009:eval/arbiter_gate.py` for the sweep) —
+  a deliberate trade: the losing side of a settled comparison was costing a
+  live function and a harness to keep. `load_arbiters` survived the deletion
+  in `eval/common.py`, so replaying recorded arbiter answers against any
+  *future* gate needs no API access. The *pairing* the entry below insists
   on — adopt it with the four-view ensemble — did **not** ship: `--views` for
   the up ensemble is still `UP_TILE_AZIMUTHS = 2`, so that half stays open
   below.
@@ -106,7 +114,7 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   The rest of this entry is the reasoning that bought it, and the four-view
   pairing below is still unadopted, which is the part that matters:
   (`top1 − top2` of `_unit(geo) + _unit(siglip)`) instead of
-  `needs_arbiter(ratio, best)`.
+  `needs_arbiter(ratio, best)` (deleted 2026-08-18; see the settled entry).
   Threshold 0.4 picked on `orig`; holdout 19/21 against the geometry gate's
   20/21, pooled tie at 42/44, on ~20% of the collection instead of ~55%. That
   is 354 arbiter calls down to ~120 per run. It also removes the tier's ability
