@@ -367,6 +367,9 @@ class Pose:
   `from_cache` therefore carries `v` through rather than defaulting it — a
   field default of `POSE_CACHE_VERSION` would stamp unversioned entries as
   freshly resolved and silently defeat that drop rule (D10).
+* (Wave 2 retired `pose_is_sufficient`'s second parameter with the
+  `--no-up-ensemble` flag — the ensemble is always available now, so the
+  function is single-arg: `pose_is_sufficient(entry)`.)
 * **`pose_is_sufficient` stays a module function over the raw entry
   `dict | None`** (D11, corrected 2026-08-17 — B's review proved the
   earlier `Pose | None` wording wrong: the store holds what

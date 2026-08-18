@@ -4,8 +4,15 @@ Usage:
   python classify_stls.py /path/to/stls --categories categories.txt --out results.csv
   python classify_stls.py model.stl --save-renders renders/   # single file, keep debug renders
 
-Renders each mesh from several viewpoints (Open3D offscreen), embeds the views
-with SigLIP, averages them, and ranks against text embeddings of the categories.
+Renders each mesh from several viewpoints (Open3D offscreen, in a render child
+process), embeds the views with SigLIP in this process, and ranks the pooled
+similarities against text embeddings of the categories.
+
+**This file is the CLI entry, not the pipeline** (docs/actor-refactor/): args,
+run-params, the cache guards and the wiring live here; the loop lives in
+`src/driver.py`, and every stage it drives is one of the `src/` modules. The
+functions kept below are the ones the eval harnesses and the sibling tools
+import — the production render/embed helpers they measure against.
 
 Viewpoints are a turntable of --views azimuths at each --elevations pitch, so
 --views 4 --elevations 20,-10 gives 8 renders per mesh. Every run records its
@@ -15,28 +22,30 @@ input directory) only have to be typed once, here.
 
 Meshes are stood upright first, from three tiers of evidence: flat print-base
 geometry with a confidence ratio, a SigLIP vote over the six up-candidate tiles
-(the two averaged; --no-up-ensemble for geometry alone), and a local VLM
-arbitrating low-confidence cases (--pose-vlm). The front-facing view index is recorded
-per file (front_view column) so downstream tools can show the render that
-actually faces the viewer, and resolved poses persist in
-<cache-dir>/pose-cache.json.
+(the two averaged, always), and a VLM arbitrating low-confidence cases
+(--pose-vlm). The front-facing view index is recorded per file (front_view
+column) so downstream tools can show the render that actually faces the viewer,
+and resolved poses persist in <cache-dir>/pose-cache.json.
+
+**No module-scope torch here, deliberately.** `mp.get_context("spawn")` makes
+the render child re-import this file as `__mp_main__` before it runs
+`run_child`, so anything imported at module scope is imported in the child too
+— and a torch import there is exactly what the child-side import rule forbids
+(interfaces.md's import table: SigLIP lives in the parent, and torch in the
+child costs VRAM and startup for nothing). The four embed helpers and `main`
+import it where they use it.
 """
 import argparse
-import csv
 import os
 import hashlib
 import json
 import time
 import sys
-import queue
-import threading
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
 import open3d as o3d
 import open3d.visualization.rendering as rendering
-import torch
 from PIL import Image
 from tqdm import tqdm
 
@@ -44,18 +53,12 @@ import instrument
 from src import identity
 from src import pose
 from naming import SKIP_TAGS, skip
-from src.pose import detect_up_axis
 from instrument import stage
 
+
 def as_tensor(feat):
+    import torch
     return feat if isinstance(feat, torch.Tensor) else feat.pooler_output
-
-
-PROMPT_TEMPLATES = [
-    "a 3D render of a {} miniature",
-    "a photo of a {} figurine",
-    "a tabletop miniature of a {}",
-]
 
 
 SUN_INTENSITY = 90000.0
@@ -341,6 +344,13 @@ def render_key(f, root):
 EMBEDS_SUBDIR = "embeds"
 RENDERS_SUBDIR = "renders"
 
+# What the render child may hold in host-side meshes before its LRU evicts
+# (RenderConfig.budget_bytes). A soft bound: in_flight meshes are never
+# evicted, so the hard worst case is the admission window x the heaviest mesh
+# (~450 MB at 3 x 150 MB — data_structures.md §residency). Not a flag: the one
+# knob is the admission window, and this follows it.
+RESIDENT_BUDGET_BYTES = 512 * 1024 * 1024
+
 
 def embeds_dir(cache_dir):
     """Where the per-file .npy embeddings live, or None with caching off."""
@@ -384,68 +394,17 @@ def save_renders(rdir, key, images, fmt):
         print(f"  could not save renders for {key}: {e}")
 
 
-class MeshPrefetcher:
-    """Load meshes a few files ahead of the consumer, on a background thread.
-
-    Loading is disk+CPU while everything after it is GPU, and the reader
-    releases the GIL — measured, this thread takes 1% of GIL time while being
-    33% of all py-spy samples — so it overlaps with rendering for free. Bounded
-    so a queue of 4M-triangle meshes cannot outrun memory.
-
-    **It matters much less than it used to.** Against `read_triangle_mesh` this
-    hid a real cost: `mesh-wait`, the main thread blocked here, was 18.6% of a
-    602-model run (746 ms/model), and one thread at depth 2 was not keeping up.
-    Since `read_binary_stl` the same measurement is 0.4% (10 ms/model) and a
-    whole mesh parses in 11-66 ms, so what is left to hide is ~1-2% of a run.
-    Do not re-tune depth or worker count off the old figures — see LEARNINGS.
-
-    The caller passes only the files that will actually ask for a mesh, so the
-    queue is consumed strictly in order and the head always matches the request.
-    It used to take the whole file list and drop skipped files on the way past,
-    which made one cache miss pay for every skip before it: 275 pose-cached
-    files ahead of a miss meant 11.6 GB read and discarded inside one get()."""
-
-    def __init__(self, files, depth=2, enabled=True):
-        self.enabled = enabled and depth > 0
-        self._done = False
-        if not self.enabled:
-            return
-        # depth is the memory bound, not a speed knob: it caps how many loaded
-        # meshes may sit unconsumed. The GPU eats one at a time and the p99 mesh
-        # is 4M triangles, so running far ahead buys nothing and costs a lot.
-        self._q = queue.Queue(maxsize=depth)
-        threading.Thread(target=self._run, args=(list(files),), daemon=True).start()
-
-    def _run(self, files):
-        for f in files:
-            try:
-                self._q.put((f, load_mesh(f)))
-            except Exception as e:                 # re-raised when the consumer asks
-                self._q.put((f, e))
-        self._q.put((None, None))                  # end of list
-
-    def get(self, f):
-        """The mesh for f, which must be the next file in the prefetch list.
-
-        Anything but f at the head means the list is exhausted or the caller has
-        diverged from it. Rather than hunt down the queue for f — the old
-        behaviour, and the reason one miss could drag gigabytes through it — the
-        prefetcher retires and this and every later get() loads directly."""
-        if not self.enabled or self._done:
-            return load_mesh(f)
-        g, value = self._q.get()                   # blocks if the loader is behind
-        if g != f:                                 # end of list, or divergence
-            self._done = True
-            return load_mesh(f)
-        if isinstance(value, Exception):
-            raise value
-        return value
-
-
 def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None,
-               sheet_path=None, defer=None):
+               sheet_path=None):
     """Resolve the up axis for --up-axis auto, cheapest evidence first:
     geometry, then SigLIP over the up-candidate tiles, then the VLM.
+
+    **Not the production path any more** — `src/poser.py` is, driven by
+    `src/driver.py`, with the geometry half computed in the render child. This
+    stays because the pose evals (`eval/parser_gate.py`) measure against a
+    single-process, in-line arrangement of the same three tiers, and they call
+    this function rather than a copy of it. Its ensemble math is `src/pose.py`'s,
+    the same functions the Poser calls.
 
     Returns (up, ratio, source). `source` records which tier *moved* the
     answer, not which ran (review P2.3-A): geometry's pick standing —
@@ -453,11 +412,13 @@ def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None,
     override becomes "siglip" or "vlm". Whether the ensemble ran at all is
     `margin is not None`, which pose_is_sufficient already keys on.
 
-    score_upright(tiles) -> per-candidate SigLIP scores; None (--no-up-ensemble)
-    falls back to geometry alone. The ensemble runs on *every* model rather
-    than only low-confidence ones: geometry can be confidently wrong with a
-    real-looking base (32mm_Gate_L scores a 0.43 ratio on the wrong face), and
-    those never reach the arbiter.
+    score_upright(tiles) -> per-candidate SigLIP scores; None falls back to
+    geometry alone, which only an eval arm asks for now (the flag that did,
+    --no-up-ensemble, is retired) — and only that arm reaches the
+    `args.up_conf` gate below, which the CLI no longer defines either. The
+    ensemble runs on *every* model rather than only low-confidence ones:
+    geometry can be confidently wrong with a real-looking base (32mm_Gate_L
+    scores a 0.43 ratio on the wrong face), and those never reach the arbiter.
 
     sheet_path, when the arbiter runs at all, keeps that model's contact sheet
     beside its renders — the scratch copy in the cache dir is one fixed name
@@ -491,13 +452,10 @@ def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None,
             sheet_tiles, vlm_backend, args.cache_dir or ".",
             args.pose_vlm_model or pose.DEFAULT_VLM_MODELS.get(vlm_backend),
             save_to=sheet_path, project=getattr(args, "gemini_project", None))
-        if defer is not None:
-            # Hand the call off and keep going. A network arbiter averages 24 s
-            # against 3-28 s of local work for a whole model, so waiting here
-            # leaves the run majority idle; the answer only decides the pose, so
-            # this file can be finished later. apply_arbiter closes the loop.
-            defer(call)
-            return up, ratio, source, margin
+        # Inline, always: deferral left with the pipeline. Parking a file on an
+        # in-flight call and folding the answer back is `src/poser.py` +
+        # `src/arbiter.py` now, and the fold that used to close the loop here
+        # (`apply_arbiter`) went with it.
         with stage("arbiter-inline"):
             idx = call()
         if idx is not None and not np.allclose(pose.UP_CANDIDATES[idx], up):
@@ -505,35 +463,38 @@ def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None,
     return up, ratio, source, margin
 
 
-def apply_arbiter(idx, up, ratio, source, margin):
-    """Fold a deferred arbiter answer into a pose already resolved without it."""
-    if idx is not None and not np.allclose(pose.UP_CANDIDATES[idx], up):
-        return pose.UP_CANDIDATES[idx], ratio, "vlm", margin
-    return up, ratio, source, margin
+# The three embed helpers below are `src/embedder.py`'s methods in free-function
+# form: same forwards, same normalisation, same dtypes — pinned equal by
+# tests/test_embedder.py's parity suite. Production goes through the Embedder;
+# these stay for the evals and the REPL, which hold their own model+processor
+# and measure against exactly this arrangement. torch is imported inside each
+# (see the module docstring: the render child re-imports this file), which is
+# also why they carry `with torch.no_grad()` rather than the decorator.
 
-
-@torch.no_grad()
 def embed_raw(model, processor, texts, device):
     """Embed raw text strings (no category templates), row-normalized."""
-    inputs = processor(text=texts, padding="max_length", return_tensors="pt").to(device)
-    feat = as_tensor(model.get_text_features(**inputs))
-    return torch.nn.functional.normalize(feat, dim=-1)  # (n_texts, dim)
+    import torch
+    with torch.no_grad():
+        inputs = processor(text=texts, padding="max_length", return_tensors="pt").to(device)
+        feat = as_tensor(model.get_text_features(**inputs))
+        return torch.nn.functional.normalize(feat, dim=-1)  # (n_texts, dim)
 
 
-@torch.no_grad()
 def embed_texts(model, processor, categories, device):
-    embeds = []
-    for cat in categories:
-        prompts = [t.format(cat) for t in PROMPT_TEMPLATES]
-        feat = embed_raw(model, processor, prompts, device).mean(0)
-        embeds.append(torch.nn.functional.normalize(feat, dim=-1))
-    return torch.stack(embeds)  # (n_categories, dim)
+    import torch
+    from src.embedder import PROMPT_TEMPLATES      # one copy, the Embedder's
+    with torch.no_grad():                          # (D-R1-1)
+        embeds = []
+        for cat in categories:
+            prompts = [t.format(cat) for t in PROMPT_TEMPLATES]
+            feat = embed_raw(model, processor, prompts, device).mean(0)
+            embeds.append(torch.nn.functional.normalize(feat, dim=-1))
+        return torch.stack(embeds)  # (n_categories, dim)
 
 
 EMBED_BATCH = 0   # 0 = one call per image list, which is what --views implies
 
 
-@torch.no_grad()
 def embed_images(model, processor, images, device, batch=None):
     """Row-normalised embeddings, (n_images, dim).
 
@@ -541,13 +502,15 @@ def embed_images(model, processor, images, device, batch=None):
     list, which is the historical behaviour and fine at 16-40 images (measured
     peak 2.5 GB of a 7.8 GB card). Raise it to keep the GPU busier when the
     image list is long, lower it if SigLIP has to share the card."""
-    batch = batch or EMBED_BATCH or len(images)
-    out = []
-    for i in range(0, len(images), batch):
-        inputs = processor(images=images[i:i + batch], return_tensors="pt").to(device)
-        out.append(as_tensor(model.get_image_features(**inputs)))
-    feat = out[0] if len(out) == 1 else torch.cat(out)
-    return torch.nn.functional.normalize(feat, dim=-1)
+    import torch
+    with torch.no_grad():
+        batch = batch or EMBED_BATCH or len(images)
+        out = []
+        for i in range(0, len(images), batch):
+            inputs = processor(images=images[i:i + batch], return_tensors="pt").to(device)
+            out.append(as_tensor(model.get_image_features(**inputs)))
+        feat = out[0] if len(out) == 1 else torch.cat(out)
+        return torch.nn.functional.normalize(feat, dim=-1)
 
 
 def pool_sims(view_sims, mode, axis=-2):
@@ -679,7 +642,10 @@ def add_cache_args(parser, input_help):
                              "full ring of --views azimuths, so total views is the "
                              "product (default 20)")
     parser.add_argument("--render-size", type=int, default=512)
-    parser.add_argument("--model", default="google/siglip2-so400m-patch14-384")
+    # the Embedder owns the default (D-R1-1): one copy, imported here rather
+    # than duplicated, and deferred because src.embedder imports torch
+    from src.embedder import DEFAULT_MODEL
+    parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--compile", action=argparse.BooleanOptionalAction, default=False,
                         help="torch.compile the image forward: ~1.09x embed throughput for "
                              "~1e-03 embedding drift, which flips only coin-toss margins "
@@ -853,6 +819,57 @@ def apply_run_params(parser):
     return args
 
 
+def resolve_pose_vlm(args):
+    """--pose-vlm to the backend the Poser is built with, announcing the choice.
+
+    `ollama` is retired (2026-08-17, C-R1-4): the Arbiter is a thread pool with
+    no inline arm, and a pooled ollama call would overlap SigLIP on the 4060 —
+    10.1 s of model reload against 0.49 s of inference, this repo's one hard
+    GPU constraint. So `auto` is gemini or nothing, and `VlmConfig` refuses the
+    name at construction if it ever reaches it another way."""
+    backend = args.pose_vlm
+    if backend == "off":
+        return None
+    if backend == "auto":
+        # gemini or nothing: it is the only arbiter measured to beat the
+        # ensemble (43/44 against 40/44), where haiku/sonnet on a 256px sheet
+        # score below running no arbiter at all. It bills per call — ~$0.30 for
+        # a 602-model run at ~120 escalations — so the choice is announced.
+        try:
+            args.gemini_project = args.gemini_project or pose.gcloud_project()
+            pose.gcloud_token()
+            backend = "gemini"
+        except Exception as e:
+            print(f"pose VLM: gemini unavailable ({e}) — ambiguous poses keep "
+                  f"the ensemble's answer")
+            return None
+    vlm_model = args.pose_vlm_model or pose.DEFAULT_VLM_MODELS.get(backend)
+    if backend == "gemini":
+        # Fail here rather than on the first ambiguous model, thousands of
+        # renders into a run: resolving the project and minting a token are the
+        # two things that go wrong, and both are cheap to check up front.
+        # Explicit --pose-vlm gemini is an error if unavailable; auto already
+        # returned above and never reaches this.
+        try:
+            args.gemini_project = args.gemini_project or pose.gcloud_project()
+            pose.gcloud_token()
+        except Exception as e:
+            raise SystemExit(f"--pose-vlm gemini: {e}")
+        print(f"pose VLM: {vlm_model} on Vertex AI, project {args.gemini_project} "
+              f"— billed per escalation")
+    else:
+        print(f"pose VLM: {vlm_model or backend}")
+    # The arbiter sheet scales each tile to SHEET_THUMB, and Image.thumbnail
+    # never enlarges — so tiles rendered smaller than that sit padded in their
+    # cells and the arbiter sees a smaller sheet than the number implies. Worth
+    # saying out loud: sheet size is the knob that moved sonnet 10 of 44.
+    if args.render_size < pose.SHEET_THUMB:
+        print(f"  note: --render-size {args.render_size} is below the {pose.SHEET_THUMB}px "
+              f"sheet tile, so the arbiter sees {args.render_size}px tiles padded into "
+              f"{pose.SHEET_THUMB}px cells, not a {pose.SHEET_THUMB}px sheet")
+    return backend
+
+
 def main():
     parser = argparse.ArgumentParser()
     add_cache_args(parser, "STL file or directory of STL files "
@@ -879,15 +896,15 @@ def main():
     parser.add_argument("--pool", choices=["mean", "max", "softmax"], default="softmax",
                         help="how per-view scores combine: mean = whole-object consensus, "
                              "max = single-view features decide, softmax = in between")
-    parser.add_argument("--pose-vlm", choices=["auto", "ollama", "claude", "gemini", "off"],
+    parser.add_argument("--pose-vlm", choices=["auto", "claude", "gemini", "off"],
                         default="auto",
                         help="arbiter for uncertain up detection: gemini on Vertex AI, "
-                             "local ollama vision model, claude CLI, or off. auto "
-                             "(default) = gemini if gcloud ADC resolves, else ollama if "
-                             "reachable, else none. gemini-3.5-flash is the only arbiter "
+                             "claude CLI, or off. auto (default) = gemini if gcloud ADC "
+                             "resolves, else none. gemini-3.5-flash is the only arbiter "
                              "measured to beat the ensemble (43/44 against 40/44) and "
-                             "bills ~$0.30 per full-collection run; --pose-vlm ollama "
-                             "keeps it local at 41/44")
+                             "bills ~$0.30 per full-collection run. `ollama` is retired: "
+                             "the arbiter is a thread pool with no inline arm, and a "
+                             "pooled ollama call would share the 4060 with SigLIP")
     parser.add_argument("--pose-vlm-model", default=None,
                         help="model for --pose-vlm; defaults per backend "
                              f"({', '.join(f'{k}={v}' for k, v in pose.DEFAULT_VLM_MODELS.items() if v)})")
@@ -899,29 +916,19 @@ def main():
                              "Raise to keep the GPU busier on long lists; lower if "
                              "SigLIP has to share the card")
     parser.add_argument("--prefetch", type=int, default=2,
-                        help="meshes to load ahead on a background thread (0 disables). "
-                             "Worth ~1-2%% of a run since the binary-STL parser landed; "
-                             "it was worth 18.6%% before that, so do not re-tune this "
-                             "off the older figures")
+                        help="accepted and inert in v1: the render child loads each mesh "
+                             "inline, and this becomes its loader_worker_count when the "
+                             "child grows loader workers (actors_proposal.md migration "
+                             "notes). Worth ~1-2%% of a run when it did apply")
     parser.add_argument("--arbiter-workers", type=int, default=8,
-                        help="concurrent pose-VLM calls for network backends. The call "
-                             "averages 24s against 3-28s of local work per model, so "
-                             "waiting inline leaves the run mostly idle")
-    parser.add_argument("--no-defer-arbiter", dest="defer_arbiter", action="store_false",
-                        help="wait for each pose-VLM answer inline instead of parking the "
-                             "file and revisiting it. Slower by design — kept so the "
-                             "overlap can be measured against the behaviour it replaced")
+                        help="concurrent pose-VLM calls for network backends — the "
+                             "Arbiter's window. The call averages 24s against 3-28s of "
+                             "local work per model, so waiting inline leaves the run "
+                             "mostly idle")
     parser.add_argument("--up-margin", type=float, default=pose.MARGIN_THRESHOLD,
                         help="escalate to the pose VLM when the ensemble's winning "
                              "candidate leads the runner-up by less than this (0-2). "
                              "Lower = fewer VLM calls")
-    parser.add_argument("--up-conf", type=float, default=0.6,
-                        help="fallback ambiguity threshold used only with --no-up-ensemble, "
-                             "where there is no ensemble margin: runner-up/best flat-base "
-                             "score ratio above this escalates to the pose VLM")
-    parser.add_argument("--no-up-ensemble", dest="up_ensemble", action="store_false",
-                        help="decide the up axis from flat-base geometry alone, without "
-                             "the SigLIP vote over the up-candidate tiles")
     parser.add_argument("--skip-embed", action="store_true",
                         help="skip embedding and scoring the classification views; pose "
                              "resolution, including the SigLIP up-ensemble, still runs")
@@ -957,321 +964,84 @@ def main():
           f"{', '.join(f'{e:g}' for e in args.elevations)} degrees")
     categories = [l.strip() for l in open(args.categories) if l.strip()]
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    from transformers import AutoModel, AutoProcessor
+    # Every import below is deferred, and for one reason: src.done, src.embedder
+    # and src.poser own torch, this module is re-imported by the spawned render
+    # child (module docstring), and none of this runs there.
+    from src import driver
+    from src.arbiter import Arbiter
+    from src.done import Done
+    from src.driver import Admission, DriverConfig
+    from src.embedder import Embedder
+    from src.messages import CacheContext, Failure, RenderConfig
+    from src.poser import Poser, VlmConfig
+    from src.transport import MpQueueTransport
 
-    print(f"loading {args.model} on {device} ...")
+    vlm_backend = resolve_pose_vlm(args)
+    print(f"loading {args.model} ...")
     with stage("model-load"):
-        model = AutoModel.from_pretrained(args.model, torch_dtype=torch.float16).to(device).eval()
-        processor = AutoProcessor.from_pretrained(args.model)
+        # the Embedder is the only owner of torch models: the fp16 load, the
+        # --compile wrap on the image forward, the category text embeddings and
+        # the four prompt banks all happen in here
+        embedder = Embedder(categories, args.model,
+                            compile_image_forward=args.compile,
+                            embed_batch=args.embed_batch)
     if args.compile:
-        # compile the bound method — wrapping the model only intercepts
-        # forward() and get_image_features silently stays eager. Lazy: the
-        # first embed call of each batch shape (24 tiles, 16 views) pays the
-        # compile. Text embeddings stay eager; they are not cached per-file.
-        model.get_image_features = torch.compile(model.get_image_features)
         print("torch.compile on the image forward; embeddings keyed as a "
               "separate cache regime")
-
-    with stage("text-embed"):
-        text_embeds = embed_texts(model, processor, categories, device)
-    renderer = None  # created lazily on first render
 
     # the .npy files sit in their own subdirectory: they are the bulk of the
     # entries, and keeping them out of the cache root leaves pose-cache.json,
     # the walk lists and run-params.json legible in a listing
-    cache_dir = embeds_dir(args.cache_dir)
-    if cache_dir:
-        cache_dir.mkdir(parents=True, exist_ok=True)
-    hits = 0
-
+    edir = embeds_dir(args.cache_dir)
+    if edir:
+        edir.mkdir(parents=True, exist_ok=True)
     rdir = renders_dir(args.cache_dir, args) if args.save_renders else None
-    saved_renders = render_index(rdir)
-    redrawn = 0  # rendered only to refresh --save-renders, embedding already cached
-    angles = view_angles(args.views, args.elevations)
-    view_cfg = view_config(args)  # keys front_view entries in the pose cache
+    # route()'s read-only world. `poses` is THE store Done owns from here on —
+    # the same object, never a copy, so route sees this run's resolutions (I9).
+    ctx = CacheContext(poses=pose.load_pose_cache(args.cache_dir), embeds_dir=edir,
+                       render_index=render_index(rdir), args=args, root=root)
 
-    pose_cache = pose.load_pose_cache(args.cache_dir)
-    vlm_backend = args.pose_vlm
-    if vlm_backend == "auto":
-        # gemini first: it is the only arbiter measured to beat the ensemble
-        # (43/44 against 40/44), where gemma reaches 41/44 and haiku/sonnet on a
-        # 256px sheet score below running no arbiter at all. It bills per call —
-        # ~$0.30 for a 602-model run at ~120 escalations — so the choice is
-        # always announced, and --pose-vlm ollama/off opts out.
-        try:
-            args.gemini_project = args.gemini_project or pose.gcloud_project()
-            pose.gcloud_token()
-            vlm_backend = "gemini"
-        except Exception as e:
-            vlm_backend = "ollama" if pose.ollama_available() else None
-            print(f"pose VLM: gemini unavailable ({e}); "
-                  + ("falling back to ollama" if vlm_backend
-                     else "ollama not reachable either — ambiguous poses keep the "
-                          "geometry guess"))
-    elif vlm_backend == "off":
-        vlm_backend = None
-    vlm_model = args.pose_vlm_model or pose.DEFAULT_VLM_MODELS.get(vlm_backend)
-    if vlm_backend == "gemini":
-        # Fail here rather than on the first ambiguous model, thousands of
-        # renders into a run: resolving the project and minting a token are the
-        # two things that go wrong, and both are cheap to check up front.
-        # Explicit --pose-vlm gemini is an error if unavailable; auto already
-        # fell back above and never reaches this.
-        try:
-            args.gemini_project = args.gemini_project or pose.gcloud_project()
-            pose.gcloud_token()
-        except Exception as e:
-            raise SystemExit(f"--pose-vlm gemini: {e}")
-        print(f"pose VLM: {vlm_model} on Vertex AI, project {args.gemini_project} "
-              f"— billed per escalation")
-    elif vlm_backend:
-        print(f"pose VLM: {vlm_model or vlm_backend}")
-
-    # The arbiter sheet scales each tile to SHEET_THUMB, and Image.thumbnail
-    # never enlarges — so tiles rendered smaller than that sit padded in their
-    # cells and the arbiter sees a smaller sheet than the number implies. Worth
-    # saying out loud: sheet size is the knob that moved sonnet 10 of 44.
-    if vlm_backend and args.render_size < pose.SHEET_THUMB:
-        print(f"  note: --render-size {args.render_size} is below the {pose.SHEET_THUMB}px "
-              f"sheet tile, so the arbiter sees {args.render_size}px tiles padded into "
-              f"{pose.SHEET_THUMB}px cells, not a {pose.SHEET_THUMB}px sheet")
-
-    front_T = embed_raw(model, processor, pose.FRONT_PROMPTS, device).float().cpu().numpy()
-    back_T = embed_raw(model, processor, pose.BACK_PROMPTS, device).float().cpu().numpy()
-
-    score_upright = None
-    if args.up_ensemble:
-        up_T = embed_raw(model, processor, pose.UPRIGHT_PROMPTS, device).float().cpu().numpy()
-        down_T = embed_raw(model, processor, pose.TOPPLED_PROMPTS, device).float().cpu().numpy()
-
-        def score_upright(tiles):
-            embeds = embed_images(model, processor, tiles, device).float().cpu().numpy()
-            return pose.upright_scores(embeds, up_T, down_T)
-
-    def get_renderer():
-        nonlocal renderer
-        if renderer is None:
-            renderer = make_renderer(args.render_size)
-        return renderer
-
-    rows = []
-    arbiter_pool = None       # the finally below shuts it down; it must exist first
+    # tasks unbounded, results bounded at the admission window (I2/Q1): the
+    # parent never blocks on a send, and admission is the only forward pressure
+    tasks = MpQueueTransport()
+    results = MpQueueTransport(maxsize=driver.WINDOW)
+    # ONE Admission per run (P2) — `admitted` is the driver's field, `retired`
+    # is Done's, and the driver takes this very object back off Done rather
+    # than being handed a second one.
+    done = Done(Admission(), embedder.text_embeds, ctx, tasks,
+                categories=categories, front_embeds=embedder.front_T,
+                back_embeds=embedder.back_T)
+    arbiter = Arbiter(workers=args.arbiter_workers, wrap=driver.instrumented)
+    poser = Poser(embedder.up_T, embedder.down_T, arbiter, done.record_pose,
+                  VlmConfig(backend=vlm_backend, model=args.pose_vlm_model,
+                            scratch_dir=args.cache_dir or ".",
+                            project=args.gemini_project,
+                            margin_threshold=args.up_margin,
+                            # keeps each escalation's contact sheet beside that
+                            # model's renders; the scratch copy is one fixed
+                            # name every model overwrites
+                            sheet_path=(lambda f: rdir / f"{render_key(f, root)}_pose.png")
+                                       if rdir else None))
+    child = driver.spawn_render_child(tasks, results, RenderConfig(
+        render_size=args.render_size, views=args.views,
+        elevations=tuple(args.elevations), save_renders_dir=rdir,
+        render_format=args.render_format, budget_bytes=RESIDENT_BUDGET_BYTES,
+        collection_root=root))
     try:
-        # Only a pose-cache miss ever calls prefetch.get(): a forced --up-axis
-        # skips pose resolution altogether, and the render path below loads its
-        # own mesh. Anything else here is gigabytes read and thrown away. The
-        # miss test must be the same one process() uses, or an upgraded file
-        # would reach prefetch.get() unannounced and retire the prefetcher.
-        wanted = [] if args.up_axis in ("z", "y") else [
-            f for f in files if not pose.pose_is_sufficient(
-                pose_cache.get(pose.file_identity(f, root)), score_upright is not None)]
-        stale = sum(1 for f in wanted if pose.file_identity(f, root) in pose_cache)
-        if stale:
-            print(f"pose cache: {stale} geometry-only poses (from a --no-up-ensemble "
-                  f"pass) will be re-resolved with the ensemble")
-        prefetch = MeshPrefetcher(wanted, args.prefetch)
-        # A network arbiter is worth overlapping; a local one is not — ollama
-        # shares the GPU with SigLIP and they evict each other (a measured 10.1 s
-        # reload against 0.49 s of inference), so running them concurrently is
-        # slower than taking turns.
-        defer_arbiter = args.defer_arbiter and vlm_backend in ("gemini", "claude")
-        arbiter_pool = ThreadPoolExecutor(max_workers=args.arbiter_workers) \
-            if defer_arbiter else None
-        deferred, pending_box = [], []
-
-        def process(f, deferred_answer=None):
-            """One file end to end.
-
-            deferred_answer is (arbiter_index, pose-as-resolved-without-it) for a
-            file parked on its first visit. Pose resolution is *not* repeated on
-            the revisit: the ensemble already decided, and re-running it would
-            redo the mesh load, the candidate renders and their embeddings —
-            and, because the deferral hook is off the second time, ask the
-            arbiter all over again. Measured: that cost more than the overlap
-            saved, and two independent calls disagreed on three models."""
-            nonlocal hits, redrawn
-            # the guard around resolve_up leans on this: a leftover entry here
-            # would park this file against another file's arbiter call
-            assert not pending_box
-            mesh = None
-            pose_changed = False
-            rkey = render_key(f, root) if rdir else None  # resolves the path; do it once
-            if args.up_axis in ("z", "y"):
-                up = [0.0, 0.0, 1.0] if args.up_axis == "z" else [0.0, 1.0, 0.0]
-                entry = {"up": up, "confidence": 0.0, "source": "forced"}
-            else:
-                entry = pose_cache.get(pose.file_identity(f, root))
-                # a true miss, or a geometry-only pose this run can upgrade
-                if not pose.pose_is_sufficient(entry, score_upright is not None):
-                    if deferred_answer is not None:
-                        idx, resolved = deferred_answer
-                        up, ratio, source, margin = apply_arbiter(idx, *resolved)
-                    else:
-                        try:
-                            # blocking here is the loader failing to keep ahead,
-                            # which is exactly what loader_worker_count is for
-                            with stage("mesh-wait"):
-                                mesh = prefetch.get(f)
-                            # guarded like the view renders below: resolve_up runs
-                            # the candidate renders and embeddings, and a degenerate
-                            # mesh that survived load_mesh (coincident vertices,
-                            # NaNs) raises out of Filament on its empty AABB —
-                            # one bad file must not end the run
-                            up, ratio, source, margin = resolve_up(
-                                mesh, args, get_renderer, vlm_backend, score_upright,
-                                sheet_path=rdir / f"{rkey}_pose.png" if rdir else None,
-                                defer=(lambda call: pending_box.append(call))
-                                      if defer_arbiter else None)
-                        except Exception as e:
-                            rows.append({"file": str(f), "top1": f"RENDER_ERROR: {e}"})
-                            return
-                        if pending_box:
-                            # arbiter running elsewhere — park this file and move on
-                            call = pending_box.pop()
-                            def timed(call=call):
-                                with instrument.arbiter_call():
-                                    return call()
-                            deferred.append((f, arbiter_pool.submit(timed),
-                                             (up, ratio, source, margin)))
-                            return
-                    entry = {"up": [float(v) for v in up],
-                             "confidence": round(ratio, 4), "source": source,
-                             "margin": None if margin is None else round(margin, 4),
-                             "v": pose.POSE_CACHE_VERSION}
-                    pose_cache[pose.file_identity(f, root)] = entry
-                    # Saved renders predate a fresh override, so they show the old
-                    # pose. Only the debug files are at stake now — the embedding
-                    # re-keys on its own, because the override moves up_token.
-                    pose_changed = source in ("vlm", "siglip")
-
-            token = pose.embed_cache_token(entry, args.up_axis)
-            cache_file = cache_dir / f"{cache_key(f, args, token, root)}.npy" if cache_dir else None
-            cached = cache_file is not None and cache_file.exists()
-            # Two independent questions. Embeddings come from the .npy cache or a
-            # fresh render, never from the files on disk: those are debug output,
-            # and nothing in their names ties them to this run's cache key. That
-            # decoupling is what makes a lossy --render-format safe.
-            need_embeds = not cached and not args.skip_embed
-            # --save-renders only forces a re-render for files whose renders are missing
-            need_renders = rdir is not None and (pose_changed or not all(
-                f"{rkey}_view{i}" in saved_renders for i in range(n_views)))
-
-            if need_embeds or need_renders:
-                try:
-                    if mesh is None:
-                        with stage("mesh-load"):
-                            mesh = load_mesh(f)
-                    with stage("view-render"):
-                        mesh.rotate(rotation_to_z_up(np.array(entry["up"])), center=(0, 0, 0))
-                        images = render_views(get_renderer(), mesh, angles)
-                except Exception as e:
-                    rows.append({"file": str(f), "top1": f"RENDER_ERROR: {e}"})
-                    return
-                # write whenever we rendered, not only when files were missing:
-                # at 0.13 s it is cheaper than leaving a stale image on disk next
-                # to a fresh embedding
-                if rdir is not None:
-                    with stage("save-renders"):
-                        save_renders(rdir, rkey, images, args.render_format)
-                    redrawn += not need_embeds
-
-            if cached and not args.skip_embed:
-                with stage("cache-load"):
-                    img_embeds = torch.from_numpy(np.load(cache_file)).to(device, dtype=text_embeds.dtype)
-                hits += 1
-            elif need_embeds:
-                with stage("embed"):
-                    img_embeds = embed_images(model, processor, images, device,
-                                              batch=args.embed_batch)
-                if cache_file:
-                    with stage("cache-save"):
-                        try:
-                            np.save(cache_file, img_embeds.float().cpu().numpy())
-                        except BaseException:
-                            # a torn write (full disk, Ctrl-C) would read as a
-                            # cache hit next run and crash cache-load
-                            cache_file.unlink(missing_ok=True)
-                            raise
-
-            if not args.skip_embed:
-                with stage("score"):
-                    view_np = img_embeds.float().cpu().numpy()
-                    fv = pose.front_view(entry, view_cfg)
-                    if fv is None:
-                        fv = pose.front_view_index(view_np, front_T, back_T)
-                        old = entry.get("front_view")
-                        # legacy int: no record of which config produced it
-                        entry["front_view"] = \
-                            {**(old if isinstance(old, dict) else {}), view_cfg: fv}
-                    view_sims = (img_embeds @ text_embeds.T).float().cpu().numpy()  # (n_views, n_cats)
-                    sims = torch.from_numpy(pool_sims(view_sims, args.pool))
-                    order = sims.argsort(descending=True)
-                    row = {"file": str(f), "up": pose.up_str(entry["up"]),
-                           "pose_conf": entry["confidence"], "pose_source": entry["source"],
-                           "front_view": fv}
-                    for rank in range(min(3, len(categories))):
-                        idx = order[rank]
-                        row[f"top{rank + 1}"] = categories[idx]
-                        row[f"score{rank + 1}"] = round(sims[idx].item(), 4)
-                    rows.append(row)
-
-        for f in tqdm(files, desc="classifying"):
-            process(f)
-
-        if deferred:
-            # The arbiter calls have been in flight since their file was parked,
-            # so most are already answered; this is the tail, not the wait. The
-            # mesh is reloaded rather than held — a 4M-triangle mesh costs more
-            # memory than the reload costs time, and only ~20% of files land here.
-            print(f"resolving {len(deferred)} deferred arbiter calls")
-            for f, fut, resolved in tqdm(deferred, desc="arbiter"):
-                try:
-                    # the tail: how much of the arbiter did *not* overlap
-                    with stage("arbiter-wait"):
-                        idx = fut.result()
-                except Exception as e:              # one bad call must not sink the rest
-                    print(f"  arbiter failed for {f.stem}: {e}")
-                    idx = None                      # keep the ensemble's answer
-                process(f, deferred_answer=(idx, resolved))
+        driver.run(DriverConfig(
+            # the bar advances on admission, so it runs at most WINDOW files
+            # ahead of what has actually retired
+            walker=tqdm(files, desc="classifying"), ctx=ctx,
+            tasks=tasks, results=results, child=child, poser=poser,
+            embedder=embedder, done=done, arbiter=arbiter,
+            skip_embed=args.skip_embed))
     finally:
-        # Drop queued arbiter calls rather than letting the interpreter join
-        # them at exit: they are non-daemon threads at ~24 s each, so a Ctrl-C
-        # with a full queue would otherwise hang for minutes with nothing to show
-        # for it. Their files simply keep the ensemble's pose.
-        if arbiter_pool is not None:
-            arbiter_pool.shutdown(wait=False, cancel_futures=True)
-        # Three artifacts to save, each attempted even if another's write
-        # raises — on the full disk that killed the run, one failing write
-        # must not also cost the others. The nested finallys chain rather
-        # than swallow: the last failure re-raises after every write has had
-        # its try, with earlier failures and the run's own exception kept
-        # visible as __context__.
-        try:
-            # the pose cache first: it is the only artifact whose loss costs
-            # money — its VLM answers bill per gemini call — where rows and
-            # run-params only cost time to rebuild. Interrupted cold passes
-            # keep their (expensive) pose resolutions.
-            if args.up_axis == "auto":
-                pose.save_pose_cache(args.cache_dir, pose_cache)
-        finally:
-            try:
-                # an exception at file 900 of 1758 must not discard 899
-                # finished rows. It still propagates after.
-                fields = ["file", "top1", "score1", "top2", "score2", "top3", "score3",
-                          "up", "pose_conf", "pose_source", "front_view"]
-                with open(args.out, "w", newline="") as fh:
-                    writer = csv.DictWriter(fh, fieldnames=fields)
-                    writer.writeheader()
-                    writer.writerows(rows)
-                print(f"wrote {args.out} ({len(rows)} models, {hits} from embedding cache"
-                      + (f", {redrawn} re-rendered only to refresh --save-renders" if redrawn else "")
-                      + ")")
-            finally:
-                # still describes the cache a partial pass partly filled
-                save_run_params(args)
+        # still describes the cache a partial pass partly filled
+        save_run_params(args)
+    errors = sum(1 for r in done.rows.values() if isinstance(r, Failure))
+    print(f"wrote {args.out} ({len(done.rows)} rows"
+          + (f", {errors} of them render errors" if errors else "") + ")")
     instrument.report()
-
 
 if __name__ == "__main__":
     main()

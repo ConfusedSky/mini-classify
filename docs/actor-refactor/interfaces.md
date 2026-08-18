@@ -49,7 +49,7 @@ Import rules, and why each is load-bearing:
 
 | module | may import | must NOT import | because |
 |---|---|---|---|
-| child side (`loader`, `renderer`, `render_child`) | open3d, PIL, numpy, `messages`, pose | **torch** | SigLIP lives in the parent; a torch import in the child costs VRAM and startup for nothing |
+| child side (`loader`, `renderer`, `render_child`) | open3d, PIL, numpy, `messages`, pose | **torch** | SigLIP lives in the parent; a torch import in the child costs VRAM and startup for nothing. **This binds `classify_stls.py` too** (wave 2, measured): `spawn` re-executes `__main__` in the child, so a module-scope torch import in the CLI would land in the render child — the CLI imports torch only inside function bodies |
 | `poser` | torch (one conversion), numpy, pose, PIL (contact sheet) | open3d renderer calls | the Poser consumes geometry *scores* (computed child-side) and tiles, never the mesh itself |
 | `embedder` | torch, transformers | — | the only owner of models |
 | `pose` | numpy, open3d, PIL, `identity` | torch, **any other `src/` module** | the standing rule, unchanged by the move: `pose` is the leaf both sides import (the child for `up_axis_scores`, the Poser for `combine_up`, `messages` for `Pose`), so it must depend on nothing in the pipeline. Living in `src/` makes it a sibling of its importers, not a peer that may import back |
@@ -441,6 +441,12 @@ class DriverState:                            # the container three passes asked
                                               # not a message.
 
 def run(cfg) -> None:
+    # As built (wave 2): the CLI does the constructing — it spawns the child
+    # (driver.spawn_render_child), builds Done(Admission(), ...), and hands
+    # the constructed world in via DriverConfig; run takes done.admission.
+    # P2 holds by construction (there is no second source a copy could come
+    # from), and a fake child/world is injectable for tests. The lines below
+    # keep the original shape for the P2 argument's sake.
     child = spawn_render_child(cfg)
     admission = Admission()                   # ONE instance, handed to Done and
                                               # DriverState alike (P2): the
@@ -621,12 +627,25 @@ def drain(block):                   # driver state is written as drv.* (O1): an
                                                            # (C-R1-5; no-op if
                                                            # never stashed)
     for out in poser.poll():        # arbiter answers; poll is its own error
-        dispatch(out)               # boundary, yields Failure per file (J3).
+        dispatch(out)               # boundary, yields Failure per file (J3) —
+                                    # but dispatch(Resolved) re-routes through
+                                    # route(), which raises (vanished file), so
+                                    # THIS dispatch gets the same Failure+drop
+                                    # guard as the match arms (wave-2 addition).
                                     # NO progress bump here (O2): child_owed()
                                     # already silences the clock in the tail
                                     # (N1), so the bump N4 asked for protected
                                     # nothing — and it let a mid-run fold reset
                                     # a wedged child's deadline.
+    if not child_owed():            # nothing owed: the clock has nothing to
+        drv.last_progress = now()   # measure (W2-R1-1). Without this, an
+                                    # arbiter tail ages the clock past STALL_S
+                                    # and the child is killed the instant the
+                                    # file un-parks — zero ms to answer the
+                                    # task just sent. While the child owes
+                                    # anything (the wedge O2 protected), owed()
+                                    # is non-empty and no reset happens, so a
+                                    # mid-run fold still cannot save a wedge.
     if outstanding() and (child.exitcode is not None or
             (child_owed() and now() - drv.last_progress > STALL_S)):
         fail_outstanding()          # LAST, after the recv loop AND poll (M1):

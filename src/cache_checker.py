@@ -91,11 +91,11 @@ def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False) \
     else:
         entry = ctx.poses.get(pose.file_identity(f, ctx.root))
         # The ensemble always runs now (`--no-up-ensemble`/`--up-conf` retired
-        # 2026-08-17, actors_proposal.md Migration notes), so sufficiency is
-        # always evaluated with it available: a geometry-only entry — margin
-        # None, written by some older pass — always reads insufficient and is
-        # upgraded in place.
-        if not pose.pose_is_sufficient(entry, True):
+        # 2026-08-17, actors_proposal.md Migration notes), which is why
+        # `pose_is_sufficient` no longer takes the availability flag: a
+        # geometry-only entry — margin None, written by some older pass —
+        # always reads insufficient and is upgraded in place.
+        if not pose.pose_is_sufficient(entry):
             return PoseRenderTask(file=f, index=index)
         resolved = pose.Pose.from_cache(entry)
 

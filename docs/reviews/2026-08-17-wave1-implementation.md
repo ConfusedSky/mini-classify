@@ -1,4 +1,4 @@
-# Wave 1 implementation reviews — 2026-08-17
+# Wave 1–2 implementation reviews — 2026-08-17/18
 
 Review record for the actor-refactor wave-1 tracks (branch `actor-refactor`).
 Implementations by fable agents, reviews by opus agents, coordinated in
@@ -218,3 +218,61 @@ had named `front_T`/`back_T` where the code takes `front_embeds`/
 `back_embeds`; ruling — keep the code's names (they are `pose.py`'s
 `front_view_index` parameter names; `front_T`/`back_T` is the Embedder's
 attribute), fix the doc.
+
+## Wave 2 — driver + CLI (`src/driver.py`, `classify_stls.py`): FINDINGS → fix round
+
+First end-to-end runs of the new pipeline passed (cold/warm/redraw/
+skip-embed/SIGINT; warm CSV byte-identical; child torch-free by /proc
+maps). Review re-verified every contract point (drain table, Resolved
+re-route verbatim, admission window with no blocking send, wrap adapter
+semantically identical to today's `timed` closure on both the timer and
+the in-flight gauge, abort order + narration, SIGINT restore on every
+exit path, retired flags gone) and the module-scope-torch rule
+mechanically (0 torch modules after import, incl. under `__mp_main__`
+re-exec). Name sweep independent: 42 names, 0 missing. All five listed
+behaviour changes ruled acceptable (the ollama fallback's removal is
+required by the hard constraint; measured cost ~1 model in 44).
+
+- **W2-R1-1** (MAJOR) — the stall clock never resets: `child_owed()`
+  silences the check during an arbiter tail (N1) but `last_progress`
+  keeps aging, so the un-parking fold's own drain call sees
+  `outstanding() ∧ child_owed() ∧ stale clock` and kills a healthy child
+  zero ms after sending its task (reproduced on the test rig; 260 s park
+  vs gemini's 300 s transport deadline). **The spec carried the same
+  bug** — the drain pseudocode is amended with the fix: reset
+  `last_progress` whenever `child_owed()` is empty; a wedge keeps
+  `owed()` non-empty so O2's protection is intact.
+- **W2-R1-2** (minor) — the poll-dispatch guard converts to `Failure`
+  but omits `poser.drop`, contradicting the spec note added the same
+  day; harmless today (poll pops parked first) but the guarantee should
+  be real. Fix: add the drop; arms become literally identical.
+
+Notes, no action: the old `stage("arbiter-wait")` has no successor
+(driver's blocking wait is `results-wait` now); M4's "needs nothing
+further from the child" is one drain-cycle optimistic in the
+skip-embed+save-renders+dead-child+parked combination (self-correcting);
+the pre-walk "N geometry-only poses will be re-resolved" diagnostic is
+gone with the prefetcher (recorded in the migration notes).
+
+**Delta round W2-R2**: CLEAN, no findings. The stall-clock fix verified
+beyond report: the new regression test fails against a driver with the
+reset stubbed out, and `test_a_wedged_child_is_killed_after_stall_s`
+passes against *both* the fixed and unfixed driver — so O2/M3's wedge
+path is genuinely unchanged rather than propped up by the new code.
+Measured semantics: the un-parked file now gets exactly `STALL_S` of
+fresh silence (kill at un-park + STALL_S against a child that never
+answers), where pre-fix it was un-park + 0 ms. The bind-once deviation
+(`owed = child_owed()`) accepted as an improvement, not merely
+permitted: none of its three inputs (`admitted_files`, `retired_ids`,
+`parked`) can mutate between the bind and the stall predicate — all
+main-thread-only, and arbiter workers complete `Future`s without
+touching `parked` — so the single bind makes the reset and the stall
+half provably the same decision. `DriverConfig`'s `TYPE_CHECKING`
+typing ruled correct and complete (no runtime use of the five names;
+`import src.driver` still loads zero torch; both directions of the
+`done ↔ driver` annotation pair stay annotation-only, so no runtime
+cycle). Notes: `typing.get_type_hints(DriverConfig)` would now raise
+`NameError` — matters only if a runtime-validating dataclass layer
+(pydantic/typeguard) is ever added; a three-method `Protocol` for
+`child` would state the fake-substitution contract more precisely than
+`BaseProcess` + comment (taste, not correctness).

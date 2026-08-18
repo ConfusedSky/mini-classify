@@ -205,20 +205,24 @@ def save_pose_cache(cache_dir, cache):
     p.write_text(json.dumps(cache))
 
 
-def pose_is_sufficient(entry, ensemble_available):
+def pose_is_sufficient(entry):
     """Is this cached pose good enough for the current run, or a miss?
 
     `margin` is None exactly when the SigLIP ensemble did not run — a
-    `--no-up-ensemble` pass resolves poses from geometry alone. Treating
-    those as hits would let one geometry-only pass pin every
-    model to its geometry answer, and the ensemble — and the margin gate
-    behind it, so the arbiter too — would never run again. A run with the
-    ensemble available treats them as misses and upgrades them in place; a run
-    without it takes any cached answer, and a VLM answer outranks the ensemble
-    whichever gate escalated it."""
+    geometry-only pass, written by some older `--no-up-ensemble` run. Treating
+    those as hits would let one such pass pin every model to its geometry
+    answer, and the ensemble — and the margin gate behind it, so the arbiter
+    too — would never run again; so they read as misses and are upgraded in
+    place. A VLM answer outranks the ensemble whichever gate escalated it, so
+    it stands regardless of its margin.
+
+    The `ensemble_available` parameter is retired (2026-08-17, with
+    `--no-up-ensemble`/`--up-conf` — actors_proposal.md Migration notes): the
+    ensemble always runs now, so every caller passed True and the False arm —
+    "take any cached answer" — had no way to be reached."""
     if entry is None:
         return False
-    if not ensemble_available or entry["source"] == "vlm":
+    if entry["source"] == "vlm":
         return True
     return entry.get("margin") is not None
 
