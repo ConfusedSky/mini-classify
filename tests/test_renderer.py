@@ -70,7 +70,7 @@ def make_cfg(tmp_path=None, **over):
 @pytest.fixture
 def rig(monkeypatch):
     log = []
-    monkeypatch.setattr(renderer_mod, "_make_offscreen",
+    monkeypatch.setattr(renderer_mod, "make_offscreen",
                         lambda size: FakeOffscreen(log))
 
     def make(cfg=None):

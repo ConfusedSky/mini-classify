@@ -15,12 +15,6 @@ from pathlib import Path
 
 import pytest
 
-# Hard import, not importorskip (B-R1-1): the key-parity pin below is the only
-# thing holding the extracted key builders byte-identical to the originals, and
-# a skip would retire that guarantee silently. classify_stls pulls in torch and
-# open3d.rendering — that is why *route* may not import it, and why this test
-# module is the one place that does.
-import classify_stls
 from src import cache_checker, pose
 from src.cache_checker import route
 from src.messages import (
@@ -276,23 +270,13 @@ def test_route_raises_on_vanished_file(tmp_path):
         route(f, 0, ctx)
 
 
-def test_key_composition_matches_classify_stls(tmp_path):
-    """The extracted key builders stay byte-identical to the originals in
-    classify_stls.py (which route cannot import: it pulls in torch)."""
-    ident = "kit/model.stl|1723600000|4096"
-    for over in (dict(),
-                 dict(elevations=[20.0, -10.0]),
-                 dict(compile=True),
-                 dict(views=8, render_size=384)):
-        args = make_args(**over)
-        assert cache_checker.cache_key_from_identity(ident, args, "0,0,1") \
-            == classify_stls.cache_key_from_identity(ident, args, "0,0,1")
-    root = tmp_path
-    f = tmp_path / "Baal_Flaming_Sword_L.stl"
-    f.write_bytes(b"x")
-    assert cache_checker.render_key(f, root) == classify_stls.render_key(f, root)
-    assert cache_checker.EMBED_CACHE_VERSION == classify_stls.EMBED_CACHE_VERSION
-    assert cache_checker.DEFAULT_ELEVATIONS == classify_stls.DEFAULT_ELEVATIONS
+# The key-composition pin that lived here (cache_checker's builders against
+# classify_stls') is retired with the copies it pinned: `render_key`,
+# `cache_key_from_identity` and `EMBED_CACHE_VERSION` are `src.identity`'s
+# alone now (E-R1-5), imported by this module, by the child's renderer and by
+# the CLI, so the assertion had become a thing compared with itself. What the
+# keys actually *say* is pinned by tests/test_identity.py and
+# tests/test_migrate_cache_keys.py.
 
 
 def test_import_pulls_no_torch_and_no_renderer():

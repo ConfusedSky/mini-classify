@@ -6,9 +6,11 @@ CachedHit (row, no retirement, no Release); Release exactly once per
 retirement on a fake transport; flush idempotence (two calls, one atomic
 replace each, identical bytes); and byte-shape parity of the CSV and
 pose-cache output with what classify_stls.py writes today — the success-row
-oracle replicates the score block (classify_stls.py:1197-1217) on
-classify_stls' own pool_sims, so the numbers and the row dict are pinned
-against the production originals, not against Done's copies.
+oracle replicates the score block (classify_stls.py:1197-1217) line for line,
+so the numbers and the row dict are pinned against the production original's
+*shape*: the ordering, the rounding, the field names. Its `pool_sims` is the
+shared one (there is only one now), so what the oracle pins is the block
+around it, not the pooling itself.
 
 CPU torch throughout; no GPU, no renderer.
 """
@@ -28,7 +30,8 @@ import torch
 
 import classify_stls
 from src import pose
-from src.cache_checker import cache_key_from_identity, route
+from src.cache_checker import route
+from src.identity import cache_key_from_identity
 from src.done import CSV_FIELDS, Done, pool_sims, view_config
 from src.messages import (
     CacheContext,
@@ -136,10 +139,10 @@ def a_pose(up=(0.0, 0.0, 1.0), source="geometry", conf=0.1234, margin=0.9) -> Po
 
 
 def today_row(f, p: Pose, fv, img, text, mode="mean"):
-    """The score block exactly as classify_stls.process writes it
-    (:1197-1217), on classify_stls' own pool_sims — the parity oracle."""
+    """The score block exactly as classify_stls.process wrote it (:1197-1217)
+    — the parity oracle for the row's shape, ordering and rounding."""
     view_sims = (img @ text.T).float().cpu().numpy()
-    sims = torch.from_numpy(classify_stls.pool_sims(view_sims, mode))
+    sims = torch.from_numpy(pool_sims(view_sims, mode))
     order = sims.argsort(descending=True)
     row = {"file": str(f), "up": pose.up_str(p.up), "pose_conf": p.confidence,
            "pose_source": p.source, "front_view": fv}
@@ -515,15 +518,9 @@ def test_flush_empty_rows_writes_header_only(tmp_path):
         (",".join(CSV_FIELDS) + "\r\n").encode()
 
 
-# --- parity of the extracted helpers with the production originals -----------
-
-def test_pool_sims_parity_all_modes():
-    view_sims = np.random.default_rng(0).standard_normal((2, 6, 4)).astype(np.float32)
-    for mode in ("mean", "max", "softmax"):
-        np.testing.assert_array_equal(pool_sims(view_sims, mode),
-                                      classify_stls.pool_sims(view_sims, mode))
-
-
-def test_view_config_parity(tmp_path):
-    args = make_args(tmp_path, views=4, elevations=[20.0, -12.5])
-    assert view_config(args) == classify_stls.view_config(args)
+# The two parity pins that lived here (`pool_sims` and `view_config` against
+# classify_stls' copies) are retired with the copies: this module is their one
+# home now, and classify_stls forwards to it, so both assertions had become a
+# function compared with itself. `pool_sims` is still exercised through
+# `today_row` on every success-row test, and `view_config` through the
+# front_view keying below.

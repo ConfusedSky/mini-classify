@@ -39,7 +39,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 
-from src.cache_checker import cache_key_from_identity
+from src.identity import cache_key_from_identity
 from src.messages import (
     CacheContext,
     CachedHit,
@@ -70,17 +70,29 @@ CSV_FIELDS = ["file", "top1", "score1", "top2", "score2", "top3", "score3",
 
 
 def view_config(args):
-    """The token keying `front_view` entries in the pose cache. Extracted
-    verbatim from classify_stls.view_config (:300-308); the parity test in
-    tests/test_done.py pins the two identical until classify_stls delegates."""
+    """The token keying `front_view` entries in the pose cache.
+
+    front_view is an index into this run's view list, and an index cached at 8
+    views is meaningless at 4 — or silently wrong at the same count with
+    different elevations — so the pose cache stores it per view config. Same
+    elevation formatting as the embedding key, so the two never disagree about
+    what one config is. The CLI's `render_subdir` names its renders directory
+    with this, importing it from here (function-local: this module owns torch,
+    and the CLI must stay torch-free at module scope)."""
     elev = ",".join(f"{e:g}" for e in args.elevations)
     return f"{args.views}v-e{elev}"
 
 
 def pool_sims(view_sims, mode, axis=-2):
     """Pool per-view similarity scores (..., n_views, n_categories) over views.
-    Extracted verbatim from classify_stls.pool_sims (:553-566); parity-pinned
-    by tests/test_done.py until classify_stls delegates to this copy."""
+
+    mean: robust whole-object consensus (a feature seen in 1 of 4 views keeps
+    ~25% weight). max: "clearly visible from some angle" — lets single-view
+    features decide. softmax: in between (sharpness set by BETA).
+
+    The one copy: the REPL and the evals reach it through `classify_stls`,
+    which forwards here lazily rather than importing this torch-owning module
+    at module scope (classify_stls' module docstring)."""
     if mode == "mean":
         return view_sims.mean(axis)
     if mode == "max":

@@ -425,6 +425,26 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   Exit check: an AST sweep for same-named module-level constants or
   functions across `src/` + `classify_stls.py` comes back empty (bar
   `__init__`).
+  ~~**Done 2026-08-18.**~~ The sweep found 17 duplicated names (the four the
+  entry did not list: `rotation_to_z_up`, `read_binary_stl`, `load_mesh`,
+  `STL_RECORD`) and comes back empty now. Keys moved to `src/identity.py`
+  (`render_key`, `cache_key_from_identity`, `EMBED_CACHE_VERSION`, and
+  `DEFAULT_ELEVATIONS`, which the key elides and so had to travel with it);
+  `done` imports them from there rather than from `cache_checker` (E-R1-5
+  closed). Everything else is a `classify_stls` re-export of the `src/` home:
+  `loader` for the STL parse, `renderer` for the camera/light/tile names —
+  and `pool_sims`/`view_config`, whose home `src/done.py` owns torch, are
+  forwarded by a module `__getattr__` so the CLI stays torch-free at module
+  scope for the spawned child. Keys verified byte-identical to the pre-dedup
+  source across 36 flag combinations, so no cache is invalidated. Three
+  parity pins retired with their copies (`test_key_composition_matches_
+  classify_stls`, `test_pool_sims_parity_all_modes`, `test_view_config_
+  parity`): 398 → 395 passing. Pylint's duplicate-code checker over `src/` +
+  `classify_stls.py` reported 7 clone pairs before and none after; the
+  camera-carried rotation, which was a real clone the entry did not name,
+  became `renderer.rotated_cams` (one definition for the child's pose tiles
+  and the evals' contact-sheet grid), and `make_renderer` now delegates to
+  `renderer.make_offscreen`.
 
 - **Renders are not reproducible across pose-cache states.** A cold pose cache
   renders the six up-candidate tiles through the same `OffscreenRenderer` first,

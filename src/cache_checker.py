@@ -18,14 +18,16 @@ path that skips the pose-cache lookup and goes straight to the embedding key
 Import discipline: no torch, no renderer, no classify_stls (which imports
 both). Cache keying goes through `src.identity` / `src.pose` —
 `pose.file_identity` is byte-identical to the embedding key's identity half
-(review §P3.1), so this module never re-derives an identity string.
+(review §P3.1), so this module never re-derives an identity string, and the
+key builders themselves are `identity`'s: the child's renderer needs
+`render_key` too and neither module may import the other (E-R1-5).
 """
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
-from src import identity, pose
+from src import pose
+from src.identity import cache_key_from_identity, render_key
 from src.messages import (
     CacheContext,
     CachedHit,
@@ -34,38 +36,6 @@ from src.messages import (
     Redraw,
     Retired,
 )
-
-# --- Embedding / render cache keys ------------------------------------------
-# Extracted verbatim from classify_stls.py (EMBED_CACHE_VERSION,
-# DEFAULT_ELEVATIONS, cache_key_from_identity:608, render_key:321). The
-# constants are replicated rather than imported because classify_stls imports
-# torch and open3d.rendering at module scope — exactly what this module must
-# not pull in. classify_stls delegating to this copy is a later wave's move;
-# until then the parity test in tests/test_cache_checker.py pins the two
-# byte-identical.
-
-EMBED_CACHE_VERSION = 1
-DEFAULT_ELEVATIONS = [20.0]
-
-
-def cache_key_from_identity(ident, args, up_token):
-    """The embedding key for a file already reduced to its identity string.
-
-    `ident` is `pose.file_identity` — rel|mtime|size. Every conditional token
-    appends only when non-default so keys written before each flag existed
-    stay byte-identical (see the source's comments for the full history)."""
-    elev = "" if args.elevations == DEFAULT_ELEVATIONS else \
-        "|e:" + ",".join(f"{e:g}" for e in args.elevations)
-    ver = "" if EMBED_CACHE_VERSION == 1 else f"|ev{EMBED_CACHE_VERSION}"
-    comp = "|compiled" if getattr(args, "compile", False) else ""
-    raw = f"{ident}|{args.views}|{args.render_size}|{up_token}|{args.model}|pv{elev}{comp}{ver}"
-    return hashlib.sha1(raw.encode()).hexdigest()
-
-
-def render_key(f, root):
-    """Per-file prefix for saved renders: '<stem>_<6 hex of the rel path>'."""
-    return f"{f.stem}_{hashlib.sha1(identity.rel_path(f, root).encode()).hexdigest()[:6]}"
-
 
 # --- The decision ------------------------------------------------------------
 

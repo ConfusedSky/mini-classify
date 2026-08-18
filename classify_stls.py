@@ -14,6 +14,13 @@ run-params, the cache guards and the wiring live here; the loop lives in
 functions kept below are the ones the eval harnesses and the sibling tools
 import — the production render/embed helpers they measure against.
 
+Nothing here is a second copy of a `src/` definition. The names the tools have
+always imported from this module (`render_key`, `load_mesh`, `view_angles`,
+`RENDER_FORMATS`, ...) are re-exported from the module that owns them, so
+there is exactly one of each to keep in step — and `pool_sims`/`view_config`,
+whose home `src/done.py` owns torch, are forwarded lazily by `__getattr__` at
+the bottom of this file rather than imported at module scope.
+
 Viewpoints are a turntable of --views azimuths at each --elevations pitch, so
 --views 4 --elevations 20,-10 gives 8 renders per mesh. Every run records its
 parameters in <cache-dir>/run-params.json; cluster_models.py and
@@ -44,7 +51,6 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import open3d as o3d
 import open3d.visualization.rendering as rendering
 from PIL import Image
 from tqdm import tqdm
@@ -54,6 +60,18 @@ from src import identity
 from src import pose
 from naming import SKIP_TAGS, skip
 from instrument import stage
+# The definitions the tools import from here, each from its one home — several
+# are unused *in* this file and imported for the re-export alone, which is the
+# point: one definition, and the callers' import path unchanged. None of these
+# pulls torch, which is what lets them sit at module scope (docstring):
+# `identity` is stdlib-only, `loader` and `renderer` are the child side.
+from src.identity import (DEFAULT_ELEVATIONS, EMBED_CACHE_VERSION,
+                          cache_key_from_identity, render_key)
+from src.loader import STL_RECORD, load_mesh, read_binary_stl
+from src.renderer import (FILL_INTENSITY, RENDER_FORMATS, SUN_INTENSITY,
+                          UP_TILE_AZIMUTHS, UP_TILE_ELEVATION, make_offscreen,
+                          orbit_camera, rotated_cams, rotation_to_z_up,
+                          view_angles)
 
 
 def as_tensor(feat):
@@ -61,162 +79,10 @@ def as_tensor(feat):
     return feat if isinstance(feat, torch.Tensor) else feat.pooler_output
 
 
-SUN_INTENSITY = 90000.0
-# Ambient fill. The sun is the only light Filament gives us here — add_directional_
-# /point_/spot_light all return True and then render as a <0.1/255 no-op — so with
-# indirect light off, every surface facing away from the key falls to pure black
-# and swallows detail (an 11% of object pixels under 25/255 on a hat brim shading a
-# face). The built-in environment map is world-fixed and does not orbit with the
-# camera, so it is deliberately kept far below the key: at 10k the crushed-black
-# fraction is 0, while the brightness it adds still swings ~30/255 across azimuths.
-FILL_INTENSITY = 10000.0
-
-
 def make_renderer(size):
-    # Meshes are rotated into Z-up world space before rendering, so this rig
-    # (key light from above + ambient fill) is correct for any --up-axis choice.
-    renderer = rendering.OffscreenRenderer(size, size)
-    scene = renderer.scene.scene
-    renderer.scene.set_background([1.0, 1.0, 1.0, 1.0])
-    scene.enable_indirect_light(True)
-    scene.set_indirect_light_intensity(FILL_INTENSITY)
-    scene.enable_sun_light(True)  # direction is set per view in render_views
-    return renderer
-
-
-def rotation_to_z_up(up):
-    z = np.array([0.0, 0.0, 1.0])
-    if np.allclose(up, z):
-        return np.eye(3)
-    if np.allclose(up, -z):
-        return o3d.geometry.get_rotation_matrix_from_xyz((np.pi, 0, 0))
-    axis = np.cross(up, z)
-    axis = axis / np.linalg.norm(axis)
-    angle = np.arccos(np.clip(up @ z, -1, 1))
-    return o3d.geometry.get_rotation_matrix_from_axis_angle(axis * angle)
-
-
-# Binary STL: an 80-byte header, a uint32 triangle count, then this fixed
-# 50-byte record per triangle. The fixed stride is the whole trick.
-STL_RECORD = np.dtype([("normal", "<f4", 3), ("v", "<f4", (3, 3)), ("attr", "<u2")])
-
-
-def read_binary_stl(path):
-    """A binary STL read straight into arrays, or None if it is not one.
-
-    read_triangle_mesh dominates everything before the first pixel: ~3.9 s on an
-    800k-triangle collection mesh against ~120 ms here, where the upload it
-    feeds is 275 ms. Optimising the renderer was optimising the small half
-    (eval/load_path.py, docs/actor-refactor/renderer_alternatives.md).
-
-    The header cannot be trusted to say which format this is — plenty of binary
-    STLs start with "solid" — so the test is arithmetic: it is binary only if
-    the file is exactly the length a triangle count implies. Anything else
-    (ASCII, truncated, junk) returns None and takes the Open3D path.
-
-    Which count, though, is not always the one in the header. Materialise
-    Magics writes a `COLOR=... MATERIAL=...` header and a triangle count that
-    can be wrong by anything from 8 triangles to 1.5 million, while the data
-    itself fills the file exactly. Open3D refuses those outright ("Failed to
-    determine STL storage representation") though the meshes are sound, so when
-    the header disagrees and the remaining bytes are a whole number of records,
-    the file wins and says so out loud.
-
-    That is a real loosening: a file truncated at an exact 50-byte boundary is
-    now read short rather than refused. Two things keep it narrow — an ASCII
-    STL is detected and rejected before the arithmetic can coincide, and a
-    derived read must parse to finite coordinates.
-
-    The result is a triangle soup, three unshared vertices per triangle, which
-    is what an STL *is*. Open3D's reader welds a handful (108 of 2.4M on a real
-    mesh); we do not, and that difference shows up in the render."""
-    size = path.stat().st_size
-    if size < 84:
-        return None
-    with open(path, "rb") as fh:
-        head = fh.read(84)
-        n = int(np.frombuffer(head[80:84], "<u4")[0])
-        derived = False
-        if size != 84 + 50 * n:
-            if (size - 84) % 50:
-                return None
-            # an ASCII STL's bytes 80:84 are text, so its implied count is
-            # nonsense — and one file in fifty would pass the arithmetic by
-            # coincidence. Read the real marker instead of gambling on it.
-            if b"facet" in head + fh.read(448):
-                return None
-            fh.seek(84)
-            n, derived = (size - 84) // 50, True
-        if n == 0:
-            return None
-        # fromfile continues from the header rather than materialising the
-        # whole record block as bytes first — 200 MB on a 4M-triangle mesh
-        rec = np.fromfile(fh, dtype=STL_RECORD, count=n)
-    if len(rec) != n:                       # short read despite the size check
-        return None
-    if derived:
-        # Coordinates are millimetres. Finite alone is too weak a test — junk
-        # decodes to huge-but-finite floats as readily as to NaN (0x7f7f7f7f is
-        # 3.4e38) — so bound the magnitude too: a thousand kilometres is not a
-        # miniature, and no real mesh comes close to the limit.
-        v = rec["v"]
-        if not (np.isfinite(v).all() and np.abs(v).max() < 1e9):
-            return None                     # not triangles, whatever it is
-        print(f"  {path.name}: header claims "
-              f"{int(np.frombuffer(head[80:84], '<u4')[0]):,} triangles, file holds "
-              f"{n:,} — trusting the file")
-    return o3d.geometry.TriangleMesh(
-        o3d.utility.Vector3dVector(rec["v"].reshape(-1, 3).astype(np.float64)),
-        o3d.utility.Vector3iVector(np.arange(3 * n, dtype=np.int32).reshape(-1, 3)))
-
-
-def load_mesh(mesh_path):
-    mesh_path = Path(mesh_path)
-    mesh = None
-    if mesh_path.suffix.lower() == ".stl":
-        mesh = read_binary_stl(mesh_path)
-    if mesh is None:
-        mesh = o3d.io.read_triangle_mesh(str(mesh_path))
-    if not mesh.has_triangles():
-        raise ValueError("no triangles")
-    mesh.compute_vertex_normals()
-    return mesh
-
-
-DEFAULT_ELEVATIONS = [20.0]
-UP_TILE_ELEVATION = 20.0  # pose contact sheet: fixed, independent of --elevations
-# Views per up candidate for the ensemble; the arbiter sheet still gets one.
-# 2, not 4: measured on all 49 labels at production pixels, halving the
-# azimuths flips zero ensemble picks and costs one extra escalation, for half
-# of pose-embed — the run's largest GPU item (eval/tile_count.py, LEARNINGS
-# 2026-08-13). 1 is not safe: it breaks three models including 32mm_Gate_L.
-UP_TILE_AZIMUTHS = 2
-
-
-def view_angles(n_views, elevations):
-    """(azimuth, elevation) radian pairs: a full turntable ring per elevation.
-
-    Elevation-major, so views 0..n_views-1 are the first ring — a run with one
-    elevation lays out exactly as it did before elevations existed, and
-    view0.png keeps meaning the same camera."""
-    return [(2 * np.pi * i / n_views, np.deg2rad(e))
-            for e in elevations for i in range(n_views)]
-
-
-def orbit_camera(center, radius, az, elev):
-    """(eye, camera-up, sun direction) for one turntable position, Z-up world."""
-    eye = center + radius * np.array(
-        [np.cos(az) * np.cos(elev), np.sin(az) * np.cos(elev), np.sin(elev)]
-    )
-    # Camera 'up' is world +Z carried along the orbit, not +Z itself: the two
-    # frame the image identically, but past |elev| 87.44 (|up . view| > 0.999)
-    # Filament calls +Z degenerate and swaps in a fixed fallback up, which
-    # freezes the image orientation so azimuth stops changing the render.
-    up = np.array([-np.cos(az) * np.sin(elev), -np.sin(az) * np.sin(elev), np.cos(elev)])
-    # headlight: key light shines from the camera, tilted downward in world
-    # space so shading is consistent with "up" from every orbit angle
-    sun = (center - eye) / np.linalg.norm(center - eye) + np.array([0, 0, -0.6])
-    return eye, up, sun / np.linalg.norm(sun)
+    """The offscreen rig, the render child's own (`src.renderer`): the evals
+    measure the production path, so they must build the production rig."""
+    return make_offscreen(size)
 
 
 def _shoot(renderer, cams):
@@ -266,49 +132,19 @@ def render_up_candidate_grid(renderer, mesh, n_az=UP_TILE_AZIMUTHS):
     equivalent here because all six candidate rotations are signed axis
     permutations: the rotated mesh's bounding box is the rotated box, so its
     centre is R@c and its extent is a permutation of e — leaving the framing
-    radius ||e|| identical. Compute each camera in the rotated frame as before,
-    then carry it back with R.T. Verified pixel-identical against the
+    radius ||e|| identical. `renderer.rotated_cams` does that arithmetic — the
+    same call the child's pose path makes, so these tiles and the pipeline's
+    are framed by one piece of code. Verified pixel-identical against the
     rotate-the-mesh version."""
     center, radius = _upload(renderer, mesh)
     angles = view_angles(n_az, [UP_TILE_ELEVATION])
-    grid = []
-    for up in pose.UP_CANDIDATES:
-        R = rotation_to_z_up(up)
-        c_rot = R @ center                      # exact: axis permutation
-        cams = []
-        for az, elev in angles:
-            eye, cam_up, sun = orbit_camera(c_rot, radius, az, elev)
-            cams.append((R.T @ c_rot, R.T @ eye, R.T @ cam_up, R.T @ sun))
-        grid.append(_shoot(renderer, cams))
-    return grid
+    return [_shoot(renderer, rotated_cams(rotation_to_z_up(up), center, radius, angles))
+            for up in pose.UP_CANDIDATES]
 
 
 def render_up_candidate_tiles(renderer, mesh):
     """One render per candidate up (fixed azimuth) — the VLM contact sheet."""
     return [row[0] for row in render_up_candidate_grid(renderer, mesh, 1)]
-
-
-# Encodings for --save-renders. These files are written and never read back —
-# the classifier always embeds the in-memory render — so the only thing a lossy
-# format costs is what a human eye needs, not embedding fidelity. Measured on 16
-# views at 2048 px: jpg 0.13 s / 205 KB each, png 3.83 s / 3.9 MB, webp 1.02 s /
-# 100 KB. compress_level=1 is byte-identical to PIL's default 6 and 6.1x faster.
-RENDER_FORMATS = {
-    "jpg": (".jpg", {"quality": 92}),
-    "png": (".png", {"compress_level": 1}),
-    "webp": (".webp", {"quality": 90}),
-}
-
-
-def view_config(args):
-    """The token for anything that indexes into this run's view list.
-
-    front_view is such an index, and an index cached at 8 views is meaningless
-    at 4 — or silently wrong at the same count with different elevations — so
-    the pose cache stores it per view config. Same elevation formatting as
-    cache_key, so the two never disagree about what one config is."""
-    elev = ",".join(f"{e:g}" for e in args.elevations)
-    return f"{args.views}v-e{elev}"
 
 
 def render_subdir(args):
@@ -318,23 +154,9 @@ def render_subdir(args):
     size, views and elevations — so without this a rerun at a different size
     leaves the previous config's images in place and the contact sheets stop
     describing what was actually classified."""
+    # function-local: src.done owns torch and this module must not (docstring)
+    from src.done import view_config
     return f"{args.render_size}px-{view_config(args)}"
-
-
-def render_key(f, root):
-    """Per-file prefix for saved renders: '<stem>_<6 hex of the path>'.
-
-    Stems are not unique — a collection routinely holds one Baal_Flaming_Sword_L
-    per kit — and the renders all land in one flat directory, so keying by stem
-    alone let the last file walked overwrite the others' images and every tool
-    then showed one model's render for all of them. The path disambiguates;
-    mtime and size deliberately do not, so re-rendering a file replaces its own
-    images instead of accumulating a set per edit. Only the path is hashed, so
-    the stem stays readable and searchable in a directory listing.
-
-    The path hashed is relative to the collection root (identity.py), so moving
-    the library does not orphan every render."""
-    return f"{f.stem}_{hashlib.sha1(identity.rel_path(f, root).encode()).hexdigest()[:6]}"
 
 
 # Cache layout. Everything a run derives from the collection lives under
@@ -513,22 +335,6 @@ def embed_images(model, processor, images, device, batch=None):
         return torch.nn.functional.normalize(feat, dim=-1)
 
 
-def pool_sims(view_sims, mode, axis=-2):
-    """Pool per-view similarity scores (..., n_views, n_categories) over views.
-
-    mean: robust whole-object consensus (a feature seen in 1 of 4 views keeps
-    ~25% weight). max: "clearly visible from some angle" — lets single-view
-    features decide. softmax: in between (sharpness set by BETA).
-    """
-    if mode == "mean":
-        return view_sims.mean(axis)
-    if mode == "max":
-        return view_sims.max(axis)
-    BETA = 50.0
-    w = np.exp(BETA * (view_sims - view_sims.max(axis, keepdims=True)))
-    return (w * view_sims).sum(axis) / w.sum(axis)
-
-
 def find_stls(root):
     found = []
     for dirpath, dirnames, filenames in os.walk(root):
@@ -563,40 +369,6 @@ def load_file_list(inp, cache_dir, rescan=False):
         walk_cache.write_text(json.dumps(
             {"scanned": time.time(), "files": [str(f) for f in files]}))
     return files
-
-
-EMBED_CACHE_VERSION = 1
-
-
-def cache_key_from_identity(ident, args, up_token):
-    """The embedding key for a file already reduced to its identity string.
-
-    `ident` is byte-identical to pose.file_identity — rel|mtime|size — which
-    is what makes every embedding key reconstructible from pose-cache.json
-    plus run-params.json alone, with no filesystem access (review §P3.1).
-    migrate_cache_keys drives the token migration through here so a
-    half-mounted collection cannot leave entries behind (S1)."""
-    # A single 20° ring appends nothing, so keys written before --elevations
-    # existed stay byte-identical and those (expensive) caches survive.
-    elev = "" if args.elevations == DEFAULT_ELEVATIONS else \
-        "|e:" + ",".join(f"{e:g}" for e in args.elevations)
-    # "pv" = per-view cache format: (n_views, dim) instead of one pooled vector.
-    # up_token is the pose's up vector ("0,0,1"), the only pose input that
-    # changes the pixels — pose.embed_cache_token.
-    # Versions the *derivation* of an embedding from its file: bump when
-    # load_mesh -> up_axis_scores -> rank_up_scores changes its answer for
-    # unchanged bytes, the way POSE_CACHE_VERSION already re-resolves poses.
-    # The numpy-parser swap was the near-miss (it passed only because triangle
-    # counts and bounding boxes came out exact). Appended only when bumped, so
-    # every key from before it existed survives its introduction.
-    ver = "" if EMBED_CACHE_VERSION == 1 else f"|ev{EMBED_CACHE_VERSION}"
-    # torch.compile's kernels drift ~1e-03 from eager, so the two regimes are
-    # different numbers under the same pixels; like elev, the token appears
-    # only when non-default, so every key from before the flag existed stays
-    # byte-identical.
-    comp = "|compiled" if getattr(args, "compile", False) else ""
-    raw = f"{ident}|{args.views}|{args.render_size}|{up_token}|{args.model}|pv{elev}{comp}{ver}"
-    return hashlib.sha1(raw.encode()).hexdigest()
 
 
 def cache_key(f, args, up_token, root):
@@ -1042,6 +814,24 @@ def main():
     print(f"wrote {args.out} ({len(done.rows)} rows"
           + (f", {errors} of them render errors" if errors else "") + ")")
     instrument.report()
+
+
+# The two names whose home imports torch. `src.done` owns the scoring, so
+# `pool_sims` and `view_config` live there — but the render child re-imports
+# this file as `__mp_main__` (module docstring), and a module-scope
+# `from src.done import ...` would hand it torch. PEP 562 defers the import to
+# first use, so `from classify_stls import pool_sims` keeps resolving for
+# test_categories.py, cluster_models.py and the evals, while the child — which
+# touches neither name — never pays for it. One definition either way.
+_FORWARDED = {"pool_sims": "src.done", "view_config": "src.done"}
+
+
+def __getattr__(name):
+    if name in _FORWARDED:
+        import importlib
+        return getattr(importlib.import_module(_FORWARDED[name]), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 if __name__ == "__main__":
     main()

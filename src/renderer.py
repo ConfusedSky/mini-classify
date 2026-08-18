@@ -39,10 +39,13 @@ Hard constraints this module is built around (CLAUDE.md):
 
 Rendering extraction source: `classify_stls.py` (make_renderer, orbit_camera,
 view_angles, render_up_candidate_grid's camera trick, save_renders,
-render_key, RENDER_FORMATS). The child owns saving renders (data_structures
-Q2): the pixels are already in its memory.
+RENDER_FORMATS). This module is now the one home for all of it: the CLI's
+eval-facing render path imports `orbit_camera`, `view_angles`,
+`rotation_to_z_up`, `rotated_cams`, `make_offscreen` and the light/tile
+constants from here rather than keeping copies, and `render_key` moved down to
+`identity` (the parent's cache checker needs it too). The child owns saving
+renders (data_structures Q2): the pixels are already in its memory.
 """
-import hashlib
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -52,21 +55,28 @@ import open3d as o3d
 import open3d.visualization.rendering as rendering
 from PIL import Image
 
-from src import identity
 from src import pose
+from src.identity import render_key
 from src.loader import LoadedMesh
 from src.messages import RenderConfig
 
 SUN_INTENSITY = 90000.0
-# Ambient fill. The sun is the only light Filament gives us here — see the
-# extraction source's note (classify_stls.py:61-69): every other light call is
-# a no-op, the built-in environment map is world-fixed, so the fill is kept
-# far below the key.
+# Ambient fill. The sun is the only light Filament gives us here —
+# add_directional_/point_/spot_light all return True and then render as a
+# <0.1/255 no-op — so with indirect light off, every surface facing away from
+# the key falls to pure black and swallows detail (an 11% of object pixels
+# under 25/255 on a hat brim shading a face). The built-in environment map is
+# world-fixed and does not orbit with the camera, so it is deliberately kept
+# far below the key: at 10k the crushed-black fraction is 0, while the
+# brightness it adds still swings ~30/255 across azimuths.
 FILL_INTENSITY = 10000.0
 
 UP_TILE_ELEVATION = 20.0  # pose contact sheet: fixed, independent of --elevations
-# Views per up candidate for the ensemble; 2, not 4 — measured
-# (eval/tile_count.py, LEARNINGS 2026-08-13). 1 breaks three models.
+# Views per up candidate for the ensemble; 2, not 4: measured on all 49 labels
+# at production pixels, halving the azimuths flips zero ensemble picks and
+# costs one extra escalation, for half of pose-embed — the run's largest GPU
+# item (eval/tile_count.py, LEARNINGS 2026-08-13). 1 is not safe: it breaks
+# three models including 32mm_Gate_L.
 UP_TILE_AZIMUTHS = 2
 
 # Scene name for the rotated copy `views` renders. One name, added and removed
@@ -123,19 +133,33 @@ def orbit_camera(center, radius, az, elev):
     return eye, up, sun / np.linalg.norm(sun)
 
 
-def render_key(f, root):
-    """Per-file prefix for saved renders: '<stem>_<6 hex of the path>' — the
-    same key `classify_stls.render_key` derives, so the child's files land
-    where the parent's render index expects them. The path hashed is relative
-    to the collection root (identity.py), so moving the library does not
-    orphan every render."""
-    return f"{f.stem}_{hashlib.sha1(identity.rel_path(f, root).encode()).hexdigest()[:6]}"
+def rotated_cams(R, center, radius, angles):
+    """The camera-carried rotation: each camera computed in the frame R takes
+    the mesh to, then carried back with R.T so the geometry never moves.
+
+    Exact as *framing* when R is a signed axis permutation — the rotated AABB
+    is the permuted box, so its centre is R @ center and the framing radius is
+    unchanged — which is why the pose path (`_shoot_rotated`, and the evals'
+    `classify_stls.render_up_candidate_grid`) can shoot six candidate ups from
+    one upload. Exact as *framing*, not as pixels: the ambient fill is
+    world-fixed, which is why the classification views rotate a copy of the
+    mesh instead (I11, module docstring)."""
+    c_rot = R @ center
+    cams = []
+    for az, elev in angles:
+        eye, cam_up, sun = orbit_camera(c_rot, radius, az, elev)
+        cams.append((R.T @ c_rot, R.T @ eye, R.T @ cam_up, R.T @ sun))
+    return cams
 
 
-def _make_offscreen(size):
-    """The one `OffscreenRenderer`, scene rig included. Module-level so tests
-    can substitute a fake without touching the GPU. The returned renderer is
-    kept for the process lifetime and never destroyed (CLAUDE.md)."""
+def make_offscreen(size):
+    """The one `OffscreenRenderer`, scene rig included (key light from above
+    plus ambient fill — meshes are rotated into Z-up world space before
+    rendering, so the rig is correct for any --up-axis choice). Module-level so
+    tests can substitute a fake without touching the GPU, and public because
+    the evals' single-process path builds the same rig through
+    `classify_stls.make_renderer`. The returned renderer is kept for the
+    process lifetime and never destroyed (CLAUDE.md)."""
     renderer = rendering.OffscreenRenderer(size, size)
     scene = renderer.scene.scene
     renderer.scene.set_background([1.0, 1.0, 1.0, 1.0])
@@ -171,7 +195,7 @@ class Renderer:
 
     def __init__(self, cfg: RenderConfig):
         self.cfg = cfg
-        self._renderer = _make_offscreen(cfg.render_size)   # never destroyed
+        self._renderer = make_offscreen(cfg.render_size)    # never destroyed
         self._material = rendering.MaterialRecord()
         self._material.shader = "defaultLit"
         self._material.base_color = [0.7, 0.7, 0.7, 1.0]
@@ -278,18 +302,10 @@ class Renderer:
         return images
 
     def _shoot_rotated(self, R, center, radius, angles) -> list[np.ndarray]:
-        """The camera-carried rotation, the pose path's (`pose_tiles`): compute
-        each camera in the rotated frame, carry it back with R.T — the
-        render_up_candidate_grid trick, exact as framing because R is a signed
-        axis permutation (so the rotated AABB centre is R @ center and the
-        framing radius is unchanged). Exact as *framing*, not as pixels: the
-        fill is world-fixed, which is why `views` does not use this (I11)."""
-        c_rot = R @ center
-        cams = []
-        for az, elev in angles:
-            eye, cam_up, sun = orbit_camera(c_rot, radius, az, elev)
-            cams.append((R.T @ c_rot, R.T @ eye, R.T @ cam_up, R.T @ sun))
-        return self._shoot(cams)
+        """The pose path's shot (`pose_tiles`): `rotated_cams`, then fire. The
+        rotation is carried by the cameras, not the geometry — one upload for
+        all six candidates — and `views` deliberately does not use it (I11)."""
+        return self._shoot(rotated_cams(R, center, radius, angles))
 
     def pose_tiles(self, lm: LoadedMesh, index: int) -> list[list[np.ndarray]]:
         """[6][UP_TILE_AZIMUTHS] tiles — each candidate up seen from
