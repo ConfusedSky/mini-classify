@@ -63,10 +63,10 @@ from tqdm import tqdm
 
 import instrument
 from instrument import stage
-from src.cachedir import (RUN_PARAMS_FILE, RUN_PARAMS_KEYS, add_cache_args,
-                          apply_run_params, cache_root, embeds_dir,
-                          load_file_list, load_run_params, render_index,
-                          renders_dir, require_cache_version, total_views)
+from src.cachedir import (RUN_PARAMS_FILE, add_cache_args, apply_run_params,
+                          cache_root, embeds_dir, load_file_list,
+                          render_index, renders_dir, require_cache_version,
+                          save_run_params, total_views)
 from src.identity import render_key
 
 # What the render child may hold in host-side meshes before its LRU evicts
@@ -95,28 +95,6 @@ def profile_dir(argv=None):
     p.add_argument("--profile", nargs="?", const=PROFILE_DIR, default=None)
     known, _ = p.parse_known_args(argv)
     return known.profile
-
-
-def save_run_params(args):
-    """Record this run's parameters next to the cache it just wrote. Kept with
-    the cache rather than in a committed config so the description can't drift
-    from what the embeddings actually are.
-
-    The writer stays with the CLI while `load_run_params`/`apply_run_params`
-    live in `src/cachedir.py`, because the asymmetry is real: a classify run is
-    the only thing that writes this manifest, and every other tool only reads
-    it. What both halves have to agree on — the filename and RUN_PARAMS_KEYS —
-    is declared once, over there."""
-    if not args.cache_dir:
-        return
-    params = {k: getattr(args, k, None) for k in RUN_PARAMS_KEYS}
-    # a single-file run describes no collection — leave the recorded root alone
-    params["input"] = str(Path(args.input).resolve()) if Path(args.input).is_dir() else None
-    params = load_run_params(args.cache_dir) | {
-        k: v for k, v in params.items() if v is not None}
-    p = Path(args.cache_dir) / RUN_PARAMS_FILE
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(params, indent=2))
 
 
 def resolve_pose_vlm(args):

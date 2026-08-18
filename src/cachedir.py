@@ -333,6 +333,28 @@ def load_run_params(cache_dir):
     return json.loads(p.read_text()) if p.exists() else {}
 
 
+def save_run_params(args):
+    """Record this run's parameters next to the cache it just wrote. Kept with
+    the cache rather than in a committed config so the description cannot drift
+    from what the embeddings actually are.
+
+    Only `classify_stls.py` calls this — every other tool reads. It lives here
+    anyway, with the readers: the three things a writer and a reader must agree
+    on (`RUN_PARAMS_FILE`, `RUN_PARAMS_KEYS`, and the merge rule below) are all
+    declared in this module, so a format change that touched only one side
+    would be a bug the split made easy to write."""
+    if not args.cache_dir:
+        return
+    params = {k: getattr(args, k, None) for k in RUN_PARAMS_KEYS}
+    # a single-file run describes no collection — leave the recorded root alone
+    params["input"] = str(Path(args.input).resolve()) if Path(args.input).is_dir() else None
+    params = load_run_params(args.cache_dir) | {
+        k: v for k, v in params.items() if v is not None}
+    p = Path(args.cache_dir) / RUN_PARAMS_FILE
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(params, indent=2))
+
+
 def apply_run_params(parser):
     """parse_args(), with defaults filled in from the last classify run.
     Explicit command-line values still win — set_defaults only moves the
