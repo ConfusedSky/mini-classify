@@ -515,8 +515,11 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   naming a view config no longer costs a torch import, and
   `as_tensor`/`embed_raw`/`embed_texts` moved into `src/embedder.py` with the
   Embedder's methods delegating to them. `classify_stls.py` went 875 → 394
-  lines and now exports nothing; `import classify_stls` pulls 186 modules
-  instead of 2653, with no numpy, open3d, PIL or torch among them.
+  lines and now exports nothing; `import classify_stls` leaves `sys.modules` at
+  186 instead of 2653, with no numpy, open3d, PIL or torch among them. (That is
+  138 modules *added* over a bare interpreter's 48 — the number phase 2's
+  commit message quotes. Same measurement, counted from a different zero;
+  `len(sys.modules)` after the import is the one these docs use.)
 
 - **Renders are not reproducible across pose-cache states** — **and the cause
   is more general than that** (amended 2026-08-18, the refactor's parity run:

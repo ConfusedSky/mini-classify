@@ -26,9 +26,14 @@ reasons, both load-bearing:
 * the read-only tools (`cluster_models.py`) must be able to find their way
   around a cache without loading a model.
 
-The two names that would break that rule are imported inside the function that
-needs them: `--model`'s default lives with the Embedder (`src.embedder` owns
-torch) and `view_config`'s callers are otherwise torch-free.
+The rule is about this module's *callers*, not just its module scope — a
+deferred import still lands in whoever calls the function. That is why
+`--model`'s default is `src.identity`'s and not the Embedder's: importing it
+from `src.embedder` inside `add_cache_args` kept torch out of this file and
+put it into every tool that built a parser, `cluster_models.py` and
+`migrate_cache_keys.py` included (836 modules and ~0.9 s, measured
+2026-08-18). Nothing here imports outside the rule now, at module scope or
+inside a function.
 """
 import argparse
 import hashlib
@@ -40,7 +45,8 @@ from pathlib import Path
 
 from naming import SKIP_TAGS, skip
 from src import identity
-from src.identity import DEFAULT_ELEVATIONS, cache_key_from_identity
+from src.identity import (DEFAULT_ELEVATIONS, DEFAULT_MODEL,
+                          cache_key_from_identity)
 
 # Cache layout.
 EMBEDS_SUBDIR = "embeds"
@@ -188,9 +194,6 @@ def add_cache_args(parser, input_help):
                              "full ring of --views azimuths, so total views is the "
                              "product (default 20)")
     parser.add_argument("--render-size", type=int, default=512)
-    # the Embedder owns the default (D-R1-1): one copy, imported here rather
-    # than duplicated, and deferred because src.embedder imports torch
-    from src.embedder import DEFAULT_MODEL
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--compile", action=argparse.BooleanOptionalAction, default=False,
                         help="torch.compile the image forward: ~1.09x embed throughput for "

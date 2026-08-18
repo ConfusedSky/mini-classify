@@ -36,14 +36,15 @@ import torch
 
 from instrument import stage
 from src import pose
+# The one copy, kept in `identity` because it is part of every embedding key
+# and `cachedir.add_cache_args` declares `--model` with it — reading it there
+# must not cost a torch import (D-R1-1, amended 2026-08-18). Re-exported here
+# because this is where a caller looks for the Embedder's default.
+from src.identity import DEFAULT_MODEL
 from src.messages import Embedded, EmbedTilesRequest, EmbedViews, TileEmbeds
 
-DEFAULT_MODEL = "google/siglip2-so400m-patch14-384"
-
 # Category prompt templates (main:classify_stls.py:54-58). The one copy: every
-# templated query in the project goes through `embed_texts` below, and
-# `DEFAULT_MODEL` above is `--model`'s default for the same reason (D-R1-1) —
-# `src/cachedir.py`'s `add_cache_args` imports it from here.
+# templated query in the project goes through `embed_texts` below.
 PROMPT_TEMPLATES = [
     "a 3D render of a {} miniature",
     "a photo of a {} figurine",
@@ -185,7 +186,3 @@ class Embedder:
             out.append(as_tensor(self.model.get_image_features(**inputs)))
         feat = out[0] if len(out) == 1 else torch.cat(out)
         return torch.nn.functional.normalize(feat, dim=-1)
-
-    # The name this was born with, kept as an alias so a caller that reached
-    # for the private one still lands on the same bound method.
-    _embed_images = embed_images

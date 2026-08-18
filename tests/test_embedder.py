@@ -275,7 +275,3 @@ def test_gpu_parity_of_the_eval_rig_with_the_embedder():
     pil_diff = np.abs(pil_embeds - rig_embeds).max()
     print(f"PIL-input vs array-input max|diff| = {pil_diff:.3e}")
     assert np.allclose(pil_embeds, rig_embeds, rtol=0, atol=1e-3)
-
-    # -- the private alias still lands on the same bound method (phase 1 kept
-    #    it so nothing internal broke on the rename)
-    assert emb._embed_images.__func__ is Embedder.embed_images

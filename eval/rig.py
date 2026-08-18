@@ -32,9 +32,11 @@ Two hard constraints it exists to hold (CLAUDE.md):
 Residency: the production `Renderer` keeps meshes in a byte-budgeted LRU keyed
 by an integer index, because the pipeline revisits a mesh between pose and
 embed. A harness visits each mesh once, so `pose_tiles`/`views` below allocate
-a fresh index per call and release it immediately — the mesh then falls out of
-the LRU on the next admission, which is the same add/remove churn the old
-`_upload`'s `clear_geometry()` had.
+a fresh index per call and release it immediately. `Renderer.release` drops the
+pin, not the mesh: the entry stays resident and merely becomes evictable, so it
+leaves when a later admission needs the bytes. That is what makes `index()`
+work — a caller holding one index across six visits still hits the resident
+entry, because releasing it after each visit does not remove it.
 
 Arrays, not PIL: `src.renderer` returns `np.ndarray` where the CLI's helpers
 returned `PIL.Image`. A harness that saves a render needs one

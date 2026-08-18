@@ -135,6 +135,15 @@ EMBED_CACHE_VERSION = 1
 # flag with it.
 DEFAULT_ELEVATIONS = [20.0]
 
+# The --model default, here for the same reason and one more: the model name is
+# part of every embedding key, and `add_cache_args` needs it to declare the
+# flag. Owning it in `src/embedder.py` meant every tool that built a parser
+# imported the module that owns torch — 836 modules and ~0.9 s to name a
+# string, in `cluster_models.py` and `migrate_cache_keys.py`, which otherwise
+# never touch torch at all. `embedder` imports it from here; there is still
+# one copy, it just lives on the side of the line that stays stdlib.
+DEFAULT_MODEL = "google/siglip2-so400m-patch14-384"
+
 
 def cache_key_from_identity(ident, args, up_token):
     """The embedding key for a file already reduced to its identity string.
