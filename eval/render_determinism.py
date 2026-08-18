@@ -42,16 +42,17 @@ import numpy as np
 from common import OUT  # puts REPO on sys.path
 
 import torch
+import rig
 from src import pose
-from classify_stls import (add_cache_args, apply_run_params, as_tensor,
-                           embed_raw, load_mesh, make_renderer,
-                           render_up_candidate_grid)
+from classify_stls import add_cache_args, apply_run_params, as_tensor
 
 PINNED = ("32mm_Pipe5",)
 
 
-def configure(renderer, arm):
-    view = renderer.scene.view
+def configure(r, arm):
+    """Filament view flags, reached through the production Renderer's own
+    OffscreenRenderer — the arms are exactly the toggles review V1 tested."""
+    view = r._renderer.scene.view
     if arm in ("nopost", "noaa"):
         view.set_post_processing(False)
     else:
@@ -82,24 +83,23 @@ def main():
             break
         picks.setdefault(p, c)
 
-    from transformers import AutoModel, AutoProcessor
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = AutoModel.from_pretrained(args.model, torch_dtype=torch.float16).to(device).eval()
-    processor = AutoProcessor.from_pretrained(args.model)
-    with torch.no_grad():
-        up_T = embed_raw(model, processor, pose.UPRIGHT_PROMPTS, device).float().cpu().numpy()
-        down_T = embed_raw(model, processor, pose.TOPPLED_PROMPTS, device).float().cpu().numpy()
-    renderer = make_renderer(args.render_size)
+    e = rig.embedder(args.model)
+    model, processor, device = e.model, e.processor, e.device
+    up_T, down_T = e.up_T, e.down_T
+    renderer = rig.rig(args.render_size)
 
     @torch.no_grad()
     def embed(inputs):
+        # the raw forward, not Embedder.embed_images: this phase re-embeds the
+        # *same* preprocessed tensor to separate the tower's determinism from
+        # the renderer's, so preprocessing has to stay outside the timed call
         feat = as_tensor(model.get_image_features(**inputs))
         return torch.nn.functional.normalize(feat, dim=-1).float().cpu().numpy()
 
-    def one_pass(mesh, geo):
-        grid = render_up_candidate_grid(renderer, mesh)
+    def one_pass(lm, geo):
+        grid = rig.pose_tiles(renderer, lm)
         flat = [im for row in grid for im in row]
-        arr = np.stack([np.asarray(im) for im in flat])
+        arr = np.stack(flat)
         inputs = processor(images=flat, return_tensors="pt").to(device)
         sig = pose.upright_scores(embed(inputs), up_T, down_T) \
                   .reshape(len(grid), -1).mean(axis=1)
@@ -109,15 +109,15 @@ def main():
     arms = [a.strip() for a in args.arms.split(",")]
     rows = []
     for p, c in picks.items():
-        mesh = load_mesh(Path(p))
-        geo = pose.up_axis_scores(mesh)          # seeded — computed once
+        lm = rig.load(Path(p))
+        geo = pose.up_axis_scores(lm.mesh)       # seeded — computed once
         per_arm = {}
         for arm in arms:
             configure(renderer, arm)
-            one_pass(mesh, geo)                  # throwaway: the warm-up frame
+            one_pass(lm, geo)                    # throwaway: the warm-up frame
             stacks, idxs, margins = [], [], []
             for _ in range(args.repeats):
-                arr, idx, margin = one_pass(mesh, geo)
+                arr, idx, margin = one_pass(lm, geo)
                 stacks.append(arr); idxs.append(idx); margins.append(margin)
             hashes = {hashlib.sha1(s.tobytes()).hexdigest() for s in stacks}
             pix_delta = max((int(np.abs(stacks[0].astype(int) - s.astype(int)).max())
@@ -149,6 +149,7 @@ def main():
     out = OUT / "render_determinism.json"
     out.write_text(json.dumps(rows, indent=2))
     print(f"wrote {out}")
+    rig.exit_without_teardown()   # the live OffscreenRenderer must not be destroyed
 
 
 if __name__ == "__main__":

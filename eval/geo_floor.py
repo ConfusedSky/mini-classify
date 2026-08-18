@@ -15,10 +15,11 @@ weight w = min(1, best/floor) ** p.
 
     w * _unit(geo) + _unit(siglip)
 
-This is *not* the "absolute-scaled geometry" scheme in `ensemble.py` that
-scored 20/23. That one replaced min-max with `clip(geo/floor, 0, 1)`, which
-saturates every candidate above the floor at 1.0 and destroys the margin. Here
-the margin inside geometry's vote is untouched; only how loudly it votes changes.
+This is *not* the "absolute-scaled geometry" scheme that scored 20/23 in the
+retired `ensemble.py` (git history). That one replaced min-max with
+`clip(geo/floor, 0, 1)`, which saturates every candidate above the floor at 1.0
+and destroys the margin. Here the margin inside geometry's vote is untouched;
+only how loudly it votes changes.
 
 Because the gate reads the same combined vector, an attenuated geometry vote
 also shrinks every margin — so the escalation rate is reported beside the
@@ -29,7 +30,8 @@ import argparse, json
 
 import numpy as np
 
-from common import AX, OUT, build_tiles, load_labels  # puts REPO on sys.path
+from common import (AX, ORBIT_N_AZ, ORBIT_PX, OUT,  # puts REPO on sys.path
+                    build_orbit_tiles, build_tiles, load_labels)
 
 from src import pose
 
@@ -40,28 +42,21 @@ def state(labels):
     """{stem: (geo(6), sig4(6), best)} — geometry and the four-view upright score."""
     import torch
     from PIL import Image
-    from transformers import AutoModel, AutoProcessor
-    import classify_stls as C
-    from front_first import N_AZ, RENDER_PX as ORBIT_PX, build_orbit_tiles
+    import rig
 
     orbit = build_orbit_tiles(labels, ORBIT_PX)
     geo_src = build_tiles(labels, 2048)
-    dev = "cuda" if torch.cuda.is_available() else "cpu"
-    model = AutoModel.from_pretrained(BACKBONE, torch_dtype=torch.float16).to(dev).eval()
-    proc = AutoProcessor.from_pretrained(BACKBONE)
-    up = C.embed_raw(model, proc, pose.UPRIGHT_PROMPTS, dev).float().cpu().numpy()
-    dn = C.embed_raw(model, proc, pose.TOPPLED_PROMPTS, dev).float().cpu().numpy()
+    e = rig.embedder(BACKBONE)
 
     out = {}
     for l in labels:
         flat = [p for row in orbit[l["stem"]] for p in row]
-        emb = C.embed_images(model, proc, [Image.open(p).convert("RGB") for p in flat],
-                             dev).float().cpu().numpy()
-        sig = pose.upright_scores(emb, up, dn).reshape(6, N_AZ).mean(1)
+        emb = rig.embed(e, [Image.open(p).convert("RGB") for p in flat])
+        sig = pose.upright_scores(emb, e.up_T, e.down_T).reshape(6, ORBIT_N_AZ).mean(1)
         geo = np.asarray(geo_src[l["stem"]]["geo"])
         out[l["stem"]] = (geo, sig, float(pose.rank_up_scores(geo)[2]))
-    del model
-    if dev == "cuda":
+    del e
+    if torch.cuda.is_available():
         torch.cuda.empty_cache()
     return out
 
@@ -134,6 +129,8 @@ def main():
 
     json.dump(results, open(OUT / "geo_floor.json", "w"), indent=1)
     print(f"\nwrote {OUT}/geo_floor.json")
+    import rig                      # a renderer may be live; never tear one down
+    rig.exit_without_teardown()
 
 
 if __name__ == "__main__":

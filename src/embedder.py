@@ -103,7 +103,7 @@ class Embedder:
         tensor stays on device — the Poser pulls it off the GPU.
         """
         return TileEmbeds(file=m.file, index=m.index,
-                          embeds=self._embed_images(list(m.tiles)))
+                          embeds=self.embed_images(list(m.tiles)))
 
     def embed_views(self, m: EmbedViews) -> Embedded:
         """Embed the classification views; the pose rides through untouched.
@@ -113,7 +113,7 @@ class Embedder:
         with main's (main:classify_stls.py:1190).
         """
         return Embedded(file=m.file, index=m.index, pose=m.pose,
-                        embeds=self._embed_images(m.views, batch=self.embed_batch))
+                        embeds=self.embed_images(m.views, batch=self.embed_batch))
 
     # --- the extracted forward passes (main:classify_stls.py:515-550) -------
 
@@ -135,12 +135,19 @@ class Embedder:
         return torch.stack(embeds)  # (n_categories, dim)
 
     @torch.no_grad()
-    def _embed_images(self, images: Sequence[np.ndarray], batch: int = 0) -> torch.Tensor:
+    def embed_images(self, images: Sequence[np.ndarray], batch: int = 0) -> torch.Tensor:
         """Row-normalised embeddings, (n_images, dim).
 
         batch caps how many images go to the GPU at once; 0 sends the whole
         list, which is the historical behaviour and fine at 16-40 images
-        (measured peak 2.5 GB of a 7.8 GB card)."""
+        (measured peak 2.5 GB of a 7.8 GB card).
+
+        Public, unlike the text passes: the eval harnesses embed pixels they
+        rendered themselves and have no message to wrap them in, so this is
+        their entry point (`eval/rig.py`). Keeping it private forced a second
+        arrangement of the same forward to live in the CLI for them to call —
+        which is the copy tests/test_embedder.py used to pin, and now does not
+        have to."""
         batch = batch or len(images)
         out = []
         for i in range(0, len(images), batch):
@@ -149,3 +156,7 @@ class Embedder:
             out.append(_as_tensor(self.model.get_image_features(**inputs)))
         feat = out[0] if len(out) == 1 else torch.cat(out)
         return torch.nn.functional.normalize(feat, dim=-1)
+
+    # The name this was born with, kept as an alias so a caller that reached
+    # for the private one still lands on the same bound method.
+    _embed_images = embed_images

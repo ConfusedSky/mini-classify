@@ -1,7 +1,8 @@
 """How much faster can the SigLIP side get without changing its outputs?
 
 The pipeline embeds 24 pose tiles + 16 classification views per cold model
-(classify_stls.embed_images), so the only knobs that matter are batch shape,
+(`src.embedder.Embedder.embed_images`, which this loads through `eval/rig.py`
+and times directly), so the only knobs that matter are batch shape,
 where preprocessing runs, and whether the image forward can be compiled. This
 harness measures all three on the real renders rather than noise, and never
 touches a knob that would move the embeddings.
@@ -38,7 +39,15 @@ from PIL import Image
 
 from common import OUT  # puts REPO on sys.path
 
-import classify_stls as C
+import classify_stls as C          # as_tensor + embed_texts, the CLI's own
+import rig
+
+# The production `Embedder`, built in main(). Module-level because every phase
+# below takes (model, processor, device) from the days when the forward was a
+# free function; those are `EMB.model` / `EMB.processor` / `EMB.device` now,
+# and the forward itself is `EMB.embed_images` — the same call the pipeline's
+# Embedder makes, which is the point of benchmarking it rather than a copy.
+EMB = None
 
 RENDERS = Path(__file__).resolve().parent.parent / "embed-cache2" / "renders" / "384px-8v-e20,-20"
 MODEL = "google/siglip2-so400m-patch14-384"
@@ -52,10 +61,10 @@ N_IMAGES = 128       # distinct renders held in memory; batches slice into these
 SOAK_S = int(os.environ.get("SOAK_S", 150))   # sustained load before timing (steady clocks)
 SEED = 0
 
-# What the production run actually does per cold model, from classify_stls:
-# resolve_up embeds the 6x4 up-candidate grid in one un-capped call (line ~888,
-# no batch= argument, so --embed-batch never reaches it), then the classifier
-# embeds the 16-view list with batch=args.embed_batch.
+# What the production run actually does per cold model, from src/embedder.py:
+# `embed_tiles` sends the up-candidate grid in one un-capped call (no batch=
+# argument, so --embed-batch never reaches it), then `embed_views` sends the
+# 16-view list with batch=self.embed_batch.
 POSE_TILES = 24
 VIEW_TILES = 16
 N_MODELS = 2284
@@ -134,7 +143,7 @@ def soak(model, processor, imgs, device, seconds=SOAK_S):
     trace = []
     nxt = 0
     while time.perf_counter() - t0 < seconds:
-        C.embed_images(model, processor, batch, device)
+        EMB.embed_images(batch)
         el = time.perf_counter() - t0
         if el >= nxt:
             trace.append({"t": round(el, 1), "state": gpu_state()})
@@ -165,8 +174,8 @@ def duty(model, processor, imgs, device, results, gap=8.0, cycles=8, cool=60):
         clk = sm_clock()
         torch.cuda.synchronize()
         t0 = time.perf_counter()
-        C.embed_images(model, processor, tiles, device)      # pose grid: un-capped
-        C.embed_images(model, processor, views, device)      # views: --embed-batch
+        EMB.embed_images(tiles)      # pose grid: un-capped
+        EMB.embed_images(views)      # views: --embed-batch
         torch.cuda.synchronize()
         dt = time.perf_counter() - t0
         rows.append({"cycle": i, "s": dt, "img_s": (POSE_TILES + VIEW_TILES) / dt,
@@ -215,7 +224,7 @@ def sweep(model, processor, imgs, device, results):
                 clk = sm_clock()
                 torch.cuda.synchronize()
                 t0 = time.perf_counter()
-                C.embed_images(model, processor, batch, device)
+                EMB.embed_images(batch)
                 torch.cuda.synchronize()
                 t_full = time.perf_counter() - t0
 
@@ -420,7 +429,7 @@ def prefetch_duty(model, processor, imgs, device, results, chunk=8, cycles=8,
 
     def current():
         for lst in (tiles, views):
-            C.embed_images(model, processor, lst, device).float().cpu().numpy()
+            EMB.embed_images(lst).float().cpu().numpy()
 
     def prefetched(ex):
         for lst in (tiles, views):
@@ -428,7 +437,7 @@ def prefetch_duty(model, processor, imgs, device, results, chunk=8, cycles=8,
 
     # equality check first: chunking must not move the embeddings
     with ThreadPoolExecutor(1) as ex:
-        ref = C.embed_images(model, processor, tiles, device).float()
+        ref = EMB.embed_images(tiles).float()
         got = chunked(tiles, ex).float()
         eq = (ref - got).abs().max().item()
         print(f"  chunked vs current, max abs diff: {eq:.2e}")
@@ -653,11 +662,13 @@ def main():
     print(f"gpu at start: {results['gpu_at_start']}")
 
     imgs = load_images()
-    from transformers import AutoModel, AutoProcessor
+    global EMB
     print(f"loading {MODEL} fp16 on {device} ...")
     t0 = time.perf_counter()
-    model = AutoModel.from_pretrained(MODEL, torch_dtype=torch.float16).to(device).eval()
-    processor = AutoProcessor.from_pretrained(MODEL)
+    # model_load_s now covers the prompt-bank text pass too — the Embedder does
+    # both in __init__, and it is a startup number, not one of the timed phases
+    EMB = rig.embedder(MODEL, device=device)
+    model, processor = EMB.model, EMB.processor
     results["model_load_s"] = time.perf_counter() - t0
     results["weights_gib"] = torch.cuda.memory_allocated() / 2**30
     print(f"  {results['model_load_s']:.1f} s, weights {results['weights_gib']:.2f} GiB")

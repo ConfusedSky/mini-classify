@@ -15,6 +15,11 @@ cluster-sheets/
 # eval scratch (renders, sheets, prediction dumps) — regenerable
 eval/out/
 
+# torch profiler traces — where torch.profiler's tensorboard handler writes by
+# default. Hundreds of MB each, regenerable, and never content to track: 1.4 GB
+# of them were committed by accident on 2026-08-18.
+log/
+
 # git worktrees created for parallel branches — a full second checkout of
 # this repo, never content to track
 .claude/worktrees/

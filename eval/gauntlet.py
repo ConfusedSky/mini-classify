@@ -33,29 +33,23 @@ def siglip_phase(labels, tiles_by_px, backbones):
     """{(backbone, px): {stem: {"sig": i, "ens": i}}} — one tower loaded at a time."""
     import torch
     from PIL import Image
-    from transformers import AutoModel, AutoProcessor
-    import classify_stls as C
+    import rig
 
-    dev = "cuda" if torch.cuda.is_available() else "cpu"
     out = {}
     for mid in backbones:
-        model = AutoModel.from_pretrained(mid, torch_dtype=torch.float16).to(dev).eval()
-        proc = AutoProcessor.from_pretrained(mid)
-        up = C.embed_raw(model, proc, pose.UPRIGHT_PROMPTS, dev).float().cpu().numpy()
-        dn = C.embed_raw(model, proc, pose.TOPPLED_PROMPTS, dev).float().cpu().numpy()
+        e = rig.embedder(mid)
         for px, tiles in tiles_by_px.items():
             picks = {}
             for l in labels:
                 rec = tiles[l["stem"]]
                 imgs = [Image.open(p).convert("RGB") for p in rec["tiles"]]
-                emb = C.embed_images(model, proc, imgs, dev).float().cpu().numpy()
-                sig = pose.upright_scores(emb, up, dn)
+                sig = pose.upright_scores(rig.embed(e, imgs), e.up_T, e.down_T)
                 picks[l["stem"]] = {"sig": int(sig.argmax()),
                                     "ens": int(pose.combine_up_scores(rec["geo"], sig))}
             out[(mid, px)] = picks
         print(f"  {mid.split('/')[-1]} done")
-        del model
-        if dev == "cuda":
+        del e
+        if torch.cuda.is_available():
             torch.cuda.empty_cache()
     return out
 
@@ -159,6 +153,8 @@ def main():
                                     for s, v in p.items()} for (m, t), p in vlm.items()}},
               open(OUT / f"gauntlet_{args.set}.json", "w"), indent=1)
     print(f"\nwrote {OUT}/gauntlet_{args.set}.json")
+    import rig                      # the render phase may have built a renderer
+    rig.exit_without_teardown()
 
 
 if __name__ == "__main__":

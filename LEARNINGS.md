@@ -78,6 +78,13 @@ notes at the bottom are amended in place. Open work is tracked separately in
   the same old binary differs from itself by as much (7.0e-03) when a model is
   rendered in company rather than alone, which generalises the pose-cache-state
   entry to any change in the preceding draw sequence.
+- [2026-08-18 — the eval rig's tiles are not the old tiles](docs/learnings/2026-08-18-pose-tiles-and-the-draw-sequence-again.md)
+  — porting the harnesses onto the render child's own `pose_tiles` changes
+  pixels by up to 30/255 on ~1% of them, with geometry, cameras, material and
+  framing all identical. The residue is the add/show/hide sequence Filament
+  sees, making this the third independent measurement that its output depends
+  on the scene's history. It moved no answer: `parser_gate` gives 0/49 picks
+  moved and the difference sits inside its own A/A floor.
 - [2026-08-18 — the untimed join, and why a missing EGL line is not evidence](docs/learnings/2026-08-18-the-untimed-join-and-the-missing-egl-line.md)
   — a 1-in-17 stall traced by elimination to `child.join()` being untimed on
   the one path that reaches quiescence by *killing* the child rather than

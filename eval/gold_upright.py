@@ -14,11 +14,11 @@ import argparse
 import base64
 import html
 
-import numpy as np
-import open3d as o3d
-
 from common import AX, OUT, load_labels
 
+# `Renderer.views` orbits a full ring — `view_angles(n, [elev])` is
+# 360/n-spaced — so three views *are* these azimuths. Named here because the
+# filenames carry them.
 AZIMUTHS = [0.0, 120.0, 240.0]
 ELEVATION = 20.0
 RENDER_PX = 768      # rendered big, saved small: antialiases the thin bits
@@ -30,8 +30,11 @@ DIR = OUT / "gold_upright"
 
 def render(labels):
     """One JPEG per (model, azimuth), skipping pairs already on disk."""
-    import classify_stls as C
+    import numpy as np
+    from PIL import Image
+    import rig
     from src import pose as P
+    from src.renderer import view_angles
 
     DIR.mkdir(parents=True, exist_ok=True)
     paths = {l["stem"]: [DIR / f"{l['stem']}_az{int(a)}.jpg" for a in AZIMUTHS]
@@ -41,13 +44,15 @@ def render(labels):
         return paths
 
     print(f"rendering {len(todo)} models x {len(AZIMUTHS)} views -> {DIR}")
-    renderer = C.make_renderer(RENDER_PX)
-    angles = [(np.deg2rad(a), np.deg2rad(ELEVATION)) for a in AZIMUTHS]
+    r = rig.rig(RENDER_PX, views=len(AZIMUTHS), elevations=(ELEVATION,))
+    # the rotation the pipeline makes: `Renderer.views` rotates a copy of the
+    # mesh by rotation_to_z_up(up), which is exactly what this page asserts
+    assert [round(a, 6) for a, _ in view_angles(len(AZIMUTHS), [ELEVATION])] \
+        == [round(float(np.deg2rad(a)), 6) for a in AZIMUTHS]
     for n, l in enumerate(todo, 1):
-        mesh = C.load_mesh(l["path"])
-        m = o3d.geometry.TriangleMesh(mesh)
-        m.rotate(C.rotation_to_z_up(P.UP_CANDIDATES[l["gold"]]), center=(0, 0, 0))
-        for p, im in zip(paths[l["stem"]], C.render_views(renderer, m, angles)):
+        images = rig.views(r, rig.load(l["path"]), P.UP_CANDIDATES[l["gold"]])
+        for p, arr in zip(paths[l["stem"]], images):
+            im = Image.fromarray(arr)
             im.thumbnail((SAVE_PX, SAVE_PX))
             im.convert("RGB").save(p, "JPEG", quality=JPEG_QUALITY)
         print(f"  [{n}/{len(todo)}] {l['stem']} ({l['up']})", flush=True)
@@ -432,3 +437,6 @@ if __name__ == "__main__":
     else:
         paths = render(labels)
     build_html(labels, paths, pathlib.Path(a.out))
+    if not a.html:                 # a renderer is live; teardown would abort
+        import rig
+        rig.exit_without_teardown()

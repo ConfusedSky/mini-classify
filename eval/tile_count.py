@@ -11,27 +11,32 @@ with probes, geometry and the min-max combination frozen — only how many
 azimuths are averaged into the SigLIP vote changes.
 
 Why the cached 24-tile grid can be subsetted rather than re-rendered:
-`render_up_candidate_grid` takes its cameras from `view_angles(n_az, [20.0])`,
-i.e. azimuths 2*pi*i/n_az at one fixed elevation, and nothing else in that
-function depends on n_az. So n_az=2 asks for {0, pi} and n_az=1 for {0}, both
-exact subsets of n_az=4's {0, pi/2, pi, 3pi/2} — columns (0, 2) and (0). This is
-*checked* against `classify_stls.view_angles` at run time rather than assumed
+`Renderer.pose_tiles` takes its cameras from `view_angles(n_az, [20.0])`, i.e.
+azimuths 2*pi*i/n_az at one fixed elevation, and nothing else in that method
+depends on n_az. So n_az=2 asks for {0, pi} and n_az=1 for {0}, both exact
+subsets of n_az=4's {0, pi/2, pi, 3pi/2} — columns (0, 2) and (0). This is
+*checked* against `src.renderer.view_angles` at run time rather than assumed
 (`azimuth_columns`), and a non-subset request aborts instead of quietly scoring
 the wrong pixels.
 
-`--source` chooses the pixels. `orbit` reuses `front_first.build_orbit_tiles`
-(already cached for all 49 labels, and the pixels every published azimuth number
-in LEARNINGS was measured on), which rotates the mesh per candidate where
-production carries the camera back through R.T. `production` renders through
-`render_up_candidate_grid` itself — the real code path — and needs the STLs
-reachable. The two are *not* interchangeable: measured here they agree to the
-noise floor only for the +Z candidate, where R is the identity.
+The `n_az` parameter on `Renderer.pose_tiles` exists for this harness: the tile
+count is a measured parameter, so the sweep has to sweep the production call
+rather than a copy of it. Production always passes `UP_TILE_AZIMUTHS`.
 
-`--verify N` re-renders N of the scored models through `render_up_candidate_grid`
+`--source` chooses the pixels. `orbit` reuses `common.build_orbit_tiles`
+(already cached for all 49 labels, and the pixels every published azimuth number
+in LEARNINGS was measured on), which rotates the mesh per candidate — the
+`Renderer.views` path — where the pose tiles carry the camera back through R.T.
+`production` renders through `Renderer.pose_tiles` itself — the real code path,
+the pixels the render child produces — and needs the STLs reachable. The two
+are *not* interchangeable: measured here they agree to the noise floor only for
+the +Z candidate, where R is the identity.
+
+`--verify N` re-renders N of the scored models through `Renderer.pose_tiles`
 and reports the pixel delta and whether any pick or margin moves. Against
 `--source orbit` that measures the path difference; against `--source production`
 it measures the renderer's own noise floor, which every pixel diff has to be read
-against (eval/load_path.py).
+against.
 
 Per eval/README: `orig` is tuned, `holdout` is honest, `hard` was picked for
 being failure-prone — reported separately, never pooled into one figure.
@@ -43,11 +48,12 @@ What the 2026-08-13 run found, so the next reader knows which arm to trust:
   for half the `pose-embed` work. `n_az=1` costs 2 of 40 (`Propane_Tank`,
   `Mortimer_BodyNoMask`) and doubles arbiter firing, 6 → 12 of 40.
 - The renderer is bit-exact: re-rendering the same model twice through
-  `render_up_candidate_grid` gives mean|dpx| 0.0000. So any pixel difference
+  `Renderer.pose_tiles` gives mean|dpx| 0.0000. So any pixel difference
   measured against it is real, not noise.
-- The two render paths are **not** pixel-identical, contrary to the docstring on
-  `render_up_candidate_grid`: rendered fresh, camera-carry against
-  rotate-the-mesh is ~1.9 mean|dpx| on both models tried. The `+Z` candidate is
+- The two render paths are **not** pixel-identical: rendered fresh, camera-carry
+  against rotate-the-mesh is ~1.9 mean|dpx| on both models tried — the finding
+  that later became I11 (`eval/views_camera_rotation.py`) and moved the view
+  path onto a rotated copy. The `+Z` candidate is
   the exception, where R is the identity and the two paths agree exactly.
 - The cached `orbit384x4` tiles are additionally **stale** for 39 of the 43
   reachable models — 35 by a uniform ~0.45 mean|dpx| (a shading constant moved
@@ -65,7 +71,8 @@ import time
 
 import numpy as np
 
-from common import AX, OUT, build_tiles, load_labels   # puts REPO on sys.path
+from common import (AX, ORBIT_N_AZ, OUT, build_orbit_tiles,  # puts REPO on sys.path
+                    build_tiles, load_labels)
 
 from src import pose
 
@@ -77,14 +84,15 @@ GRID_AZ = 4                                      # azimuths in the cached grid
 def azimuth_columns(n_az, grid_az=GRID_AZ):
     """Columns of a `grid_az`-azimuth grid that reproduce an n_az render, or None.
 
-    Asks `classify_stls.view_angles` for both camera lists and matches them, so
-    this stays correct if the angle scheme or the tile elevation ever changes.
-    Returning None means the angles are not a subset and the caller must render
-    that n_az itself rather than slicing.
+    Asks `src.renderer.view_angles` — the function `Renderer.pose_tiles` itself
+    calls — for both camera lists and matches them, so this stays correct if the
+    angle scheme or the tile elevation ever changes. Returning None means the
+    angles are not a subset and the caller must render that n_az itself rather
+    than slicing.
     """
-    import classify_stls as C
-    have = C.view_angles(grid_az, [C.UP_TILE_ELEVATION])
-    want = C.view_angles(n_az, [C.UP_TILE_ELEVATION])
+    from src.renderer import UP_TILE_ELEVATION, view_angles
+    have = view_angles(grid_az, [UP_TILE_ELEVATION])
+    want = view_angles(n_az, [UP_TILE_ELEVATION])
     cols = []
     for az, elev in want:
         hit = [i for i, (a, e) in enumerate(have)
@@ -96,13 +104,14 @@ def azimuth_columns(n_az, grid_az=GRID_AZ):
 
 
 def render_production_grids(labels, render_px=RENDER_PX, out_dir=None):
-    """`render_up_candidate_grid` itself, cached: {stem: [6][GRID_AZ] Path}.
+    """`Renderer.pose_tiles` itself, cached: {stem: [6][GRID_AZ] Path}.
 
     The production call, so these are the pixels the pipeline actually embeds.
     Unreachable STLs are dropped and returned as the second element rather than
     faked — the labels carry an absolute collection root and the library moves.
     """
-    import classify_stls as C
+    from PIL import Image
+    import rig
     d = out_dir or (OUT / f"upgrid{render_px}x{GRID_AZ}")
     d.mkdir(parents=True, exist_ok=True)
     paths = {l["stem"]: [[d / f"{l['stem']}_u{u}a{k}.png" for k in range(GRID_AZ)]
@@ -112,15 +121,14 @@ def render_production_grids(labels, render_px=RENDER_PX, out_dir=None):
             and any(not p.exists() for row in paths[l["stem"]] for p in row)]
     if todo:
         print(f"rendering {len(todo)} models x {6 * GRID_AZ} tiles at {render_px}px "
-              f"through render_up_candidate_grid -> {d}")
-        renderer = C.make_renderer(render_px)
+              f"through Renderer.pose_tiles -> {d}")
+        r = rig.rig(render_px)
         for n, l in enumerate(todo, 1):
-            grid = C.render_up_candidate_grid(renderer, C.load_mesh(l["path"]), GRID_AZ)
+            grid = rig.pose_tiles(r, rig.load(l["path"]), n_az=GRID_AZ)
             for u, row in enumerate(grid):
                 for k, im in enumerate(row):
-                    im.save(paths[l["stem"]][u][k])
+                    Image.fromarray(im).save(paths[l["stem"]][u][k])
             print(f"  [{n}/{len(todo)}] {l['stem']}", flush=True)
-        del renderer
     ok = [l for l in labels
           if all(p.exists() for row in paths[l["stem"]] for p in row)]
     return {l["stem"]: paths[l["stem"]] for l in ok}, missing
@@ -130,7 +138,7 @@ def upright_grid(labels, verify=0, source="orbit"):
     """{stem: {"up": (6, GRID_AZ) upright scores, "geo": (6,)}} plus a render check.
 
     `source` is "orbit" (the cached rotate-the-mesh tiles) or "production"
-    (`render_up_candidate_grid`, which needs the meshes and drops unreachable
+    (`Renderer.pose_tiles`, which needs the meshes and drops unreachable
     ones — hence the filtered label list in the return).
 
     Render phase first, embed phase second — they evict each other on an 8 GB
@@ -142,12 +150,10 @@ def upright_grid(labels, verify=0, source="orbit"):
     """
     import torch
     from PIL import Image
-    from transformers import AutoModel, AutoProcessor
-    import classify_stls as C
-    from front_first import N_AZ, build_orbit_tiles
+    import rig
 
-    if N_AZ != GRID_AZ:
-        raise SystemExit(f"front_first.N_AZ is {N_AZ}, expected {GRID_AZ}")
+    if ORBIT_N_AZ != GRID_AZ:
+        raise SystemExit(f"common.ORBIT_N_AZ is {ORBIT_N_AZ}, expected {GRID_AZ}")
 
     if source == "production":
         paths, gone = render_production_grids(labels)
@@ -173,29 +179,24 @@ def upright_grid(labels, verify=0, source="orbit"):
         d = OUT / "tile_count_verify"
         d.mkdir(parents=True, exist_ok=True)
         print(f"verify: re-rendering {len(check)} models through "
-              f"render_up_candidate_grid at {RENDER_PX}px")
-        renderer = C.make_renderer(RENDER_PX)
+              f"Renderer.pose_tiles at {RENDER_PX}px")
+        r = rig.rig(RENDER_PX)
         for l in check:
-            grid = C.render_up_candidate_grid(renderer, C.load_mesh(l["path"]), GRID_AZ)
+            grid = rig.pose_tiles(r, rig.load(l["path"]), n_az=GRID_AZ)
             prod[l["stem"]] = [[d / f"{l['stem']}_u{u}a{k}.png" for k in range(GRID_AZ)]
                                for u in range(6)]
             for u, row in enumerate(grid):
                 for k, im in enumerate(row):
-                    im.save(prod[l["stem"]][u][k])
-        del renderer
+                    Image.fromarray(im).save(prod[l["stem"]][u][k])
 
-    dev = "cuda" if torch.cuda.is_available() else "cpu"
     t0 = time.time()
-    model = AutoModel.from_pretrained(BACKBONE, torch_dtype=torch.float16).to(dev).eval()
-    proc = AutoProcessor.from_pretrained(BACKBONE)
-    print(f"{BACKBONE} on {dev}, loaded in {time.time()-t0:.0f}s")
-    upT = C.embed_raw(model, proc, pose.UPRIGHT_PROMPTS, dev).float().cpu().numpy()
-    dnT = C.embed_raw(model, proc, pose.TOPPLED_PROMPTS, dev).float().cpu().numpy()
+    e = rig.embedder(BACKBONE)
+    print(f"{BACKBONE} on {e.device}, loaded in {time.time()-t0:.0f}s")
 
     def scores(flat):
         imgs = [Image.open(p).convert("RGB") for p in flat]
-        emb = C.embed_images(model, proc, imgs, dev).float().cpu().numpy()
-        return pose.upright_scores(emb, upT, dnT).reshape(6, GRID_AZ)
+        return pose.upright_scores(rig.embed(e, imgs),
+                                   e.up_T, e.down_T).reshape(6, GRID_AZ)
 
     out, t0 = {}, time.time()
     for n, l in enumerate(labels, 1):
@@ -238,8 +239,8 @@ def upright_grid(labels, verify=0, source="orbit"):
                                "reference": [AX[p[0]], round(p[1], 4)]}
                               for n, o, p in rows]})
 
-    del model
-    if dev == "cuda":
+    del e
+    if torch.cuda.is_available():
         torch.cuda.empty_cache()
     return out, ver, per_model, labels
 
@@ -305,7 +306,7 @@ def main():
     ap.add_argument("--source", default="orbit", choices=("orbit", "production"),
                     help="which pixels to score: the cached rotate-the-mesh orbit "
                          "tiles every published azimuth number was measured on, or "
-                         "render_up_candidate_grid itself (needs the STLs)")
+                         "Renderer.pose_tiles itself (needs the STLs)")
     ap.add_argument("--out", default=None, help="results filename in eval/out/")
     ap.add_argument("--compare", action="store_true",
                     help="don't score anything: read both source runs' JSON and "
@@ -478,6 +479,8 @@ def main():
                                      for s, p in res[n].items()} for n in az_list}},
               open(out, "w"), indent=1)
     print(f"\nwrote {out}")
+    import rig                      # a renderer is live; teardown would abort
+    rig.exit_without_teardown()
 
 
 if __name__ == "__main__":

@@ -862,4 +862,14 @@ def __getattr__(name):
 
 
 if __name__ == "__main__":
-    main()
+    import torch
+    with torch.profiler.profile(
+        activities=[
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.CUDA,
+        ],
+        on_trace_ready=torch.profiler.tensorboard_trace_handler('./log'),
+        record_shapes=True
+    ) as prof:
+        main()
+    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))

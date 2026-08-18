@@ -41,10 +41,10 @@ import numpy as np
 from common import OUT  # puts REPO on sys.path
 
 import torch
+import rig
 from src import pose
 from classify_stls import (add_cache_args, apply_run_params, as_tensor,
-                           cache_root, embed_raw, load_file_list, load_mesh,
-                           make_renderer, render_up_candidate_grid)
+                           cache_root, load_file_list)
 
 CENSUS = OUT / "pose_live_margins.json"
 
@@ -63,15 +63,11 @@ def main():
             if (e := poses.get(pose.file_identity(f, root)))
             and e.get("margin") is not None]
 
-    from transformers import AutoModel, AutoProcessor
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = AutoModel.from_pretrained(args.model, torch_dtype=torch.float16).to(device).eval()
-    processor = AutoProcessor.from_pretrained(args.model)
-    with torch.no_grad():
-        up_T = embed_raw(model, processor, pose.UPRIGHT_PROMPTS, device).float().cpu().numpy()
-        down_T = embed_raw(model, processor, pose.TOPPLED_PROMPTS, device).float().cpu().numpy()
+    emb = rig.embedder(args.model)      # not `e`: `except ... as e` below unbinds it
+    model, processor, device = emb.model, emb.processor, emb.device
+    up_T, down_T = emb.up_T, emb.down_T
     compiled_feat = torch.compile(model.get_image_features)   # the bound method
-    renderer = make_renderer(args.render_size)
+    renderer = rig.rig(args.render_size)
 
     @torch.no_grad()
     def sig_scores(inputs, fn, n_candidates):
@@ -81,9 +77,9 @@ def main():
 
     def ensemble(f, fns):
         """geometry + tiles once, then one (idx, margin) per tower in fns."""
-        mesh = load_mesh(f)
-        geo = pose.up_axis_scores(mesh)
-        grid = render_up_candidate_grid(renderer, mesh)
+        loaded = rig.load(f)
+        geo = pose.up_axis_scores(loaded.mesh)
+        grid = rig.pose_tiles(renderer, loaded)
         flat = [im for row in grid for im in row]
         inputs = processor(images=flat, return_tensors="pt").to(device)
         return [pose.combine_up(geo, sig_scores(inputs, fn, len(grid))) for fn in fns]
@@ -157,6 +153,7 @@ def main():
     out.write_text(json.dumps({"threshold": thr, "band": args.band,
                                "results": results}, indent=2))
     print(f"wrote {out}")
+    rig.exit_without_teardown()   # the live OffscreenRenderer must not be destroyed
 
 
 if __name__ == "__main__":

@@ -7,10 +7,18 @@ normalisation, the read-only text_embeds, and the batch behaviour of the two
 entry points.
 
 Tier (b): one @pytest.mark.gpu test that loads real SigLIP on the 4060 and
-asserts parity with the OLD code path — classify_stls.embed_images /
-embed_texts / embed_raw called on the *same* model instance — for the same
-inputs: allclose plus dtype and norm equality, and byte-compatibility of the
-.npy cache write.
+pins the **eval rig** against the Embedder — `eval/rig.py`'s `embedder()` and
+`embed()`, which is what every harness in `eval/` now calls, against
+`embed_tiles`/`embed_views`, which is what the pipeline calls. Same instance,
+same inputs: bitwise equality plus dtype and norm equality, and
+byte-compatibility of the .npy cache write.
+
+That assertion is the one `eval/README.md` has always claimed and could not
+prove. It used to point at `classify_stls.embed_images` instead — a second
+arrangement of the same forward, kept in the CLI for the harnesses. The
+harnesses stopped needing it (2026-08-18), so the parity that matters is no
+longer CLI-vs-Embedder but harness-vs-Embedder. The text half still crosses to
+the CLI, because `embed_texts`/`embed_raw` are the CLI's own and stay.
 """
 from __future__ import annotations
 
@@ -190,13 +198,17 @@ def test_views_batching_matches_whole_and_tiles_ignore_it(monkeypatch):
 
 @pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs the 4060")
-def test_gpu_parity_with_old_path():
-    """New Embedder vs classify_stls' embed_* on the same model instance."""
+def test_gpu_parity_of_the_eval_rig_with_the_embedder():
+    """eval/rig.py's embedding path vs the Embedder's message-shaped ones."""
     import classify_stls as old
     from PIL import Image
 
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "eval"))
+    import rig
+
     categories = ["dragon", "terrain"]
-    emb = Embedder(categories)                           # real load, cuda
+    emb = rig.embedder(categories=categories)            # real load, cuda
+    assert isinstance(emb, Embedder)
     assert emb.device == "cuda"
     # One copy since the dedup pass: the CLI imports this from src.embedder
     # rather than keeping its own, so the old cross-copy assertion would now
@@ -223,34 +235,41 @@ def test_gpu_parity_with_old_path():
         assert new_bank.dtype == old_bank.dtype == np.float32, name
         assert np.array_equal(new_bank, old_bank), name
 
-    # -- image parity: same arrays through both paths
+    # -- image parity: the harnesses' call against the pipeline's two
     rng = np.random.default_rng(42)
     arrays = [rng.integers(0, 256, size=(256, 256, 3), dtype=np.uint8)
               for _ in range(3)]
-    old_embeds = old.embed_images(emb.model, emb.processor, arrays, emb.device)
+    # what every harness in eval/ runs: float32 numpy off the same forward
+    rig_embeds = rig.embed(emb, arrays)
+    assert isinstance(rig_embeds, np.ndarray)
+    assert rig_embeds.dtype == np.float32                # .float().cpu().numpy()
 
     out = emb.embed_tiles(EmbedTilesRequest(Path("m.stl"), 0, np.stack(arrays)))
-    assert out.embeds.dtype == old_embeds.dtype == torch.float16
+    assert out.embeds.dtype == torch.float16
     assert out.embeds.device.type == "cuda"              # stays on device
-    tile_diff = (out.embeds - old_embeds).abs().max().item()
-    print(f"embed_tiles vs old embed_images max|diff| = {tile_diff:.3e}")
-    assert torch.allclose(out.embeds.float(), old_embeds.float(), rtol=0, atol=1e-3)
-    assert torch.equal(out.embeds, old_embeds)           # same code path: bitwise
-    new_norms = out.embeds.float().norm(dim=-1)
-    old_norms = old_embeds.float().norm(dim=-1)
-    assert torch.equal(new_norms, old_norms)             # norm equality
-    print(f"row norms: new {new_norms.cpu().numpy()}, old {old_norms.cpu().numpy()}")
+    tile_diff = np.abs(rig_embeds - out.embeds.float().cpu().numpy()).max()
+    print(f"rig.embed vs embed_tiles max|diff| = {tile_diff:.3e}")
+    assert np.array_equal(rig_embeds, out.embeds.float().cpu().numpy())
+    norms = out.embeds.float().norm(dim=-1)
+    assert np.allclose(np.linalg.norm(rig_embeds, axis=-1), norms.cpu().numpy())
+    print(f"row norms: {norms.cpu().numpy()}")
 
-    # -- views path + the .npy cache write stays byte-compatible
+    # -- views path + the .npy cache write stays byte-compatible with what a
+    #    harness reads back, which is what makes a harness number comparable to
+    #    a cached one
     viewed = emb.embed_views(EmbedViews(Path("m.stl"), 0, _pose(), arrays))
-    assert torch.equal(viewed.embeds, old_embeds)
-    assert np.array_equal(viewed.embeds.float().cpu().numpy(),
-                          old_embeds.float().cpu().numpy())
+    assert torch.equal(viewed.embeds, out.embeds)
+    assert np.array_equal(viewed.embeds.float().cpu().numpy(), rig_embeds)
 
-    # -- today's path fed PIL Images where the child will send arrays: the
-    #    processor converts both to the same pixels, so this pins the crossing
+    # -- harnesses hand PIL Images (they read cached tiles off disk) where the
+    #    child sends arrays: the processor converts both to the same pixels, so
+    #    this pins the crossing that every disk-cached tile set depends on
     pils = [Image.fromarray(a) for a in arrays]
-    old_pil = old.embed_images(emb.model, emb.processor, pils, emb.device)
-    pil_diff = (old_pil - out.embeds).abs().max().item()
+    pil_embeds = rig.embed(emb, pils)
+    pil_diff = np.abs(pil_embeds - rig_embeds).max()
     print(f"PIL-input vs array-input max|diff| = {pil_diff:.3e}")
-    assert torch.allclose(old_pil.float(), out.embeds.float(), rtol=0, atol=1e-3)
+    assert np.allclose(pil_embeds, rig_embeds, rtol=0, atol=1e-3)
+
+    # -- the private alias still lands on the same bound method (phase 1 kept
+    #    it so nothing internal broke on the rename)
+    assert emb._embed_images.__func__ is Embedder.embed_images

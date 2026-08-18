@@ -94,6 +94,22 @@ def test_pose_tiles_is_the_six_by_azimuth_grid(rig):
     assert all(isinstance(t, np.ndarray) for row in grid for t in row)
 
 
+def test_pose_tiles_n_az_defaults_to_production_and_is_a_camera_subset(rig):
+    """`n_az` exists for eval/tile_count.py, which sweeps the tile count. The
+    default must stay production's, and a smaller n_az must be an exact camera
+    subset of a larger one — that is what lets the sweep slice a cached grid
+    instead of re-rendering per n_az."""
+    r, _ = rig()
+    assert all(len(row) == renderer_mod.UP_TILE_AZIMUTHS
+               for row in r.pose_tiles(lm(), 0))          # default = production
+    assert all(len(row) == 4 for row in r.pose_tiles(lm(), 1, n_az=4))
+    assert all(len(row) == 1 for row in r.pose_tiles(lm(), 2, n_az=1))
+    four = renderer_mod.view_angles(4, [renderer_mod.UP_TILE_ELEVATION])
+    for n in (2, 1):
+        want = renderer_mod.view_angles(n, [renderer_mod.UP_TILE_ELEVATION])
+        assert all(a in four for a in want), n
+
+
 def test_views_count_is_views_times_elevations(rig):
     r, _ = rig()
     views = r.views(lm(), 0, (0.0, 0.0, 1.0))

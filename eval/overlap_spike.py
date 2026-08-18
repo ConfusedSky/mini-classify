@@ -42,11 +42,10 @@ import numpy as np
 
 from common import OUT  # puts REPO on sys.path
 
+import rig
 from src import pose
 from classify_stls import (add_cache_args, apply_run_params, cache_root,
-                           load_file_list, load_mesh, make_renderer,
-                           render_up_candidate_grid, render_views,
-                           rotation_to_z_up, view_angles)
+                           load_file_list)
 
 
 def pick_models(args, n):
@@ -60,31 +59,38 @@ def pick_models(args, n):
     return posed[::step][:n]
 
 
-def render_one(renderer, f, up, angles):
-    """The cold render work for one model: 24 tiles then 16 rotated views,
-    in production order. Returns two uint8 stacks."""
-    mesh = load_mesh(f)
-    grid = render_up_candidate_grid(renderer, mesh)
-    tiles = np.stack([np.asarray(im) for row in grid for im in row])
-    mesh.rotate(rotation_to_z_up(np.array(up, dtype=float)), center=(0, 0, 0))
-    views = np.stack([np.asarray(im) for im in render_views(renderer, mesh, angles)])
+def render_one(renderer, f, up):
+    """The cold render work for one model: the pose tiles then the rotated
+    views, in production order, through the production `Renderer`. Returns two
+    uint8 stacks.
+
+    The mesh is admitted once and both calls share the slot, which is the
+    residency the roundtrip arm is here to measure: `views` rotates a *copy*
+    (I11), so the resident original stays clean for the next visit.
+    """
+    lm, i = rig.load(f), rig.index()
+    grid = rig.pose_tiles(renderer, lm, index=i)
+    tiles = np.stack([im for row in grid for im in row])
+    views = np.stack(rig.views(renderer, lm, np.array(up, dtype=float), index=i))
     return tiles, views
 
 
 def render_child(work, size, views, elevations, queue):
     """Child process: owns Filament (and its GIL) on the iGPU. Streams
     (index, name, tiles, views, render_seconds) and a None sentinel."""
-    renderer = make_renderer(size)
-    angles = view_angles(views, elevations)
+    renderer = rig.rig(size, views=views, elevations=elevations)
     for i, (f, up) in enumerate(work):
         t0 = time.perf_counter()
         try:
-            tiles, view_ims = render_one(renderer, Path(f), up, angles)
+            tiles, view_ims = render_one(renderer, Path(f), up)
         except Exception as e:
             queue.put(("error", i, Path(f).name, str(e)))
             continue
         queue.put((i, Path(f).name, tiles, view_ims, time.perf_counter() - t0))
     queue.put(None)
+    # No os._exit here: mp.Queue.put hands off to a feeder thread, so exiting
+    # hard would drop the sentinel and hang the parent. The child returns and
+    # lets the process end normally, as it always has.
 
 
 def roundtrip_child(work, size, views, elevations, out_q, pose_q, inflight):
@@ -92,16 +98,16 @@ def roundtrip_child(work, size, views, elevations, out_q, pose_q, inflight):
     mesh, and render its views only when the parent's pose answer arrives.
     Meanwhile keep working — up to `inflight` meshes stay resident, which is
     the Loader/Poser residency question from the actor proposal in one dict."""
-    renderer = make_renderer(size)
-    angles = view_angles(views, elevations)
+    renderer = rig.rig(size, views=views, elevations=elevations)
     resident = {}
 
     def finish_one():
         i, up = pose_q.get()
-        mesh = resident.pop(i)
+        lm, slot = resident.pop(i)
         t0 = time.perf_counter()
-        mesh.rotate(rotation_to_z_up(np.array(up, dtype=float)), center=(0, 0, 0))
-        arr = np.stack([np.asarray(im) for im in render_views(renderer, mesh, angles)])
+        # `Renderer.views` rotates a copy — the resident original is never
+        # mutated, which is what makes a second visit at another up correct
+        arr = np.stack(rig.views(renderer, lm, np.array(up, dtype=float), index=slot))
         out_q.put(("views", i, arr, time.perf_counter() - t0))
 
     for i, (f, _cached_up) in enumerate(work):
@@ -109,20 +115,20 @@ def roundtrip_child(work, size, views, elevations, out_q, pose_q, inflight):
             finish_one()
         t0 = time.perf_counter()
         try:
-            mesh = load_mesh(Path(f))
-            geo = pose.up_axis_scores(mesh)
-            grid = render_up_candidate_grid(renderer, mesh)
+            lm, slot = rig.load(Path(f)), rig.index()
+            geo = pose.up_axis_scores(lm.mesh)
+            grid = rig.pose_tiles(renderer, lm, index=slot)
         except Exception as e:
             out_q.put(("error", i, Path(f).name, str(e)))
             continue
-        tiles = np.stack([np.asarray(im) for row in grid for im in row])
-        resident[i] = mesh
+        tiles = np.stack([im for row in grid for im in row])
+        resident[i] = (lm, slot)
         out_q.put(("tiles", i, geo, tiles, time.perf_counter() - t0))
         while not pose_q.empty():   # opportunistic: answers beat admissions
             finish_one()
     while resident:
         finish_one()
-    out_q.put(None)
+    out_q.put(None)               # see render_child: no hard exit before the drain
 
 
 def run_roundtrip(work, args, embed, resolve_pose):
@@ -167,26 +173,19 @@ def run_roundtrip(work, args, embed, resolve_pose):
 def make_embedder(args, fake):
     """(embed, resolve_pose): the parent's GPU work. resolve_pose runs the
     production ensemble math on a model's 24 tiles plus its geometry scores,
-    exactly as resolve_up does, and returns the winning up vector."""
+    through `src.pose`'s own `upright_scores`/`combine_up`, and returns the
+    winning up vector."""
     if fake:
         return (lambda images: time.sleep(0.01),
                 lambda tiles, geo: pose.UP_CANDIDATES[int(np.argmax(geo))])
-    import torch
-    from transformers import AutoModel, AutoProcessor
-    from classify_stls import embed_images, embed_raw
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = AutoModel.from_pretrained(args.model, torch_dtype=torch.float16).to(device).eval()
-    processor = AutoProcessor.from_pretrained(args.model)
-    up_T = embed_raw(model, processor, pose.UPRIGHT_PROMPTS, device).float().cpu().numpy()
-    down_T = embed_raw(model, processor, pose.TOPPLED_PROMPTS, device).float().cpu().numpy()
+    emb = rig.embedder(args.model, embed_batch=args.embed_batch)
 
     def embed(images):
-        embed_images(model, processor, list(images), device, batch=args.embed_batch)
+        emb.embed_images(list(images), batch=args.embed_batch)
 
     def resolve_pose(tiles, geo):
-        embeds = embed_images(model, processor, list(tiles), device,
-                              batch=args.embed_batch).float().cpu().numpy()
-        sig = pose.upright_scores(embeds, up_T, down_T).reshape(len(pose.UP_CANDIDATES), -1).mean(axis=1)
+        embeds = rig.embed(emb, tiles, batch=args.embed_batch)
+        sig = pose.upright_scores(embeds, emb.up_T, emb.down_T).reshape(len(pose.UP_CANDIDATES), -1).mean(axis=1)
         idx, _margin = pose.combine_up(geo, sig)
         return pose.UP_CANDIDATES[idx]
     return embed, resolve_pose
@@ -194,13 +193,13 @@ def make_embedder(args, fake):
 
 def run_baseline(work, args, embed):
     """Today's order: render, embed, next model. One process."""
-    renderer = make_renderer(args.render_size)
-    angles = view_angles(args.views, args.elevations)
+    renderer = rig.rig(args.render_size, views=args.views,
+                       elevations=args.elevations)
     render_s = embed_s = 0.0
     wall0 = time.perf_counter()
     for f, up in work:
         t0 = time.perf_counter()
-        tiles, views = render_one(renderer, f, up, angles)
+        tiles, views = render_one(renderer, f, up)
         render_s += time.perf_counter() - t0
         t0 = time.perf_counter()
         embed(tiles)
@@ -298,6 +297,9 @@ def main():
         "elevations": args.elevations, "queue_depth": args.queue_depth,
         "embed_batch": args.embed_batch}, "results": results}, indent=2))
     print(f"wrote {out}")
+    # the baseline mode builds a renderer in *this* process; the child modes do
+    # not, but exiting hard is correct either way once every child has joined
+    rig.exit_without_teardown()
 
 
 if __name__ == "__main__":

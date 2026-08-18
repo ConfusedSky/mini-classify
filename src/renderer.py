@@ -307,13 +307,21 @@ class Renderer:
         all six candidates — and `views` deliberately does not use it (I11)."""
         return self._shoot(rotated_cams(R, center, radius, angles))
 
-    def pose_tiles(self, lm: LoadedMesh, index: int) -> list[list[np.ndarray]]:
-        """[6][UP_TILE_AZIMUTHS] tiles — each candidate up seen from
-        UP_TILE_AZIMUTHS azimuths, one upload total. Pins the mesh resident
-        (`in_flight=True`): it is awaiting a pose answer, and the pose->embed
-        revisit is the one revisit residency exists for."""
+    def pose_tiles(self, lm: LoadedMesh, index: int,
+                   n_az: int = UP_TILE_AZIMUTHS) -> list[list[np.ndarray]]:
+        """[6][n_az] tiles — each candidate up seen from `n_az` azimuths, one
+        upload total. Pins the mesh resident (`in_flight=True`): it is awaiting
+        a pose answer, and the pose->embed revisit is the one revisit residency
+        exists for.
+
+        `n_az` is production's `UP_TILE_AZIMUTHS` and the child never passes
+        anything else — it exists because the tile count is a *measured*
+        parameter (eval/tile_count.py sweeps 4/2/1) and the harness that sweeps
+        it must sweep the production call rather than a copy of it. The
+        azimuths are `view_angles(n_az, [UP_TILE_ELEVATION])`, so a smaller
+        n_az is an exact camera subset of a larger one."""
         center, radius = self._show(lm, index, pin=True)
-        angles = view_angles(UP_TILE_AZIMUTHS, [UP_TILE_ELEVATION])
+        angles = view_angles(n_az, [UP_TILE_ELEVATION])
         return [self._shoot_rotated(rotation_to_z_up(up), center, radius, angles)
                 for up in pose.UP_CANDIDATES]
 

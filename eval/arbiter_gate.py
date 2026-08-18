@@ -22,7 +22,8 @@ import argparse, json
 
 import numpy as np
 
-from common import AX, IDX, OUT, RESULTS_FILE, build_tiles, load_labels  # sys.path
+from common import (AX, IDX, ORBIT_N_AZ, ORBIT_PX, OUT, RESULTS_FILE,  # sys.path
+                    build_orbit_tiles, build_tiles, load_labels)
 
 from src import pose
 
@@ -40,25 +41,18 @@ def ensemble_state(labels, views):
     """
     import torch
     from PIL import Image
-    from transformers import AutoModel, AutoProcessor
-    import classify_stls as C
-    from front_first import N_AZ, RENDER_PX as ORBIT_PX, build_orbit_tiles
+    import rig
 
     orbit = build_orbit_tiles(labels, ORBIT_PX)
     geo_src = build_tiles(labels, RENDER_PX)          # geometry only; already cached
-    dev = "cuda" if torch.cuda.is_available() else "cpu"
-    model = AutoModel.from_pretrained(BACKBONE, torch_dtype=torch.float16).to(dev).eval()
-    proc = AutoProcessor.from_pretrained(BACKBONE)
-    up = C.embed_raw(model, proc, pose.UPRIGHT_PROMPTS, dev).float().cpu().numpy()
-    dn = C.embed_raw(model, proc, pose.TOPPLED_PROMPTS, dev).float().cpu().numpy()
+    e = rig.embedder(BACKBONE)
+    up, dn = e.up_T, e.down_T                         # the Embedder's own banks
 
     out = {v: {} for v in views}
     for l in labels:
         flat = [p for row in orbit[l["stem"]] for p in row]
-        emb = C.embed_images(model, proc,
-                             [Image.open(p).convert("RGB") for p in flat],
-                             dev).float().cpu().numpy()
-        grid = pose.upright_scores(emb, up, dn).reshape(6, N_AZ)
+        emb = rig.embed(e, [Image.open(p).convert("RGB") for p in flat])
+        grid = pose.upright_scores(emb, up, dn).reshape(6, ORBIT_N_AZ)
         geo = np.asarray(geo_src[l["stem"]]["geo"])
         _, ratio, best = pose.rank_up_scores(geo)
         for v in views:
@@ -66,8 +60,8 @@ def ensemble_state(labels, views):
             idx, margin = pose.combine_up(geo, sig)   # the real combination, weights and all
             out[v][l["stem"]] = {"ens": idx, "margin": margin,
                                  "ratio": float(ratio), "best": float(best)}
-    del model
-    if dev == "cuda":
+    del e
+    if torch.cuda.is_available():
         torch.cuda.empty_cache()
     return out
 
@@ -171,6 +165,9 @@ def main():
                               for s, v in states[view].items()} for view in views},
               open(OUT / "arbiter_gate.json", "w"), indent=1)
     print(f"\nwrote {OUT}/arbiter_gate.json")
+    # build_tiles/build_orbit_tiles may have built a renderer; never tear one down
+    import rig
+    rig.exit_without_teardown()
 
 
 if __name__ == "__main__":

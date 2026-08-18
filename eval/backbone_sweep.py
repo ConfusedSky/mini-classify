@@ -33,31 +33,28 @@ def embed_backbone(model_id, tiles_by_stem, order, note=""):
     """
     import torch
     from PIL import Image
-    from transformers import AutoModel, AutoProcessor
-    import classify_stls as C
+    import rig
 
-    dev = "cuda" if torch.cuda.is_available() else "cpu"
     t0 = time.time()
-    model = AutoModel.from_pretrained(model_id, torch_dtype=torch.float16).to(dev).eval()
-    proc = AutoProcessor.from_pretrained(model_id)
-    px = getattr(proc.image_processor, "size", {}).get("height", "?")
+    # the Embedder loads the tower and the frozen probe banks in one step —
+    # up_T/down_T are `pose.UPRIGHT_PROMPTS`/`TOPPLED_PROMPTS` through the same
+    # text forward production uses, so "probes frozen" is structural here
+    e = rig.embedder(model_id)
+    px = getattr(e.processor.image_processor, "size", {}).get("height", "?")
     print(f"{model_id} {note}  loaded in {time.time()-t0:.0f}s "
           f"(processor resizes to {px}px)")
 
-    up = C.embed_raw(model, proc, pose.UPRIGHT_PROMPTS, dev).float().cpu().numpy()
-    dn = C.embed_raw(model, proc, pose.TOPPLED_PROMPTS, dev).float().cpu().numpy()
     out, t0 = {}, time.time()
     for stem in order:
         rec = tiles_by_stem[stem]
         imgs = [Image.open(p).convert("RGB") for p in rec["tiles"]]
-        emb = C.embed_images(model, proc, imgs, dev).float().cpu().numpy()
-        sig = pose.upright_scores(emb, up, dn)
+        sig = pose.upright_scores(rig.embed(e, imgs), e.up_T, e.down_T)
         out[stem] = {"sig": int(sig.argmax()),
                      "ens": int(pose.combine_up_scores(rec["geo"], sig))}
     print(f"  embedded {len(order)} models in {time.time()-t0:.0f}s "
           f"({(time.time()-t0)/len(order):.2f}s each)")
-    del model
-    if dev == "cuda":
+    del e
+    if torch.cuda.is_available():
         torch.cuda.empty_cache()
     return out
 
@@ -136,6 +133,9 @@ def main():
         print("\nA handful of differing models is not a result — see the holdout "
               "lesson in LEARNINGS.\nSign-test the disagreements before believing "
               "either direction.")
+
+    import rig                      # build_tiles may have built a renderer
+    rig.exit_without_teardown()
 
 
 if __name__ == "__main__":

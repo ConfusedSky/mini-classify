@@ -6,10 +6,26 @@ normals and therefore different pixels — measured at 4.5% of pixels above 2/25
 against a 0.004% noise floor (docs/actor-refactor/renderer_alternatives.md). That is well
 above jitter, so it has to be scored against labels before it ships.
 
-Each arm runs the production pose path (`classify_stls.resolve_up`, arbiter off)
-changing *only* the loader:
+Each arm runs the production pose path with the arbiter off, changing *only*
+the loader:
 
-    geometry scores -> 6x4 candidate tiles -> SigLIP -> combine_up
+    geometry scores -> 6 x UP_TILE_AZIMUTHS candidate tiles -> SigLIP -> combine_up
+
+The three tiers are composed here, out of the same `src/pose.py` functions the
+Poser calls (`up_axis_scores` -> `rank_up_scores` -> `combine_up` ->
+`needs_arbiter_margin`) over the same `Renderer.pose_tiles` pixels the render
+child produces and the same `Embedder` forward. That is fifteen lines of
+composition rather than a call into `src/poser.py`, because the Poser is
+message-shaped — it consumes `TileEmbeds`, parks files on in-flight arbiter
+calls and writes a cache — and none of that is under test here. What *is*
+under test is the loader, so everything downstream of it is production's.
+
+This used to call `classify_stls.resolve_up`, a single-process re-arrangement
+of the same three tiers kept alive in the CLI for this one caller. Two things
+went with it: geometry's ratio gate (`pose.needs_arbiter`, reached only when
+no SigLIP scorer is supplied — which this harness never does, so it was dead
+code behind a dead `--up-conf`), and the inline arbiter tier, which this
+harness switched off anyway.
 
 Two modes run per invocation over the same models:
 
@@ -24,9 +40,9 @@ Two modes run per invocation over the same models:
 Arm order alternates per model in both modes, so scene-state bias lands on both
 arms equally instead of systematically on the arm that always rendered second.
 
-`eval/tile_and_vlm.py` is the wrong gate for this change — it sweeps tile
-resolution and the ollama VLM tier, neither of which the parser touches, and it
-needs a prior harness's results.json.
+No other harness gates this: `tile_count.py` sweeps azimuths and
+`backbone_sweep.py` sweeps towers, neither of which the parser touches, and
+both score cached pixels rather than re-parsing the meshes.
 
 One OffscreenRenderer per process, so pass the size rather than sweeping it:
 
@@ -45,21 +61,20 @@ from types import SimpleNamespace
 
 import numpy as np
 import open3d as o3d
-import torch
 
 from common import AX, OUT, collection_root, load_labels   # puts REPO on sys.path
 
-import classify_stls as C
+import rig
 from src import pose
+from src.loader import load_mesh
 
 PX = int(sys.argv[1]) if len(sys.argv) > 1 else 384
 MID = "google/siglip2-so400m-patch14-384"
 SETS = ("orig", "hard", "holdout")   # reported separately, never pooled
 
-# All resolve_up reads off args with vlm_backend=None: the margin gate, plus
-# geometry's ratio gate, which is unreachable while the ensemble supplies a
-# margin. Production defaults, so the gate moves when production does.
-ARGS = SimpleNamespace(up_margin=pose.MARGIN_THRESHOLD, up_conf=0.6)
+# The one threshold the pose path still reads: the ensemble's margin gate.
+# Production's default, so the gate moves when production does.
+ARGS = SimpleNamespace(up_margin=pose.MARGIN_THRESHOLD)
 
 
 def old_reader(path):
@@ -69,8 +84,8 @@ def old_reader(path):
     return m
 
 
-MODES = (("A/A", (C.load_mesh, C.load_mesh)),    # control: nothing changed
-         ("A/B", (old_reader, C.load_mesh)))     # the loader, and nothing else
+MODES = (("A/A", (load_mesh, load_mesh)),    # control: nothing changed
+         ("A/B", (old_reader, load_mesh)))   # the loader, and nothing else
 
 
 def current_root():
@@ -100,16 +115,21 @@ def labels_on_disk():
 def resolve(loader, path, renderer, score_upright):
     """The production pose path minus the arbiter — (geo_idx, ens_idx, margin).
 
-    `resolve_up` itself rather than a copy of its ensemble: the copy this used
-    to carry was already drifting from what ships (review §4.1). It does not
-    return geometry's own pick, so that is re-derived from a second
-    `up_axis_scores` call — identical points, since pose reseeds per call.
+    The two evidence tiers, in production's order and with production's
+    functions: `pose.up_axis_scores` off the mesh the loader under test
+    produced, `Renderer.pose_tiles` for the pixels, `Embedder` for the
+    embeddings, `pose.combine_up` for the ensemble. Geometry's own pick falls
+    out of the same score vector — `up_axis_scores` is seeded, so this is the
+    same number the second call used to re-derive.
     """
     mesh = loader(path)
-    up, ratio, source, margin = C.resolve_up(
-        mesh, ARGS, lambda: renderer, None, score_upright)
-    idx = next(i for i, c in enumerate(pose.UP_CANDIDATES) if np.allclose(c, up))
-    return pose.rank_up_scores(pose.up_axis_scores(mesh))[0], idx, float(margin)
+    geo_scores = pose.up_axis_scores(mesh)
+    geo_idx, _ratio, _best = pose.rank_up_scores(geo_scores)
+    grid = rig.pose_tiles(renderer, mesh)
+    flat = [im for row in grid for im in row]
+    sig = np.asarray(score_upright(flat)).reshape(len(grid), -1).mean(axis=1)
+    idx, margin = pose.combine_up(geo_scores, sig)
+    return geo_idx, idx, float(margin)
 
 
 def run_mode(name, loaders, labels, renderer, score_upright):
@@ -198,20 +218,13 @@ def summarise(name, rows):
 
 
 def main():
-    from transformers import AutoModel, AutoProcessor
-
     labels, missing = labels_on_disk()
-    dev = "cuda" if torch.cuda.is_available() else "cpu"
-    model = AutoModel.from_pretrained(MID, torch_dtype=torch.float16).to(dev).eval()
-    proc = AutoProcessor.from_pretrained(MID)
-    upT = C.embed_raw(model, proc, pose.UPRIGHT_PROMPTS, dev).float().cpu().numpy()
-    dnT = C.embed_raw(model, proc, pose.TOPPLED_PROMPTS, dev).float().cpu().numpy()
+    emb = rig.embedder(MID)
 
-    def score_upright(tiles):   # exactly what classify_stls.main builds
-        return pose.upright_scores(
-            C.embed_images(model, proc, tiles, dev).float().cpu().numpy(), upT, dnT)
+    def score_upright(tiles):   # the Poser's ensemble input, same banks
+        return pose.upright_scores(rig.embed(emb, tiles), emb.up_T, emb.down_T)
 
-    renderer = C.make_renderer(PX)
+    renderer = rig.rig(PX)
 
     print(f"{len(labels)} of {len(labels) + len(missing)} labelled models on disk "
           f"| {PX}px tiles | {MID}\ncollection root: {current_root()}")
@@ -258,6 +271,7 @@ def main():
     path.parent.mkdir(parents=True, exist_ok=True)
     json.dump(out, open(path, "w"), indent=1, default=int)
     print(f"wrote {path}")
+    rig.exit_without_teardown()   # the live OffscreenRenderer must not be destroyed
 
 
 if __name__ == "__main__":
