@@ -406,6 +406,20 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
 
 ## Structural questions
 
+- **Dedup pass over the wave-1 `src/` modules** (2026-08-17, after wave 2
+  lands and before the whole-branch review). AST-level scan found one true
+  src-internal duplicate: `render_key` byte-identical in
+  `cache_checker.py:65` and `renderer.py:126` (parent and child each grew a
+  copy because neither may import the other). Consolidation: keying helpers
+  (`render_key`, `cache_key_from_identity`, `EMBED_CACHE_VERSION`) move to
+  `src/identity.py` — the stdlib-only leaf both sides import (E-R1-5's
+  recorded direction; the leaf's stdlib-only import rule must survive the
+  move). Everything else duplicated is `src/`-vs-`classify_stls.py`
+  (`pool_sims`, `view_config`, `orbit_camera`, `view_angles`,
+  `RENDER_FORMATS`, `DEFAULT_ELEVATIONS`, prompt constants) and dissolves
+  when the wave-2 CLI rewrite delegates to `src/`; retire each pair's
+  parity-pin test together with its copy, not before.
+
 - **Renders are not reproducible across pose-cache states.** A cold pose cache
   renders the six up-candidate tiles through the same `OffscreenRenderer` first,
   and the view renders that follow differ from a warm-cache run by up to 0.0098
