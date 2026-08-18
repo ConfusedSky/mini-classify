@@ -52,8 +52,15 @@ accordingly: cache-building throughput and REPL quality first.
   contend; the split is a measured win — keep it.
 - **`render_to_image` holds the GIL** (~85–92%). Threads cannot overlap
   rendering; a child process can (measured 1.17–1.21×, thermally capped).
-- **`src/pose.py` never imports `classify_stls`** — no rendering or model code
-  in it.
+- **Nothing imports `classify_stls.py`** (eval-debt cleanup, 2026-08-18). It is
+  the CLI entry and exports nothing; `spawn` re-imports it as `__mp_main__` in
+  the render child, so its module scope is the child's startup cost — stdlib
+  plus `instrument`, `src.identity`, `src.cachedir`, and everything torch- or
+  open3d-owning imported inside the function that uses it. What tools share
+  lives in `src/cachedir.py` (cache layout, keys, run-params, the shared
+  argparse block), `src/embed_store.py` (reading `.npy` back) and
+  `src/embedder.py` (text embeddings). `src/pose.py` holds no rendering or
+  model code either.
 - **`read_binary_stl`: the file outvotes a lying header** (commit `bd6be81`,
   for Materialise Magics files). The remaining guards — ASCII detection,
   finite/magnitude bound, whole-record remainder — are deliberate; don't
