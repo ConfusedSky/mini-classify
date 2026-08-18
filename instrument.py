@@ -21,6 +21,15 @@ effectively free.
 
 Everything is off unless enable() is called, and stage() is a cheap flag check
 when it is off.
+
+**Two processes, one table** (F-7). The render child times its own stages —
+mesh-load, pose-render, view-render, save-renders — and it must not sample:
+one nvidia-smi per run is the cadence, and a second sampler would double the
+cost and interleave two clocks in one file. So the child calls
+`enable(path, sample=False)`, ships `stage_totals()` back on `EndOfInput`
+(src/render_child.py), and the parent folds them in with `merge()` under the
+`child` role. Nothing here imports torch — which is what lets the child import
+this module at all (interfaces.md's import table).
 """
 import atexit
 import json
@@ -205,15 +214,50 @@ def _shutdown():
             proc.kill()
 
 
-def enable(path, interval_ms=100):
-    """Start sampling. path is where the raw samples and summary are written."""
+def enable(path, interval_ms=100, sample=True):
+    """Start timing stages. path is where the raw samples and summary are
+    written by `report()`.
+
+    `sample=False` times stages without starting the device sampler: what the
+    render child wants (module docstring). It writes nothing and never calls
+    `report()` — its totals travel back to the parent through `stage_totals`."""
     global _enabled, _started, _out_path, _sampler
     if _enabled:
         return
     _enabled, _started, _out_path = True, time.perf_counter(), Path(path)
+    if not sample:
+        return
     _sampler = threading.Thread(target=_sample_loop, args=(interval_ms,), daemon=True)
     _sampler.start()
     atexit.register(_shutdown)
+
+
+def enabled():
+    """Whether this process is timing — the child's `enable` gate and the
+    parent's "is there a stage table to wait for" check."""
+    return _enabled
+
+
+def stage_totals():
+    """This process's stage totals as plain tuples: (role, stage, seconds,
+    count). Picklable by construction — it crosses the child->parent queue."""
+    with _lock:
+        return tuple((r, s, t, _counts[(r, s)]) for (r, s), t in _totals.items())
+
+
+def merge(rows, role="child"):
+    """Fold another process's `stage_totals()` in under one role.
+
+    Its own role split (main/async) is dropped: a separate process consumes no
+    parent wall clock at all, so the distinction the parent's table draws —
+    critical path against overlapped — does not carry across the boundary. The
+    child's stages are all `child`, reported as their own table."""
+    if not _enabled:
+        return
+    with _lock:
+        for _role, name, seconds, count in rows:
+            _totals[(role, name)] += seconds
+            _counts[(role, name)] += count
 
 
 def _table(rows, headers):
@@ -248,6 +292,11 @@ def report():
         if async_rows:
             print("\noverlapped (other threads) — does not consume wall clock:")
             print(_table(async_rows, ["stage", "n", "total s", "% wall", "ms/call"]))
+        child_rows = stage_rows("child")
+        if child_rows:
+            print("\nrender child (separate process) — overlapped, and the "
+                  "reason the parent's\ncritical path is mostly waiting:")
+            print(_table(child_rows, ["stage", "n", "total s", "% wall", "ms/call"]))
 
         if _samples:
             by_stage = defaultdict(list)

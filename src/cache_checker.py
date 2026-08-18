@@ -2,7 +2,7 @@
 §"Cache Checker — a pure decision").
 
 Extracted from the cache-decision half of `classify_stls.process()`
-(classify_stls.py:1096-1160): the pose-cache lookup, the embedding-cache
+(main:classify_stls.py:1096-1160): the pose-cache lookup, the embedding-cache
 `.npy` presence test, the saved-render presence/redraw decision, and the
 `--skip-embed` / `--save-renders` / `--up-axis` flag interplay. `route`
 **reads** caches and never writes, renders, or embeds; the whole decision is
@@ -52,7 +52,7 @@ def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False) \
     args = ctx.args
 
     # Pose: forced axis skips the pose-cache lookup entirely (migration-notes
-    # shortcut; classify_stls.py:1100-1102). Otherwise a miss — or a
+    # shortcut; main:classify_stls.py:1100-1102). Otherwise a miss — or a
     # geometry-only pose this run's ensemble can upgrade — is a PoseRenderTask.
     entry = None
     if args.up_axis in pose.FORCED_UPS:
@@ -81,7 +81,7 @@ def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False) \
     cached = cache_file is not None and cache_file.exists()
     need_embeds = not cached and not args.skip_embed
 
-    # Renders: today's need_renders rule verbatim (classify_stls.py:1157) —
+    # Renders: main's need_renders rule verbatim (main:classify_stls.py:1157) —
     # `pose_changed or not renders_ok`. Saved renders predate a fresh
     # override, so they show the old pose; the embedding re-keys on its own
     # because the override moves up_token, but the debug files do not.

@@ -14,12 +14,23 @@ run-params, the cache guards and the wiring live here; the loop lives in
 functions kept below are the ones the eval harnesses and the sibling tools
 import — the production render/embed helpers they measure against.
 
-Nothing here is a second copy of a `src/` definition. The names the tools have
-always imported from this module (`render_key`, `load_mesh`, `view_angles`,
-`RENDER_FORMATS`, ...) are re-exported from the module that owns them, so
-there is exactly one of each to keep in step — and `pool_sims`/`view_config`,
-whose home `src/done.py` owns torch, are forwarded lazily by `__getattr__` at
-the bottom of this file rather than imported at module scope.
+No *constant or helper* here is a second copy. The names the tools have always
+imported from this module (`render_key`, `load_mesh`, `view_angles`,
+`RENDER_FORMATS`, `PROMPT_TEMPLATES` via `embed_texts`, ...) are re-exported
+from the module that owns them, so there is exactly one of each to keep in
+step — and `pool_sims`/`view_config`, whose home `src/done.py` owns torch, are
+forwarded lazily by `__getattr__` at the bottom of this file rather than
+imported at module scope.
+
+What *is* a second arrangement, deliberately: the single-process render and
+embed helpers below (`render_views`, `render_up_candidate_grid`, `resolve_up`,
+`embed_raw`/`embed_texts`/`embed_images`). The pipeline's versions are a
+Renderer method in another process and an Embedder method holding its own
+model; the evals and the REPL hold their own model+processor and measure a
+single-process, in-line path, so they need these shapes. They are not a
+divergence risk by accident: each is built out of the owning module's
+functions and pinned equal to the production path by
+tests/test_embedder.py's parity suite (F-5).
 
 Viewpoints are a turntable of --views azimuths at each --elevations pitch, so
 --views 4 --elevations 20,-10 gives 8 renders per mesh. Every run records its
@@ -203,17 +214,11 @@ def render_index(rdir):
     return {p.stem: p for p in files}
 
 
-def save_renders(rdir, key, images, fmt):
-    """Write the debug renders under a render_key() prefix. Never fails the run —
-    like the pose sheet, these exist for a human to look at, not for the
-    classifier."""
-    ext, opts = RENDER_FORMATS[fmt]
-    try:
-        rdir.mkdir(parents=True, exist_ok=True)
-        for i, im in enumerate(images):
-            im.save(rdir / f"{key}_view{i}{ext}", **opts)
-    except OSError as e:
-        print(f"  could not save renders for {key}: {e}")
+# Writing the renders is `Renderer.save_renders` and only that (F-4): the
+# pixels are already in the child's memory (data_structures Q2), and the
+# module function that used to live here had no callers left after wave 1 —
+# only tests, which now measure the method that runs in production. The names
+# it wrote are the names `render_index` above still parses.
 
 
 def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None,
@@ -228,17 +233,27 @@ def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None,
     this function rather than a copy of it. Its ensemble math is `src/pose.py`'s,
     the same functions the Poser calls.
 
-    Returns (up, ratio, source). `source` records which tier *moved* the
-    answer, not which ran (review P2.3-A): geometry's pick standing —
-    including when the ensemble ran and agreed — stays "geometry"; an
-    override becomes "siglip" or "vlm". Whether the ensemble ran at all is
+    Returns **(up, ratio, source, margin)** — four values on every path, the
+    ensemble's margin last (None when no ensemble ran). `source` records which
+    tier *moved* the answer, not which ran (review P2.3-A): geometry's pick
+    standing — including when the ensemble ran and agreed — stays "geometry";
+    an override becomes "siglip" or "vlm". Whether the ensemble ran at all is
     `margin is not None`, which pose_is_sufficient already keys on.
+
+    `args` is a duck-typed namespace, not necessarily the CLI's parser output.
+    It must carry `up_margin`, `cache_dir`, `pose_vlm_model`, optionally
+    `gemini_project` — and `up_conf`, which the CLI no longer defines at all
+    (it retired with --no-up-ensemble). That last read is reachable only with
+    `score_upright=None`, and its one caller supplies its own namespace
+    (`eval/parser_gate.py`'s `ARGS`, which sets both thresholds). Passing
+    `argparse` output from a classify run with `score_upright=None` would
+    raise `AttributeError` here (F-12); nothing does.
 
     score_upright(tiles) -> per-candidate SigLIP scores; None falls back to
     geometry alone, which only an eval arm asks for now (the flag that did,
     --no-up-ensemble, is retired) — and only that arm reaches the
-    `args.up_conf` gate below, which the CLI no longer defines either. The
-    ensemble runs on *every* model rather than only low-confidence ones:
+    `args.up_conf` gate below. The ensemble otherwise runs on *every* model
+    rather than only the low-confidence ones:
     geometry can be confidently wrong with a real-looking base (32mm_Gate_L
     scores a 0.43 ratio on the wrong face), and those never reach the arbiter.
 
@@ -668,7 +683,11 @@ def main():
     parser.add_argument("--pool", choices=["mean", "max", "softmax"], default="softmax",
                         help="how per-view scores combine: mean = whole-object consensus, "
                              "max = single-view features decide, softmax = in between")
-    parser.add_argument("--pose-vlm", choices=["auto", "claude", "gemini", "off"],
+    # the backends this CLI will accept — `ollama` is not among them (C-R1-4),
+    # which is also what --pose-vlm-model's help below filters on: advertising
+    # a default for a backend argparse rejects is worse than saying nothing
+    pose_vlm_choices = ["auto", "claude", "gemini", "off"]
+    parser.add_argument("--pose-vlm", choices=pose_vlm_choices,
                         default="auto",
                         help="arbiter for uncertain up detection: gemini on Vertex AI, "
                              "claude CLI, or off. auto (default) = gemini if gcloud ADC "
@@ -679,7 +698,7 @@ def main():
                              "pooled ollama call would share the 4060 with SigLIP")
     parser.add_argument("--pose-vlm-model", default=None,
                         help="model for --pose-vlm; defaults per backend "
-                             f"({', '.join(f'{k}={v}' for k, v in pose.DEFAULT_VLM_MODELS.items() if v)})")
+                             f"({', '.join(f'{k}={v}' for k, v in pose.DEFAULT_VLM_MODELS.items() if v and k in pose_vlm_choices)})")
     parser.add_argument("--gemini-project", default=None,
                         help="GCP project for --pose-vlm gemini (default: "
                              "$GOOGLE_CLOUD_PROJECT or `gcloud config get-value project`)")
@@ -710,7 +729,11 @@ def main():
                              "utilization to PATH (default instrument.json), and "
                              "print the breakdown at the end. Rendering runs on the "
                              "amd iGPU and embedding on the nvidia card, so both "
-                             "are sampled")
+                             "are sampled. The render child times its own stages "
+                             "(mesh-load, pose-render, view-render, save-renders) "
+                             "and reports them as their own table — it is a separate "
+                             "process, so its time overlaps the parent's rather than "
+                             "adding to it")
     args = apply_run_params(parser)
     if not args.input:
         sys.exit("no input given, and no directory recorded in "
@@ -746,7 +769,6 @@ def main():
     from src.embedder import Embedder
     from src.messages import CacheContext, Failure, RenderConfig
     from src.poser import Poser, VlmConfig
-    from src.transport import MpQueueTransport
 
     vlm_backend = resolve_pose_vlm(args)
     print(f"loading {args.model} ...")
@@ -774,9 +796,10 @@ def main():
                        render_index=render_index(rdir), args=args, root=root)
 
     # tasks unbounded, results bounded at the admission window (I2/Q1): the
-    # parent never blocks on a send, and admission is the only forward pressure
-    tasks = MpQueueTransport()
-    results = MpQueueTransport(maxsize=driver.WINDOW)
+    # parent never blocks on a send, and admission is the only forward
+    # pressure. Constructed by the driver, not here — the wiring IS the
+    # invariant, and a test pins it there (F-3)
+    tasks, results = driver.make_transports()
     # ONE Admission per run (P2) — `admitted` is the driver's field, `retired`
     # is Done's, and the driver takes this very object back off Done rather
     # than being handed a second one.
@@ -798,7 +821,11 @@ def main():
         render_size=args.render_size, views=args.views,
         elevations=tuple(args.elevations), save_renders_dir=rdir,
         render_format=args.render_format, budget_bytes=RESIDENT_BUDGET_BYTES,
-        collection_root=root))
+        collection_root=root,
+        # the child times its own stages under --instrument and ships the
+        # totals back on EndOfInput (F-7); without this the flag reports only
+        # what the parent does, which since the refactor is mostly waiting
+        instrument_path=args.instrument))
     try:
         driver.run(DriverConfig(
             # the bar advances on admission, so it runs at most WINDOW files

@@ -14,9 +14,14 @@ is pinned is the calling convention the whole refactor rests on:
 * the abort's fixed order with a flush on both sides of `settle`, and the
   narration that prices the second Ctrl-C;
 * the dead-child and wedged-child paths, the second gated on `child_owed()`
-  so an arbiter tail can never trip it.
+  so an arbiter tail can never trip it;
+* invariant 5, both halves (F-3): the transports' bounds, against the real
+  queues, and *when* the parent is allowed to block on a recv — which needs a
+  fake that tells `recv` and `recv_nowait` apart, or the flag the driver
+  threads through `drain` is invisible to everything here.
 """
 import signal
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -66,31 +71,46 @@ class FakeTasks:
 
 
 class FakeResults:
-    """The child->parent queue. `script` is consumed in order; `on_empty` runs
-    every time it is polled dry, which is where a test advances a clock or
-    fires a signal. Refuses to be polled forever: a driver that cannot make
-    progress must fail the test, not hang it."""
+    """The child->parent queue, and **the two recv methods are not the same
+    method** (F-3). The `block` flag the driver threads through `drain` decides
+    whether the parent is allowed to go to sleep holding work it could be
+    dispatching (invariant 5b), and a fake where `recv is recv_nowait` cannot
+    see the difference — with one, flipping the post-admit `drain(block=False)`
+    to True passes every test in this file.
+
+    So they differ the way the real transport differs:
+
+    * `recv(timeout)` **sleeps**. Time passes and the world moves while the
+      parent is in here — which is what `on_empty` models: a clock advancing, a
+      child answering, a signal arriving. Every call is recorded with the
+      accounting at that moment, so a test can ask *when* the parent chose to
+      sleep.
+    * `recv_nowait()` returns whatever has already arrived, or None, and
+      changes nothing. The world does not move while the parent is walking.
+
+    Refuses to be polled forever: a driver that cannot make progress must fail
+    the test, not hang it."""
 
     def __init__(self, script=(), on_empty=None, limit=500):
         self.script = list(script)
         self.on_empty = on_empty
         self.empties = 0
         self.limit = limit
+        self.blocking_at = []      # (in_flight, admitted) per blocking recv
+        self.probe = None          # set by the rig once the state exists
 
-    def _next(self):
+    def recv(self, timeout=None):
+        self.blocking_at.append(self.probe() if self.probe else None)
         if self.script:
             return self.script.pop(0)
         self.empties += 1
         assert self.empties < self.limit, "driver spun without making progress"
-        if self.on_empty:
-            self.on_empty()
+        if self.on_empty:          # the world moves only while the parent
+            self.on_empty()        # sleeps in here
         return None
 
-    def recv(self, timeout=None):
-        return self._next()
-
     def recv_nowait(self):
-        return self._next()
+        return self.script.pop(0) if self.script else None
 
     def send(self, m):
         raise AssertionError("the driver never sends on results")
@@ -244,6 +264,8 @@ class Rig:
         self.routes = routes or {}
         self.tasks.probe = lambda: (self.done.admission.in_flight(),
                                     len(self.poser.parked))
+        self.results.probe = lambda: (self.done.admission.in_flight(),
+                                      self.done.admission.admitted)
         monkeypatch.setattr(driver, "route", self._route)
         self.cfg = DriverConfig(
             walker=[f(i) for i in range(files)],
@@ -469,6 +491,80 @@ def test_admission_bounds_the_window(monkeypatch):
     rig.run()
     assert max(inflight for inflight, _ in rig.tasks.at_send) <= 2
     assert rig.done.retired_ids == set(range(6))
+
+
+def test_the_walk_never_sleeps_while_it_could_admit_another_file(monkeypatch):
+    """Invariant 5b, the half F-3 found unpinned: the parent must never make a
+    *blocking* recv while it is holding work it could dispatch instead. The
+    post-admit drain is that call — `drain(block=False)` — and its whole point
+    is to pick up cheap results without stalling the walk behind the child.
+
+    Pinned by *when* the parent chose to sleep rather than by the flag: every
+    blocking recv has to find either a full window (the admission gate, where
+    waiting is the pressure) or an exhausted walker (quiescence). A blocking
+    post-admit drain lands with room in the window and files left, and this
+    fails — which flipping that one argument to True is enough to produce."""
+    pending = []
+
+    def on_empty():
+        if pending:                     # the "child", one answer per sleep
+            rig.results.script.append(Rendered(*pending.pop(0)))
+
+    rig = Rig(monkeypatch, files=3, window=3,
+              routes={i: EmbedRenderTask(f(i), i, POSE, needs_embed=False)
+                      for i in range(3)},
+              on_empty=on_empty)
+    original_send = rig.tasks.send
+
+    def send(m):
+        original_send(m)
+        if isinstance(m, EmbedRenderTask):
+            pending.append((m.file, m.index))
+
+    rig.tasks.send = send
+    rig.run()
+    assert rig.results.blocking_at, "the run never blocked at all — rig broken"
+    assert all(in_flight >= 3 or admitted == 3
+               for in_flight, admitted in rig.results.blocking_at), \
+        f"blocked with the window open and files left: {rig.results.blocking_at}"
+
+
+def test_make_transports_leaves_tasks_unbounded_and_bounds_results_at_the_window():
+    """Invariant 5a: the parent never blocks on a send. It is a property of
+    two constructor arguments, so it lives in one function (`make_transports`)
+    and is pinned here against the real queues — the fakes above cannot see it,
+    and `maxsize=1` on `tasks` passes all of them while deadlocking a real run.
+
+    `tasks` must be unbounded because `Done._retire` sends a `Release` on it
+    from the parent's own thread, inside the drain: the only thread that could
+    relieve a full `tasks` is the one that would be blocked filling it, and the
+    child cannot help — it consumes `tasks` only between its own sends, which
+    the parent would no longer be reading. `results` is bounded at exactly
+    WINDOW, one slot per admitted file."""
+    tasks, results = driver.make_transports()
+
+    def sends_within(transport, msg, seconds):
+        done = threading.Event()
+
+        def put():
+            transport.send(msg)
+            done.set()
+
+        threading.Thread(target=put, daemon=True).start()
+        return done.wait(seconds)
+
+    try:
+        for i in range(driver.WINDOW + 5):        # well past any window
+            assert sends_within(tasks, Retired(f(i), i), 5), \
+                "a send on `tasks` blocked — the parent can deadlock itself"
+        for i in range(driver.WINDOW):
+            assert sends_within(results, Rendered(f(i), i), 5)
+        assert not sends_within(results, Rendered(f(9), 9), 0.3), \
+            "`results` is not bounded at WINDOW"
+        assert results.recv(timeout=5) is not None    # unblock that last send
+    finally:
+        tasks.close()
+        results.close()
 
 
 def test_every_admitted_index_retires_exactly_once(monkeypatch):

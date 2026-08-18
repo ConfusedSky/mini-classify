@@ -14,8 +14,8 @@ as `Resolved(file, index, pose_changed)` and the *driver* re-routes it
 through `cache_checker.route` — the second-call rule (interfaces §route):
 the pose store is warm by then, so the warm-`.npy` shortcut and the redraw
 arm apply instead of an unconditional re-embed. `pose_changed` rides along
-because the Poser is the one that knows which tier moved the answer. That re-route is today's
-post-resolution check (classify_stls.py:1148-1155), whose loss was the
+because the Poser is the one that knows which tier moved the answer. That re-route is main's
+post-resolution check (main:classify_stls.py:1148-1155), whose loss was the
 regression escalated against the first draft of this module; a `_next_step`
 here building the task itself is exactly what reintroduces it.
 
@@ -54,7 +54,7 @@ eight-way regression."""
 
 MOVED_SOURCES = ("vlm", "siglip")
 """Sources that make `Resolved.pose_changed` true — parity with
-`classify_stls.py:1146`. Saved renders predate a fresh override, so they show
+`main:classify_stls.py:1146`. Saved renders predate a fresh override, so they show
 the old pose and `route`'s renders-wanted arm must force the redraw; the
 *embedding* re-keys on its own, because the override moves `up_token`. Read
 off the source of the pose actually recorded, never off which method built
@@ -76,8 +76,8 @@ class ParkedFile:
 @dataclass
 class VlmConfig:
     """Everything the Poser needs to build one arbiter call — and nothing
-    more. The call construction is today's `resolve_up` closure
-    (classify_stls.py:490-493). No run-mode flags: `skip_embed`/`save_renders`
+    more. The call construction is the `ask_vlm_up` closure inside
+    `classify_stls.resolve_up`. No run-mode flags: `skip_embed`/`save_renders`
     lived here only to pick EmbedRenderTask-vs-Retired, and that decision is
     `route`'s again (the second-call rule), so the Poser no longer needs to
     know what mode the run is in."""
@@ -133,7 +133,8 @@ class Poser:
         """Run the ensemble and return `Resolved` for the driver to re-route,
         or None having parked the file on a submitted arbiter Future.
 
-        The ensemble is resolve_up's (classify_stls.py:465-480) with the
+        The ensemble is `classify_stls.resolve_up`'s — still there as the
+        evals' single-process arrangement of the same tiers — with the
         geometry half already computed child-side: rank geo_scores, average
         SigLIP's upright margin per candidate, combine, and record which tier
         *moved* the answer. The resolved pose is recorded through record_pose
@@ -240,10 +241,11 @@ class Poser:
 
     def _fold(self, index: int, pf: ParkedFile) -> Pose | None:
         """Fold one done future: apply the arbiter's answer to the pose
-        resolved without it (apply_arbiter, classify_stls.py:508-512) and
-        record the result. Returns None for a cancelled future — skipped, no
-        re-record. A failed call keeps the ensemble's answer (today's
-        classify_stls.py:1233-1235). May raise; the caller is the boundary."""
+        resolved without it (apply_arbiter, main:classify_stls.py:508-512 —
+        retired with the deferral it closed) and record the result. Returns
+        None for a cancelled future — skipped, no re-record. A failed call
+        keeps the ensemble's answer (main:classify_stls.py:1233-1235). May
+        raise; the caller is the boundary."""
         try:
             idx = pf.future.result(timeout=0)
         except CancelledError:
@@ -267,7 +269,7 @@ class Poser:
         return Resolved(file, index, pose_changed=source in MOVED_SOURCES)
 
     def _make_pose(self, up, ratio, source, margin) -> Pose:
-        # today's fresh-entry shape (classify_stls.py:1138-1141): rounded
+        # main's fresh-entry shape (main:classify_stls.py:1138-1141): rounded
         # confidence/margin, explicit POSE_CACHE_VERSION (D10)
         return Pose(up=tuple(float(v) for v in up),
                     confidence=round(float(ratio), 4), source=source,

@@ -26,6 +26,13 @@ class Transport(Protocol):
                                         # aborting parent cannot be held open by
                                         # the queue's feeder thread (I6)
 
+    def flush(self) -> None:            # close and WAIT for the feeder — the
+        ...                             # exact opposite of close(). The child
+                                        # exits via os._exit, which skips the
+                                        # feeder the same way it skips stdio
+                                        # buffers, so a last message before it
+                                        # (ChildStages, F-7) needs this
+
 
 class MpQueueTransport:
     """`mp.Queue` behind the protocol. `maxsize=0` is unbounded.
@@ -57,3 +64,14 @@ class MpQueueTransport:
     def close(self) -> None:
         self._q.cancel_join_thread()
         self._q.close()
+
+    def flush(self) -> None:
+        """Block until everything already sent has reached the pipe.
+
+        `mp.Queue.put` buffers and a feeder thread does the pickling, so a
+        sender that calls `os._exit` immediately after a send can lose it —
+        the same class of loss as unflushed stdio (render_child.py's L4 note).
+        `close()` + `join_thread()` is the documented wait; the queue is dead
+        afterwards, which is why only a process on its way out calls this."""
+        self._q.close()
+        self._q.join_thread()

@@ -17,7 +17,10 @@ it:
   go negative and finish the run early.
 * **The parent never blocks on a send** (invariant 5): `tasks` is unbounded,
   `results` is bounded at the admission window, and admission is the only
-  thing that waits.
+  thing that waits. Both halves are constructed by `make_transports` below
+  rather than at the call site, and the blocking/non-blocking drain split is
+  visible to the tests — a fake whose two recv methods were one method hid it
+  for a whole wave (F-3).
 * **A dead or wedged child ends the run rather than hanging it** (L1/M1/M3),
   and a healthy arbiter tail is never mistaken for either (N1) — the stall
   deadline watches `child_owed()`, which a parked file leaves.
@@ -53,11 +56,13 @@ if TYPE_CHECKING:
     from src.embedder import Embedder
     from src.poser import Poser
 
+import instrument
 from instrument import arbiter_call, stage
 from src.cache_checker import route
 from src.messages import (
     CachedHit,
     CacheContext,
+    ChildStages,
     EmbedRenderTask,
     EmbedViews,
     Embedded,
@@ -71,7 +76,7 @@ from src.messages import (
     Resolved,
     Retired,
 )
-from src.transport import Transport
+from src.transport import MpQueueTransport, Transport
 
 # --- the driver's constants (named together so nobody hunts for them, N6) ----
 
@@ -93,7 +98,7 @@ STALL_S = 240.0
 (actors_proposal.md:196), so this sits ~8.5x above the documented top of
 range: the error is one-sided — a wedge is permanent, so four minutes is paid
 once, while a false positive kills a healthy child. Deliberately not 300 s,
-which is the arbiter's transport deadline (src/pose.py:506) and unrelated."""
+which is the arbiter's transport deadline (src/pose.py:510) and unrelated."""
 
 FOLD_S = 60.0
 """The abort's wait on in-flight arbiter calls — above the 45 s p95, well
@@ -105,6 +110,12 @@ JOIN_S = 5.0
 """Abort-path join on the child. Timed, unlike the drain path's: quiescence
 means the child is idle (§P2.3), an abort means nothing of the sort, and its
 half-finished renders are debug artifacts."""
+
+STAGES_S = 5.0
+"""How long the parent waits for the child's stage totals after `EndOfInput`
+(F-7). Only under `--instrument`, and only on the clean path where the child
+is alive and idle by construction — the reply is one small pickle it has
+already flushed. Losing it costs one table, never the run, so this is short."""
 
 
 def now() -> float:
@@ -162,6 +173,21 @@ class DriverConfig:
     window: int = WINDOW
 
 
+def make_transports(window: int = WINDOW) -> tuple[Transport, Transport]:
+    """The run's two queues — `(tasks, results)` — with invariant 5's wiring
+    in one testable place (F-3).
+
+    `tasks` is **unbounded** and that is not a default anyone may tighten:
+    `Done._retire` sends a `Release` on it from the parent's own thread, inside
+    the drain, so a bounded `tasks` that filled would block the only thread
+    that can drain it — a deadlock no test with a fake transport can see, which
+    is exactly why the construction lives here rather than inline in the CLI.
+    `results` is bounded at the admission window: the child's backlog is
+    already bounded by admission (I2/Q1), so the bound is a bug-catcher, not
+    the pressure. The parent never blocks on a send either way."""
+    return MpQueueTransport(), MpQueueTransport(maxsize=window)
+
+
 def spawn_render_child(tasks: Transport, results: Transport, cfg: RenderConfig,
                        ctx=None):
     """The one child: spawn context, daemon, handed its config whole.
@@ -187,7 +213,7 @@ def instrumented(call):
 
     `instrument.arbiter_call` is a context manager, so the driver adapts it to
     the decorator `wrap` expects — structurally today's `timed` closure
-    (classify_stls.py:1132-1134). Injected rather than imported by the Arbiter,
+    (main:classify_stls.py:1132-1134). Injected rather than imported by the Arbiter,
     which owns no metrics and must stay importable without them."""
     def wrapped():
         with arbiter_call():
@@ -401,6 +427,7 @@ def run(cfg: DriverConfig) -> None:
                 _abort(cfg)
                 return
             tasks.send(EndOfInput())      # every Release precedes it (FIFO)
+            _collect_child_stages(results)   # its reply, under --instrument
             child.join()                  # UNTIMED: quiescence means idle
         finally:
             done.flush()                  # main thread, both paths — and in a
@@ -412,6 +439,26 @@ def run(cfg: DriverConfig) -> None:
         # exitcode only says HOW the child ended; on the dead-child path this
         # line plus the truncated CSV IS the crash report — the lost work is
         # already Failure rows from drain's check.
+
+
+def _collect_child_stages(results: Transport) -> None:
+    """Fold the render child's stage totals into this process's instrument
+    (F-7). A no-op unless `--instrument` is on — the child sends nothing then,
+    and waiting for a message that will never come would cost every run
+    STAGES_S of silence.
+
+    Safe only here: `EndOfInput` follows quiescence (I1), so the drain has
+    already consumed every result and this is the only thing that can be on the
+    queue. A timeout drops the child's table and nothing else — the run is
+    complete and correct by this point."""
+    if not instrument.enabled():
+        return
+    deadline = now() + STAGES_S
+    while now() < deadline:
+        m = results.recv(SHORT)
+        if isinstance(m, ChildStages):
+            instrument.merge(m.rows)
+            return
 
 
 def _abort(cfg: DriverConfig) -> None:

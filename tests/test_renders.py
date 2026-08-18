@@ -1,11 +1,21 @@
+"""The renders half of the cache: where they go (`renders_dir`/`render_subdir`),
+what they are called (`render_key`), and that the two ends agree — what the
+child writes (`Renderer.save_renders`) is exactly what `render_index` finds
+again next run. That round trip is the only thing keeping a redraw decision
+honest, and it crosses a process boundary, so it is pinned here from both
+sides."""
 import argparse
 import os
 
+import numpy as np
 import pytest
 from PIL import Image
 
 from classify_stls import (RENDER_FORMATS, embeds_dir, render_index, render_key,
-                           render_subdir, renders_dir, save_renders)
+                           render_subdir, renders_dir)
+from src import renderer as renderer_mod
+from src.messages import RenderConfig
+from src.renderer import Renderer
 
 
 def args(render_size=2048, views=8, elevations=(20.0, -20.0)):
@@ -118,20 +128,67 @@ def test_index_does_not_confuse_stems_sharing_a_prefix(tmp_path):
     assert index["bunnyhop_view0"].name == "bunnyhop_view0.jpg"
 
 
+# --- what the child writes, and what this module reads back (F-4) ------------
+#
+# The production writer is `Renderer.save_renders` in the render child; the
+# module-level `classify_stls.save_renders` these tests used to call was a
+# second copy with no production caller, so a divergence between the names it
+# wrote and the names `render_index` parses could not have shown up here. The
+# fixture stubs `make_offscreen` only because the real one needs the GPU and,
+# once created, must live for the process lifetime (CLAUDE.md) — `save_renders`
+# never touches it.
+
+@pytest.fixture
+def saver(monkeypatch, tmp_path):
+    monkeypatch.setattr(renderer_mod, "make_offscreen", lambda size: None)
+
+    def make(rdir, fmt="jpg", root=tmp_path):
+        return Renderer(RenderConfig(
+            render_size=64, views=2, elevations=(20.0,), save_renders_dir=rdir,
+            render_format=fmt, budget_bytes=1 << 20, collection_root=root))
+    return make
+
+
+def frames(n=2):
+    return [np.zeros((8, 8, 3), dtype=np.uint8)] * n
+
+
 @pytest.mark.parametrize("fmt", sorted(RENDER_FORMATS))
-def test_save_renders_writes_every_view_in_the_chosen_format(tmp_path, fmt):
+def test_save_renders_writes_every_view_in_the_chosen_format(tmp_path, saver, fmt):
     ext, _ = RENDER_FORMATS[fmt]
-    save_renders(tmp_path / "cfg", "bunny", [Image.new("RGB", (8, 8))] * 2, fmt)
+    f = tmp_path / "bunny.stl"
+    f.touch()
+    saver(tmp_path / "cfg", fmt).save_renders(f, frames())
+    key = render_key(f, tmp_path)
     assert sorted(p.name for p in (tmp_path / "cfg").iterdir()) == \
-        [f"bunny_view0{ext}", f"bunny_view1{ext}"]
+        [f"{key}_view0{ext}", f"{key}_view1{ext}"]
 
 
-def test_save_renders_never_fails_the_run(tmp_path, capsys):
+@pytest.mark.parametrize("fmt", sorted(RENDER_FORMATS))
+def test_what_the_child_writes_is_what_render_index_finds(tmp_path, saver, fmt):
+    """The round trip, in every format: `render_index` keys are
+    '<render_key>_view<i>', and that string is what `route`'s redraw check
+    looks up. A writer that spelled the name differently would silently
+    re-render the whole collection every run."""
+    rdir = tmp_path / "cfg"
+    f = tmp_path / "kit" / "bunny.stl"
+    f.parent.mkdir()
+    f.touch()
+    saver(rdir, fmt).save_renders(f, frames(3))
+    key = render_key(f, tmp_path)
+    index = render_index(rdir)
+    assert [f"{key}_view{i}" in index for i in range(3)] == [True] * 3
+    assert index[f"{key}_view0"].suffix == RENDER_FORMATS[fmt][0]
+
+
+def test_save_renders_never_fails_the_run(tmp_path, saver, capsys):
     # these files exist for a human to look at, so a write failure is a warning
     blocked = tmp_path / "ro"
     blocked.mkdir(mode=0o500)
+    f = tmp_path / "bunny.stl"
+    f.touch()
     try:
-        save_renders(blocked / "cfg", "bunny", [Image.new("RGB", (8, 8))], "jpg")
+        saver(blocked / "cfg").save_renders(f, frames(1))
     finally:
         blocked.chmod(0o700)
-    assert "could not save renders for bunny" in capsys.readouterr().out
+    assert "could not save renders" in capsys.readouterr().out

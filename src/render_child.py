@@ -22,17 +22,28 @@ The contract, verbatim from the interfaces note:
 * The child never crashes on a per-file error; it crashes only on protocol
   errors (which are bugs) — an unknown message type raises out of the loop.
 
+`--instrument` is where the child's stage timings come from (F-7): every stage
+the old single-process pipeline attributed below the recv — mesh-load,
+pose-geometry, pose-render, view-render, save-renders — is timed here, in the
+process that actually does the work, and the totals ride back on the
+`EndOfInput` reply so the parent prints one table. The timing lives in this
+file rather than in `renderer.py`/`loader.py` so those stay free of everything
+but their job, and `instrument` is torch-free, which is what lets the child
+import it at all.
+
 Import rule (interfaces.md row 1): child side imports open3d/PIL/numpy/
 messages/pose — never torch.
 """
 import os
 import sys
 
+import instrument
+from instrument import stage
 from src import loader
 from src import pose
-from src.messages import (EmbedRenderTask, EmbedViews, EndOfInput, Failure,
-                          PoseRenderTask, PoseTiles, Release, Rendered,
-                          RenderConfig)
+from src.messages import (ChildStages, EmbedRenderTask, EmbedViews, EndOfInput,
+                          Failure, PoseRenderTask, PoseTiles, Release,
+                          Rendered, RenderConfig)
 from src.renderer import Renderer
 from src.transport import Transport
 
@@ -44,16 +55,24 @@ RECV_TIMEOUT_S = 1.0
 def _handle(msg, renderer: Renderer):
     """One task -> its one result. Raises on failure; the loop converts."""
     if isinstance(msg, PoseRenderTask):
-        lm = loader.get(msg.file)
-        geo_scores = pose.up_axis_scores(lm.mesh)   # the mesh never crosses the
-        tiles = renderer.pose_tiles(lm, msg.index)  # boundary, so its geometry
-        return PoseTiles(msg.file, msg.index, geo_scores, tiles)  # evidence must
+        with stage("mesh-load"):
+            lm = loader.get(msg.file)
+        with stage("pose-geometry"):
+            geo_scores = pose.up_axis_scores(lm.mesh)  # the mesh never crosses
+        with stage("pose-render"):                     # the boundary, so its
+            tiles = renderer.pose_tiles(lm, msg.index)  # geometry evidence must
+        return PoseTiles(msg.file, msg.index, geo_scores, tiles)
     # EmbedRenderTask. The pose->embed revisit is the residency win: a
     # resident mesh needs no re-parse, so loader.get runs only on a miss.
-    lm = None if renderer.is_resident(msg.index) else loader.get(msg.file)
-    views = renderer.views(lm, msg.index, msg.pose.up)  # up rotated into a copy
-                                                        # of the mesh (I11)
-    renderer.save_renders(msg.file, views)              # child owns saving (Q2)
+    lm = None
+    if not renderer.is_resident(msg.index):
+        with stage("mesh-load"):                # the residency hit shows up as
+            lm = loader.get(msg.file)           # a missing call, not a fast one
+    with stage("view-render"):
+        views = renderer.views(lm, msg.index, msg.pose.up)  # up rotated into a
+                                                            # copy of the mesh
+    with stage("save-renders"):                             # (I11)
+        renderer.save_renders(msg.file, views)  # child owns saving (Q2)
     if not msg.needs_embed:
         return Rendered(msg.file, msg.index)            # ack after save (K6)
     return EmbedViews(msg.file, msg.index, msg.pose, views)
@@ -62,12 +81,22 @@ def _handle(msg, renderer: Renderer):
 def run_child(tasks: Transport, results: Transport, cfg: RenderConfig) -> None:
     """Spawned once per run (spawn context, daemon — the parent's job). Loops
     until `EndOfInput`; never returns."""
+    if cfg.instrument_path:
+        # times stages, samples nothing: one nvidia-smi per run is the parent's
+        # (instrument.py), and the child's totals go home on EndOfInput
+        instrument.enable(cfg.instrument_path, sample=False)
     renderer = Renderer(cfg)
     while True:
         msg = tasks.recv(timeout=RECV_TIMEOUT_S)
         if msg is None:                         # nothing arrived, not the end:
             continue                            # EndOfInput is a message (I5)
         if isinstance(msg, EndOfInput):
+            if instrument.enabled():            # the last message of the run,
+                results.send(ChildStages(instrument.stage_totals()))
+                results.flush()                 # and os._exit would drop it in
+                                                # the feeder (F-7) — the same
+                                                # loss the stdio flush below
+                                                # prevents
             sys.stdout.flush()                  # os._exit skips buffered stdio
             sys.stderr.flush()                  # on a pipe (L4)
             os._exit(0)                         # never return: teardown would

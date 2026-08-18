@@ -1,12 +1,14 @@
 """Done — scoring, rows, the pose store, retirement, Release, flush
 (interfaces.md §"Done — the only writer, and the owner of retirement").
 
-Extracted from the scoring/writing half of `classify_stls.process()` and the
-`finally` epilogue: the cache load (classify_stls.py:1179-1182), the torn-write
-guard on the `.npy` save (:1187-1195), the score block (:1197-1217), the CSV
-fields and writer (:1261-1266), and the pose-cache save (:1255-1256) — which is
-where the still-open `save_pose_cache` atomicity fix (temp + `os.replace`)
-finally lands (J7, data_structures.md's last paragraph).
+Extracted from the scoring/writing half of `main:classify_stls.process()` and
+the `finally` epilogue: the cache load (main:classify_stls.py:1179-1182), the
+torn-write guard on the `.npy` save (:1187-1195), the score block
+(:1197-1217), the CSV fields and writer (:1261-1266), and the pose-cache save
+(:1255-1256) — which is where the `save_pose_cache` atomicity fix (temp +
+`os.replace`) landed, closing the last of the three defects the proposal
+listed (J7; `pose.save_pose_cache` keeps its bare `write_text` for the evals,
+and nothing in the pipeline calls it).
 
 Ownership (I9/I10):
 * the canonical pose store — THE dict `CacheContext.poses` aliases, written
@@ -39,6 +41,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 
+from instrument import stage
 from src.identity import cache_key_from_identity
 from src.messages import (
     CacheContext,
@@ -63,7 +66,7 @@ from src.transport import Transport
 if TYPE_CHECKING:
     from src.driver import Admission
 
-# Today's CSV columns, verbatim (classify_stls.py:1261-1262). `index` orders
+# Main's CSV columns, verbatim (main:classify_stls.py:1261-1262). `index` orders
 # the flush; it is not a column.
 CSV_FIELDS = ["file", "top1", "score1", "top2", "score2", "top3", "score3",
               "up", "pose_conf", "pose_source", "front_view"]
@@ -112,7 +115,8 @@ class Done:
         Embedder computes at startup (None under --skip-embed, where no row
         is ever scored): `categories` names the top-3 columns, and
         `front_embeds`/`back_embeds` are the numpy prompt banks
-        `front_view_index` ranks against (classify_stls.py:1040-1041)."""
+        `front_view_index` ranks against (`src/embedder.py`'s `front_T`/
+        `back_T`, built once at startup)."""
         self.admission = admission
         self.text_embeds = text_embeds          # torch, read-only after startup
         self.ctx = cache_ctx
@@ -143,9 +147,10 @@ class Done:
             case CachedHit():
                 # Score before retiring: a corrupt .npy raises out of here and
                 # the drain arm converts it to a Failure, which retires (I4).
-                img_embeds = torch.from_numpy(np.load(m.cache_file)).to(
-                    self.text_embeds.device, dtype=self.text_embeds.dtype
-                )  # classify_stls.py:1181
+                with stage("cache-load"):
+                    img_embeds = torch.from_numpy(np.load(m.cache_file)).to(
+                        self.text_embeds.device, dtype=self.text_embeds.dtype
+                    )  # main:classify_stls.py:1181
                 self.rows[m.index] = self._score(m.file, m.index, m.pose, img_embeds)
                 if m.retires:
                     self._retire(m.file, m.index)
@@ -172,41 +177,42 @@ class Done:
         self.admission.retired += 1
         self.tasks.send(Release(file=file, index=index))    # K1: unconditional
 
-    # --- Scoring (classify_stls.py:1197-1217, extracted faithfully) ----------
+    # --- Scoring (main:classify_stls.py:1197-1217, extracted faithfully) -----
 
     def _score(self, file: Path, index: int, pose: Pose, img_embeds) -> ResultRow:
-        view_np = img_embeds.float().cpu().numpy()
-        # A forced --up-axis never consults the store (E-R1-1, parity with
-        # classify_stls.py:1100-1102): the run's up is the flag, so a warm
-        # auto entry's front_view describes a *different* pose's renders —
-        # reading it would report the wrong hero view, and merging into it
-        # would poison the auto entry with an index resolved under the
-        # override. Forced fv is recomputed per run and never persisted.
-        entry = None
-        if self.ctx.args.up_axis not in FORCED_UPS:
-            entry = self.poses.get(file_identity(file, self.ctx.root))
-        fv = front_view(entry, self.view_cfg)
-        if fv is None:
-            fv = front_view_index(view_np, self.front_embeds, self.back_embeds)
-            if entry is not None:
-                # The front_view merge writes through the canonical entry
-                # (D9), exactly today's shape (:1203-1206); a legacy int
-                # carries no config record and is replaced.
-                old = entry.get("front_view")
-                entry["front_view"] = \
-                    {**(old if isinstance(old, dict) else {}), self.view_cfg: fv}
-        view_sims = (img_embeds @ self.text_embeds.T).float().cpu().numpy()
-        sims = torch.from_numpy(pool_sims(view_sims, self.ctx.args.pool))
-        order = sims.argsort(descending=True)
-        top = []
-        for rank in range(min(3, len(self.categories))):
-            idx = order[rank]
-            top.append((self.categories[idx], round(sims[idx].item(), 4)))
-        return ResultRow(index=index, file=str(file), up=up_str(pose.up),
-                         pose_conf=pose.confidence, pose_source=pose.source,
-                         front_view=fv, top=tuple(top))
+        with stage("score"):        # front_view included, as in main (:1198)
+            view_np = img_embeds.float().cpu().numpy()
+            # A forced --up-axis never consults the store (E-R1-1, parity with
+            # main:classify_stls.py:1100-1102): the run's up is the flag, so a warm
+            # auto entry's front_view describes a *different* pose's renders —
+            # reading it would report the wrong hero view, and merging into it
+            # would poison the auto entry with an index resolved under the
+            # override. Forced fv is recomputed per run and never persisted.
+            entry = None
+            if self.ctx.args.up_axis not in FORCED_UPS:
+                entry = self.poses.get(file_identity(file, self.ctx.root))
+            fv = front_view(entry, self.view_cfg)
+            if fv is None:
+                fv = front_view_index(view_np, self.front_embeds, self.back_embeds)
+                if entry is not None:
+                    # The front_view merge writes through the canonical entry
+                    # (D9), exactly main's shape (:1203-1206); a legacy int
+                    # carries no config record and is replaced.
+                    old = entry.get("front_view")
+                    entry["front_view"] = \
+                        {**(old if isinstance(old, dict) else {}), self.view_cfg: fv}
+            view_sims = (img_embeds @ self.text_embeds.T).float().cpu().numpy()
+            sims = torch.from_numpy(pool_sims(view_sims, self.ctx.args.pool))
+            order = sims.argsort(descending=True)
+            top = []
+            for rank in range(min(3, len(self.categories))):
+                idx = order[rank]
+                top.append((self.categories[idx], round(sims[idx].item(), 4)))
+            return ResultRow(index=index, file=str(file), up=up_str(pose.up),
+                             pose_conf=pose.confidence, pose_source=pose.source,
+                             front_view=fv, top=tuple(top))
 
-    # --- Fresh-embedding cache write (classify_stls.py:1187-1195) ------------
+    # --- Fresh-embedding cache write (main:classify_stls.py:1187-1195) -------
 
     def _save_embeds(self, m: Embedded) -> None:
         if self.ctx.embeds_dir is None:
@@ -224,7 +230,8 @@ class Done:
         cache_file = Path(self.ctx.embeds_dir) / \
             f"{cache_key_from_identity(ident, self.ctx.args, token)}.npy"
         try:
-            np.save(cache_file, m.embeds.float().cpu().numpy())
+            with stage("cache-save"):
+                np.save(cache_file, m.embeds.float().cpu().numpy())
         except BaseException:
             # a torn write (full disk, Ctrl-C) would read as a cache hit next
             # run and crash cache-load (:1191-1195)
@@ -241,14 +248,14 @@ class Done:
         (src/pose.py:200-205); then the rows CSV, partial on abort.
 
         Each write is attempted even if the other's raises
-        (classify_stls.py:1249-1268, the full-disk incident): the nested
+        (main:classify_stls.py:1249-1268, the full-disk incident): the nested
         finallys chain rather than swallow, so the last failure re-raises
         after every write has had its try, with the earlier failure kept
         visible as `__context__`. A failed `os.replace` leaves no `.tmp`
         behind."""
         args = self.ctx.args
         try:
-            if args.up_axis == "auto" and args.cache_dir:  # classify_stls.py:1255
+            if args.up_axis == "auto" and args.cache_dir:  # main:classify_stls.py:1255
                 p = Path(args.cache_dir) / "pose-cache.json"
                 p.parent.mkdir(parents=True, exist_ok=True)
                 tmp = p.with_name(p.name + ".tmp")

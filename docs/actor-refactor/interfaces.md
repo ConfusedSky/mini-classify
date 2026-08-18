@@ -125,6 +125,11 @@ class Transport(Protocol):            # src/transport.py
                                       # unflushed pickles are abandoned, so an
                                       # aborting parent cannot be held open by
                                       # the queue's feeder thread (I6)
+    def flush(self) -> None           # close and WAIT for the feeder: close()'s
+                                      # opposite. The child's one caller is its
+                                      # last act before os._exit, which drops
+                                      # buffered pickles the way it drops
+                                      # buffered stdio (F-7, ChildStages)
 ```
 
 * **`tasks` (parent→child) is unbounded; `results` (child→parent) is bounded
@@ -396,8 +401,11 @@ class Done:
 * **`Done` owns the canonical pose store** (I9). Concretely (J7): the CLI
   entry loads it via `load_pose_cache`, hands it to `Done` at construction,
   and `Done` owns it from then on — writes, `front_view`, and `flush`,
-  which is where the still-open `save_pose_cache` atomicity fix
-  (temp + `os.replace`) finally lands. `CacheContext.poses` is *the same
+  which is where the `save_pose_cache` atomicity fix (temp + `os.replace`)
+  landed — no longer open: `Done.flush` writes `pose-cache.json.tmp` and
+  replaces, first of its two writes, unlinking the temp in a `finally`
+  (E-R1-2/E-R1-3, `src/done.py`). `pose.save_pose_cache` keeps its bare
+  `write_text` for the evals; nothing in the pipeline calls it. `CacheContext.poses` is *the same
   object*, read-only by convention, so `route` sees this run's resolutions.
   `record_pose` takes `(file, index, pose)` — the Poser has no `root` and
   must not derive identities (Invariant 2); `Done` computes
@@ -495,7 +503,7 @@ def run(cfg) -> None:
                                               # paid answers land before flush —
                                               # bounded by the arbiter's own
                                               # 300 s transport deadline
-                                              # (src/pose.py:506, :429 — O4), not by
+                                              # (src/pose.py:510, :433 — O4), not by
                                               # anything in this loop. A killed
                                               # child plus a just-submitted call
                                               # can mean five quiet minutes
@@ -592,7 +600,7 @@ permanent, so a four-minute detection costs four minutes of a multi-hour
 run exactly once, while a false positive kills a healthy child — so the
 deadline sits ~8.5× above the documented top of range, a statement about
 rendering, never about the network. And deliberately **not** 300 s: that
-is the arbiter's transport deadline (src/pose.py:506), an unrelated number
+is the arbiter's transport deadline (src/pose.py:510), an unrelated number
 `STALL_S` should not shadow. This repo's renderer has a documented
 history of aborting rather than returning; one timestamp is cheap
 insurance.
@@ -741,7 +749,7 @@ every one: today a Ctrl-C jumps past the deferred-fold loop
 futures that were *already resolved* die there. Since the atexit join makes
 the wait unavoidable, the choice is not "wait or don't" but "read the
 results or throw them away". `FOLD_S` sits above the arbiter's 45 s p95 and
-well under its 300 s transport deadline (`src/pose.py:506`) — a straggler past
+well under its 300 s transport deadline (`src/pose.py:510`) — a straggler past
 it loses its answer either way, and `FOLD_S` is a driver constant beside
 `WINDOW`, `SHORT`, and `STALL_S`.
 

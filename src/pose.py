@@ -87,7 +87,7 @@ class Pose:
                    front_view=dict(fv) if isinstance(fv, dict) else {})
 
     def to_cache(self):
-        """Today's JSON entry shape (classify_stls.py:1138-1141);
+        """Main's JSON entry shape (main:classify_stls.py:1138-1141);
         `front_view` is included only once something has been resolved,
         matching entries that predate front-view caching."""
         d = {"up": [float(x) for x in self.up],

@@ -315,8 +315,18 @@ A **frozen** dataclass in `pose.py`, replacing the raw cache-entry dict in
 flight. An earlier draft left it mutable "so `Done` can write `front_view`" —
 but the copy crossing the process boundary is a copy either way, so mutating
 the echo updates nothing that reaches `save_pose_cache` (D9). `Done` writes
-through the canonical pose dict with `dataclasses.replace`; freezing costs
-nothing the boundary was not already costing.
+through the canonical pose dict; freezing costs nothing the boundary was not
+already costing.
+
+*As built (2026-08-18): that write is **not** `dataclasses.replace`, which an
+earlier draft of this paragraph promised. The store's values are JSON entry
+dicts — what `load_pose_cache` returns and `json.dumps` takes back — not
+`Pose` objects, so there is no frozen object at that point to replace.
+`Done._score` merges the `front_view` config token into the entry dict in
+place (`entry["front_view"] = {**old, view_cfg: fv}`), and `record_pose`
+replaces a whole entry with `pose.to_cache()`. `Pose` stays frozen where it is
+a Pose — in flight, in the messages — which is what this section is actually
+about.*
 
 ```python
 @dataclass(frozen=True)
@@ -615,6 +625,9 @@ current code** (D2): the CSV now flushes inside the `finally` chain that
 attempts all three artifacts (`classify_stls.py:1134-1169`), and a torn
 `.npy` unlinks itself on `BaseException` so it cannot read as a hit next run
 (`classify_stls.py:1086-1092`) — temp + `os.replace` would still be stronger
-against SIGKILL, but it is a hardening, not an open hole. What remains open is
-the one whose loss costs money: **`save_pose_cache` is a bare `write_text`**
-(`src/pose.py:200-205`); write temp + `os.replace` when `Done` takes it over.
+against SIGKILL, but it is a hardening, not an open hole. The third — the one
+whose loss costs money — closed with the refactor: `Done` took the pose cache
+over and writes it temp + `os.replace` (`src/done.py`, `Done.flush`), first of
+its two writes and with the temp unlinked in a `finally`.
+`pose.save_pose_cache` (`src/pose.py:200-205`) is still a bare `write_text`
+and still what the evals call; the pipeline no longer goes through it.

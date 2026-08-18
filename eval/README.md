@@ -4,8 +4,23 @@ Measurement harnesses for the up-axis pipeline. These are the scripts that
 produced the numbers in `LEARNINGS.md`; they are exploratory quality, kept so
 the measurements can be reproduced or extended rather than re-derived.
 
-They import `pose` and `classify_stls` directly, so they always measure the
-real code path. Ground truth is `../up_axis_labels.json`, loaded through
+They import `src.pose` and `classify_stls` directly rather than copying either
+— which is what keeps them measuring the code the pipeline runs. Two caveats
+the actor refactor added, and neither is a licence to copy anything:
+
+* the top-level `pose` module is now `src/pose.py` (wave 0). `from src import
+  pose` everywhere; `import pose` will not resolve.
+* `classify_stls` is the **CLI**, not the pipeline. Its render/embed helpers
+  (`render_views`, `render_up_candidate_grid`, `resolve_up`, `embed_images`,
+  ...) are a single-process, in-line arrangement of the same maths for exactly
+  these harnesses to measure against — `resolve_up` says so in its own
+  docstring. Production runs the Poser/Renderer/Embedder in `src/`, across a
+  process boundary, so a harness result is a statement about the *maths* — the
+  ensemble, the probes, the gate, the pixels — and not about the pipeline's
+  scheduling. Where a harness needs the production object it constructs it
+  (`views_camera_rotation.py` builds a real `RenderConfig` + `Renderer`).
+
+Ground truth is `../up_axis_labels.json`, loaded through
 `common.load_labels()` — never re-derive labels from a random sample index,
 because the directory walk grew 509 → 602 files mid-session and the same seed
 no longer draws the same models.

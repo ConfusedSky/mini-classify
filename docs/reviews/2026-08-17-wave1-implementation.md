@@ -333,3 +333,57 @@ file's fold can re-route to a `CachedHit` whose row overwrites the
 `Failure` already written for it — the reverse of K5, and arguably an
 improvement (the row is a real score from a real cached embedding).
 Recorded so nobody rediscovers it as a bug.
+
+### Disposition of F-3 … F-12 (2026-08-18, the cleanup pass)
+
+All ten taken; the branch's test count goes 395 → 405.
+
+- **F-3** (invariant 5) — both halves pinned. `tests/test_driver.py`'s
+  `FakeResults` now has genuinely different `recv`/`recv_nowait` semantics —
+  the blocking one is where the world moves (`on_empty`) and it records the
+  accounting at every call — and `test_the_walk_never_sleeps_while_it_could_
+  admit_another_file` asserts the parent only ever blocked with a full window
+  or an exhausted walker. The two transport constructions moved out of the CLI
+  into `driver.make_transports()`, pinned against real queues by
+  `test_make_transports_leaves_tasks_unbounded_and_bounds_results_at_the_
+  window` (a thread per send, so a block is a failure rather than a hang).
+  Break-it evidence: the post-admit `drain(block=False)→True` fails the first
+  test **and passes all 29 of the pre-existing ones** — the finding, reproduced
+  and then closed; `maxsize=1` on `tasks` and an unbounded `results` each fail
+  the second.
+- **F-4** — `classify_stls.save_renders` deleted; `tests/test_renders.py`
+  measures `Renderer.save_renders`, and gained the round trip the module
+  function's existence had hidden: what the child writes is what
+  `render_index` parses, in every `RENDER_FORMATS` encoding.
+- **F-5/F-6/F-11/F-12** — docstrings and help corrected: the CLI's "nothing
+  here is a second copy" now distinguishes re-exported names from the
+  deliberate single-process helper arrangement; `src/embedder.py` no longer
+  says the CLI keeps its own templates; `--pose-vlm-model`'s help filters the
+  defaults to the backends `--pose-vlm` accepts (no `ollama=`); `resolve_up`
+  documents its 4-tuple and the `args.up_conf` contract that only
+  `eval/parser_gate.py`'s namespace satisfies.
+- **F-7 — restored, not documented away.** The child now enables `instrument`
+  from `RenderConfig.instrument_path` (timing only, `sample=False`: one
+  nvidia-smi per run stays the parent's), times `mesh-load`,
+  `pose-geometry`, `pose-render`, `view-render` and `save-renders`, and ships
+  its totals back as a `ChildStages` message on `EndOfInput`, flushed through
+  the queue feeder before `os._exit` — measured necessary, and pinned:
+  `test_flush_is_what_survives_an_os_exit` runs both arms and the unflushed
+  message never arrives. `Done` and the `Embedder` regained
+  `cache-load`/`cache-save`/`score`/`text-embed`, and `report()` prints the
+  child's stages as their own table.
+- **F-8** — 47 citations re-anchored: 43 to `main:classify_stls.py:NNNN` (the
+  historical provenance notes), 4 retargeted to the `src/` module that owns
+  the logic now. None was wrong against `main`. The `src/pose.py:506`
+  transport-deadline drift is `:510` in `src/driver.py` and interfaces.md.
+- **F-9/F-10** — the design notes and OPEN_QUESTIONS caught up with the code:
+  the `save_pose_cache` atomicity fix recorded as landed (proposal,
+  interfaces, data_structures, `src/done.py`), `dataclasses.replace` corrected
+  to the in-place entry-dict merge, the loader-knob migration note corrected
+  to the one `budget_bytes` that exists, `run_classify.sh` verified to need no
+  updating, `"ensemble"` respelled, MeshPrefetcher put in the past tense, and
+  in OPEN_QUESTIONS: the ollama fallback, the margin gate (shipped as
+  `--up-margin`), the local-VLM interleave (closed by removal) and the
+  reproducibility entry (generalised by the parity run) all amended in place.
+  `eval/README.md` no longer claims a top-level `pose` or that its harnesses
+  measure the pipeline's scheduling.

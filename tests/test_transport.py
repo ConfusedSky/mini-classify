@@ -1,7 +1,8 @@
-"""src/transport.py: the four-signature boundary protocol. Bounded/unbounded
-send semantics, recv/recv_nowait on empty, and the I6 close contract — an
-aborting parent with unflushed pickles must not be held open by the queue's
-feeder thread."""
+"""src/transport.py: the boundary protocol. Bounded/unbounded send semantics,
+recv/recv_nowait on empty, the I6 close contract — an aborting parent with
+unflushed pickles must not be held open by the queue's feeder thread — and its
+opposite, `flush`, which a process about to `os._exit` needs so its last
+message is not lost in that same feeder (F-7)."""
 import subprocess
 import sys
 import threading
@@ -77,6 +78,39 @@ def test_close_with_unflushed_items_does_not_hang():
     r = subprocess.run([sys.executable, "-c", code], cwd=REPO,
                        capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, r.stderr
+
+
+BIG = b"x" * (1 << 20)     # exceeds the pipe buffer, so the feeder cannot
+                           # finish the write in one go — which is what makes
+                           # the unflushed arm below a fact and not a race
+
+
+def _exiting_child(results, flush):
+    """Spawn target: send, optionally flush, then `os._exit` — the render
+    child's EndOfInput arm, which is the only caller of `flush`."""
+    import os
+    results.send(("stages", BIG))
+    if flush:
+        results.flush()
+    os._exit(0)
+
+
+def test_flush_is_what_survives_an_os_exit():
+    """F-7: `put` hands the pickle to a feeder thread, and `os._exit` does not
+    wait for it. Without `flush` the child's last message never arrives — the
+    unflushed arm is here so nobody 'simplifies' the call away."""
+    import multiprocessing as mp
+    ctx = mp.get_context("spawn")
+    got = {}
+    for flush in (True, False):
+        results = MpQueueTransport(maxsize=3, ctx=ctx)
+        p = ctx.Process(target=_exiting_child, args=(results, flush), daemon=True)
+        p.start()
+        got[flush] = results.recv(timeout=10)
+        p.join(timeout=30)
+        assert p.exitcode == 0
+    assert got[True] == ("stages", BIG)
+    assert got[False] is None, "unflushed send survived os._exit — flush is dead code"
 
 
 def _echo_child(tasks, results):

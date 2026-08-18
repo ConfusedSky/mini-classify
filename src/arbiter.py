@@ -3,12 +3,12 @@ interfaces.md §Arbiter, data_structures.md Q1/D6).
 
 The `Future` submit returns IS the Arbiter → Poser transport: the Poser
 parks a file on it and `poll`/`fold_done`/`settle` fold the answer back in.
-Extraction of today's `arbiter_pool` (classify_stls.py:1079-1080): windowing
+Extraction of main's `arbiter_pool` (main:classify_stls.py:1079-1080): windowing
 is the pool's `max_workers` — at most `workers` calls in flight, queued
 submissions start as workers free up. Rate limiting is a minimum
 start-to-start spacing between calls, enforced on the worker thread so
 `submit` never blocks (interfaces invariant 5: no module blocks on the
-Arbiter). Today's pool has no spacing, so `min_interval=0.0` is the
+Arbiter). Main's pool has no spacing, so `min_interval=0.0` is the
 extracted default.
 
 Instrumentation is *injected*, never imported: `wrap` is applied around every
@@ -16,8 +16,8 @@ call on the worker path and the driver passes `instrument.arbiter_call` there
 at wiring (C-R1-2), so this module keeps its stdlib-only import list and the
 metrics stay the driver's choice.
 
-`shutdown` draws the queued-vs-running distinction today's comment does
-(classify_stls.py:1238-1241): queued futures are cancelled (unbilled work,
+`shutdown` draws the queued-vs-running distinction main's comment does
+(main:classify_stls.py:1238-1241): queued futures are cancelled (unbilled work,
 and a free worker must not pick up a new call mid-abort); calls already
 running are not cancellable, and their non-daemon threads are joined by
 `concurrent.futures`' atexit hook regardless (I7) — which is exactly why the

@@ -17,8 +17,11 @@ That idle is **not** render and embed contending for one card. Measured: Open3D
 brings up EGL headless on `/dev/dri/renderD129`, which is `amdgpu` — the Phoenix1
 integrated GPU. The 4060 is `renderD128`/`nvidia`. Rendering is hardware
 accelerated, just on the iGPU, and the 30% on the 4060 is SigLIP by itself. See
-[Devices](#devices). Mesh loading is not part of the gap either:
-`MeshPrefetcher` already overlaps it (see Loader below).
+[Devices](#devices). Mesh loading is not part of the gap either: at the time of
+writing `MeshPrefetcher` overlapped it (see Loader below). *(As built: the
+prefetcher is gone. The numpy STL parser took the parse to 11–66 ms and the
+render child loads each mesh inline — see [What the spikes
+changed](#what-the-spikes-changed) and the migration notes.)*
 
 The structural win stands on its own. Hard stage boundaries are what make it
 possible to swap SigLIP for another embedder, or Filament for something we
@@ -42,7 +45,7 @@ reaches back into another's state:
 
 ```
 {"file": Path, "kind": "pose" | "embed", "index": 42,
- "pose": {"up": [0,0,1], "confidence": 0.13, "source": "ensemble",
+ "pose": {"up": [0,0,1], "confidence": 0.13, "source": "siglip",
           "margin": 0.81, "v": 4} | None,
  "mesh": <handle> | None}
 ```
@@ -85,6 +88,12 @@ either the pose just changed or some `<render_key>_view<i>` is missing from the
 render index.
 
 ### Loader
+
+*(As built, none of this section's knobs exist: the render child loads each
+mesh inline and keeps a byte-budgeted resident LRU — one number,
+`RenderConfig.budget_bytes`. Read the rest of the section as the reasoning
+that produced that, not as the shape of the code; the migration notes carry
+the mapping.)*
 
 * Uses up to [loader_worker_count=4] workers to load meshes.
 * Passes along kind and pose metadata to the `Renderer`.
@@ -157,8 +166,11 @@ Two things remain unresolved and gate on
    normals, int32 triangles — to be confirmed by the spike), so 4GiB is ~27 heavy
    meshes, and four workers cannot usefully run that far ahead of a consumer that
    eats one at a time. Read the cap as a memory *bound* rather than a tuning
-   knob, the same way `MeshPrefetcher`'s depth is; the useful depth is set by p99
-   load time against downstream work, not by bytes.
+   knob, the same way `MeshPrefetcher`'s depth was; the useful depth is set by p99
+   load time against downstream work, not by bytes. *(As built, this is the one
+   surviving knob and it reads exactly that way: `RenderConfig.budget_bytes`, a
+   soft byte bound on the child's resident meshes, with the hard worst case set
+   by the admission window instead.)*
 
 ### Renderer
 
@@ -332,16 +344,19 @@ actors are daemon threads joined with a timeout, so one wedged actor cannot take
 the pose cache down with it. This preserves today's guarantee that an interrupted
 run keeps its (expensive) pose resolutions.
 
-Three defects were listed here; two have since been fixed in the current code
-(review D2) and one remains:
+Three defects were listed here; all three are now closed:
 
 * ~~Ctrl-C loses the CSV entirely~~ — **fixed**: the write now runs inside the
   `finally` chain that attempts all three artifacts even when another's write
-  raises (`classify_stls.py:1134-1169`).
-* **`save_pose_cache` is a bare `write_text`** and runs on every shutdown
+  raises (`main:classify_stls.py:1134-1169`, and `Done.flush` on this branch).
+* ~~**`save_pose_cache` is a bare `write_text`**, and it runs on every shutdown
   including Ctrl-C. A kill mid-write corrupts the most expensive artifact we
   have — re-resolving it means 24 candidate renders per model plus ~$0.30 of
-  Gemini calls. Write to temp + `os.replace`. **Still open.**
+  Gemini calls.~~ — **landed** (`src/done.py`, `Done.flush`): the pose cache is
+  written to `pose-cache.json.tmp` and `os.replace`d, first of the two writes,
+  with a `finally` that unlinks the temp so a failed replace strands nothing
+  (E-R1-2/E-R1-3). `pose.save_pose_cache` still exists for the evals and is
+  still a bare `write_text`; the pipeline no longer goes through it.
 * ~~`np.save` to the embedding cache is non-atomic~~ — **handled**: the write
   unlinks its file on `BaseException`, so a truncated `.npy` cannot pass the
   `.exists()` check next run (`classify_stls.py:1086-1092`). Temp +
@@ -357,6 +372,14 @@ conclusions; see [What the spikes changed](#what-the-spikes-changed).
 
 `--instrument PATH` (`instrument.py`) records exclusive per-stage timing plus
 CPU / NVIDIA / amdgpu utilization. Full collection, 602 models at 384px, 2121 s:
+
+*(As built, this table spans two processes. `mesh-load`, `pose-geometry`,
+`pose-render`, `view-render` and `save-renders` are timed in the render child
+and shipped back on `EndOfInput` — the child times, the parent samples, and the
+report prints the child's stages as their own table because a separate process
+overlaps the parent's wall clock rather than consuming it. `mesh-wait` and
+`arbiter-wait` have no successors: the first was the prefetcher's, the second
+is `results-wait` now. F-7.)*
 
 | stage | % wall | | after the STL parser landed (104-model subset) |
 |---|---|---|---|
@@ -428,8 +451,10 @@ thread, with `_shoot`'s line 139 alone at 62% of it; splitting that line
 (`eval/renderer_gil.py`) shows `render_to_image` holding the GIL for ~85–92% of
 its 36–61 ms, while `np.asarray` is free and `Image.fromarray` releases.
 
-Open3D's mesh reader *does* release it — the prefetch thread takes 1% of GIL time
-while being 33% of all samples, which is exactly why `MeshPrefetcher` works.
+Open3D's mesh reader *does* release it — the prefetch thread took 1% of GIL time
+while being 33% of all samples, which is exactly why `MeshPrefetcher` worked.
+(It is gone as built: with the parse at 11–66 ms there was nothing left to hide,
+and the child loads inline.)
 
 So the split is: actors doing native GIL-free work (mesh loading, torch, the
 network arbiter) overlap fine; actors doing **Python-level** work — Cache
@@ -507,14 +532,25 @@ stages Spike 1 says pay for it. This does not foreclose the full version.
 ## Migration notes
 
 * `run_classify.sh` and the other runners invoke `python classify_stls.py`
-  directly and need updating for the `src/` layout.
+  directly and **need no updating** — verified 2026-08-18 against the built
+  branch: `classify_stls.py` is still the entry point, now the CLI rather than
+  the pipeline, and every flag the runners pass (`--out`, `--cache-dir`,
+  `--elevations`, `--render-size`, `--views`, `--pose-vlm`, `--save-renders`)
+  is still parsed there. The `src/` layout is behind that door, which is the
+  point of keeping the door.
 * `pose.py` deliberately never imports `classify_stls` — no rendering or model
-  code in it. Keep that rule when it moves.
-* Existing flags to map: `--prefetch` becomes `loader_worker_count` /
-  `loader_host_cache` / `loader_device_cache`; `--arbiter-workers` becomes the
-  `Arbiter's` window;
-  `--no-defer-arbiter` loses its meaning entirely, since non-blocking deferral is
-  structural here.
+  code in it. It moved to `src/pose.py`; the rule held (CLAUDE.md).
+* Existing flags to map: `--arbiter-workers` becomes the `Arbiter's` window
+  (it did — `Arbiter(workers=...)`); `--no-defer-arbiter` loses its meaning
+  entirely, since non-blocking deferral is structural here (retired, C-R1-4).
+  `--prefetch` was to become `loader_worker_count` / `loader_host_cache` /
+  `loader_device_cache`; **none of those exist as built.** The Loader shrank to
+  an inline `loader.get` in the render child (below), so there are no loader
+  workers to count and no separate host tier to bound, and the one residency
+  knob left is `RenderConfig.budget_bytes` — which is not a flag either: it
+  follows the admission window (`classify_stls.RESIDENT_BUDGET_BYTES`,
+  data_structures.md §residency). `--prefetch` is accepted and inert, kept so
+  the runners' command lines keep parsing.
 * Retired outright (2026-08-17): `--no-up-ensemble` and `--up-conf` — the
   ensemble always runs; C-R1-1 showed the off-mode had no home in the new
   protocol (no message carries the bit, the geometry-only `needs_arbiter`

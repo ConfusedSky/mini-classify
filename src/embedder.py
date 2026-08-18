@@ -1,13 +1,13 @@
 """The Embedder — synchronous, and the only module that owns torch models
 (docs/actor-refactor/interfaces.md §Embedder, actors_proposal.md §Embedder).
 
-Extracted from classify_stls.py with behaviour kept identical: the fp16
+Extracted from main:classify_stls.py with behaviour kept identical: the fp16
 model load (:963-966), `--compile` wrapping the bound `get_image_features`
 and nothing else (:967-974), `embed_raw`/`embed_texts`/`embed_images`
 (:515-550), and the numpy prompt banks (:1040-1046). Same device pick, same
 row-normalisation, same dtypes — so `.float().cpu().numpy()` of an
-`Embedded.embeds` stays byte-compatible with the `.npy` cache today's path
-writes (classify_stls.py:1190).
+`Embedded.embeds` stays byte-compatible with the `.npy` cache main's path
+writes (main:classify_stls.py:1190).
 
 Both public methods block for the forward pass — in v1 that *is* the
 pipeline's pacing, and torch releases the GIL so the render child renders
@@ -18,7 +18,7 @@ conversion is the consumer's business (the Poser does the one
 
 `text_embeds` is read-only after `__init__` (interfaces.md); `up_T`/`down_T`
 are handed to the Poser at wiring, `front_T`/`back_T` to Done for
-`front_view` resolution — plain numpy, exactly as today.
+`front_view` resolution — plain numpy, exactly as in main.
 """
 from __future__ import annotations
 
@@ -27,13 +27,16 @@ from typing import Sequence
 import numpy as np
 import torch
 
+from instrument import stage
 from src import pose
 from src.messages import Embedded, EmbedTilesRequest, EmbedViews, TileEmbeds
 
 DEFAULT_MODEL = "google/siglip2-so400m-patch14-384"
 
-# Category prompt templates (classify_stls.py:54-58). This is the extraction
-# target's copy; the CLI keeps its own until the driver track rewires it.
+# Category prompt templates (main:classify_stls.py:54-58). The one copy since
+# the dedup pass: the CLI's `embed_texts` imports this name rather than keeping
+# its own, and `DEFAULT_MODEL` below is `--model`'s default for the same reason
+# (D-R1-1). tests/test_embedder.py's parity suite pins the two paths equal.
 PROMPT_TEMPLATES = [
     "a 3D render of a {} miniature",
     "a photo of a {} figurine",
@@ -42,7 +45,8 @@ PROMPT_TEMPLATES = [
 
 
 def _as_tensor(feat):
-    """Some transformers versions return a pooled-output wrapper (classify_stls.py:50)."""
+    """Some transformers versions return a pooled-output wrapper
+    (main:classify_stls.py:50)."""
     return feat if isinstance(feat, torch.Tensor) else feat.pooler_output
 
 
@@ -59,7 +63,7 @@ class Embedder:
     def __init__(self, categories: Sequence[str], model_name: str = DEFAULT_MODEL,
                  device: str | None = None, compile_image_forward: bool = False,
                  embed_batch: int = 0):
-        # Same device pick as today (classify_stls.py:960): the 4060 via CUDA.
+        # Same device pick as main (main:classify_stls.py:960): the 4060 via CUDA.
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         from transformers import AutoModel, AutoProcessor  # deferred, as in main()
         self.model = (AutoModel.from_pretrained(model_name, torch_dtype=torch.float16)
@@ -72,16 +76,17 @@ class Embedder:
             # embeddings stay eager; they are not cached per-file.
             self.model.get_image_features = torch.compile(self.model.get_image_features)
         # images per SigLIP call on the view path; 0 = whole list at once
-        # (today's --embed-batch, default 0 — classify_stls.py:1185-1186)
+        # (--embed-batch, default 0 — main:classify_stls.py:1185-1186)
         self.embed_batch = embed_batch
 
-        self._text_embeds = self._embed_texts(categories)
-        # numpy prompt banks (classify_stls.py:1040-1046): row-normalised text
-        # features pulled off the GPU once, at startup.
-        self.up_T = self._embed_raw(pose.UPRIGHT_PROMPTS).float().cpu().numpy()
-        self.down_T = self._embed_raw(pose.TOPPLED_PROMPTS).float().cpu().numpy()
-        self.front_T = self._embed_raw(pose.FRONT_PROMPTS).float().cpu().numpy()
-        self.back_T = self._embed_raw(pose.BACK_PROMPTS).float().cpu().numpy()
+        with stage("text-embed"):   # the startup stage, exclusive of the model
+            self._text_embeds = self._embed_texts(categories)
+            # numpy prompt banks (main:classify_stls.py:1040-1046): row-normalised
+            # text features pulled off the GPU once, at startup.
+            self.up_T = self._embed_raw(pose.UPRIGHT_PROMPTS).float().cpu().numpy()
+            self.down_T = self._embed_raw(pose.TOPPLED_PROMPTS).float().cpu().numpy()
+            self.front_T = self._embed_raw(pose.FRONT_PROMPTS).float().cpu().numpy()
+            self.back_T = self._embed_raw(pose.BACK_PROMPTS).float().cpu().numpy()
 
     @property
     def text_embeds(self) -> torch.Tensor:
@@ -93,8 +98,8 @@ class Embedder:
     def embed_tiles(self, m: EmbedTilesRequest) -> TileEmbeds:
         """Embed the stacked up-candidate tiles, order-preserving.
 
-        Whole stack in one forward, like today's tile path (the score_upright
-        closure at classify_stls.py:1049 never passed --embed-batch); the
+        Whole stack in one forward, like main's tile path (the score_upright
+        closure at main:classify_stls.py:1049 never passed --embed-batch); the
         tensor stays on device — the Poser pulls it off the GPU.
         """
         return TileEmbeds(file=m.file, index=m.index,
@@ -105,12 +110,12 @@ class Embedder:
 
         The tensor stays on device for Done's scoring matmul; Done's
         `.float().cpu().numpy()` of it is the .npy cache write, byte-compatible
-        with today's (classify_stls.py:1190).
+        with main's (main:classify_stls.py:1190).
         """
         return Embedded(file=m.file, index=m.index, pose=m.pose,
                         embeds=self._embed_images(m.views, batch=self.embed_batch))
 
-    # --- the extracted forward passes (classify_stls.py:515-550) ------------
+    # --- the extracted forward passes (main:classify_stls.py:515-550) -------
 
     @torch.no_grad()
     def _embed_raw(self, texts: Sequence[str]) -> torch.Tensor:

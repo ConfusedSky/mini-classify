@@ -53,10 +53,17 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   models on render size alone. Memory is a wash: both 4.3 GB on disk, 2.19 GB
   resident, differing by 1 MiB of weights; the +40% image tokens cost ~1.02×
   memory and ~24% time. `eval/backbone_sweep.py`, `eval/backbone_memory.py`.
-- **Gate the VLM on the ensemble's margin** — measured. `margin < 0.4` matches
-  the geometry gate's accuracy on 9 calls instead of 24, and stops a weak
-  arbiter from going net negative (haiku@256: 30/44 → 39/44). Still to be
-  *written* — see below. `eval/arbiter_gate.py`.
+- **Gate the VLM on the ensemble's margin** — measured, then ~~still to be
+  *written*~~ **written** (2026-08-17, the actor refactor): the escalation gate
+  is `pose.needs_arbiter_margin(margin, threshold)`, the threshold is
+  `MARGIN_THRESHOLD = 0.45` and `--up-margin` exposes it; `needs_arbiter(ratio,
+  best)` survives only for the geometry-only arm no production path takes. The
+  measurement stands: `margin < 0.4` matched the geometry gate's accuracy on 9
+  calls instead of 24 and stopped a weak arbiter going net negative (haiku@256:
+  30/44 → 39/44). `eval/arbiter_gate.py`. The *pairing* the entry below insists
+  on — adopt it with the four-view ensemble — did **not** ship: `--views` for
+  the up ensemble is still `UP_TILE_AZIMUTHS = 2`, so that half stays open
+  below.
 
 - **Raise the contact sheet to `thumb=512`** — done, with the scaled numerals
   it depends on, now in `pose.make_contact_sheet` rather than only in the eval
@@ -64,12 +71,18 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   barely notices, so the size still belongs in any report of a VLM number.
 - **Wire a Gemini backend into the arbiter** — done. `--pose-vlm gemini`,
   default `gemini-3.5-flash`, ADC auth, project from `--gemini-project` /
-  `$GOOGLE_CLOUD_PROJECT` / `gcloud config`. **`auto` now prefers it**, falling
-  back to ollama and then to no arbiter, because it is the only one that beats
-  the ensemble. It bills per call (~$0.30 per full-collection run at ~120
-  escalations), so the selection is always announced and `--pose-vlm ollama`
-  opts out at 41/44. With the 512 px sheet that local path is net positive too,
-  so the "run with `--pose-vlm off`" advice no longer applies either way.
+  `$GOOGLE_CLOUD_PROJECT` / `gcloud config`. **`auto` now prefers it**, ~~falling
+  back to ollama and then to no arbiter~~ — **gemini or nothing** since
+  2026-08-17 (C-R1-4): the Arbiter is a thread pool with no inline arm, and a
+  pooled ollama call would put gemma on the 4060 beside SigLIP (10.1 s of
+  reload against 0.49 s of inference, CLAUDE.md's hard constraint), so
+  `--pose-vlm ollama` is retired from the CLI and `VlmConfig` refuses the name
+  at construction. `auto` resolves gemini or falls straight to no arbiter;
+  measured cost of dropping the local tier, ~1 model in 44. It bills per call
+  (~$0.30 per full-collection run at ~120 escalations), so the selection is
+  always announced. With the 512 px sheet the local path was net positive too,
+  so the "run with `--pose-vlm off`" advice no longer applies either way — and
+  a serialized-inline ollama mode can return as its own design item.
 - **Should saved renders keep feeding SigLIP?** — no, and they no longer do.
   Embeddings now come from the `.npy` cache or a fresh in-memory render; saved
   renders are debug output living under the config that produced them. That
@@ -83,8 +96,17 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
 
 ## Ready to do — measured, decided, not yet written
 
-- **Gate the arbiter on the ensemble's margin** (`top1 − top2` of
-  `_unit(geo) + _unit(siglip)`) instead of `needs_arbiter(ratio, best)`.
+- ~~**Gate the arbiter on the ensemble's margin**~~ — **shipped 2026-08-17**
+  as `--up-margin` / `needs_arbiter_margin` (see the settled entry above); at
+  `MARGIN_THRESHOLD = 0.45`, not the 0.4 this entry proposed — the 0.45 re-read
+  is the `UP_TILE_AZIMUTHS = 2` entry's. The pose-cache migration it says the
+  change needs was **not** run: `POSE_CACHE_VERSION` stayed at 4, so every
+  cached `source: "vlm"` pose still carries an answer decided under the
+  *geometry* gate, and only files re-resolved since escalate under the margin.
+  The rest of this entry is the reasoning that bought it, and the four-view
+  pairing below is still unadopted, which is the part that matters:
+  (`top1 − top2` of `_unit(geo) + _unit(siglip)`) instead of
+  `needs_arbiter(ratio, best)`.
   Threshold 0.4 picked on `orig`; holdout 19/21 against the geometry gate's
   20/21, pooled tie at 42/44, on ~20% of the collection instead of ~55%. That
   is 354 arbiter calls down to ~120 per run. It also removes the tier's ability
@@ -363,12 +385,17 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   never render/embed contention. And `py-spy` does *not* need root here —
   `ptrace_scope=1` permits tracing descendants, so `py-spy record -- <cmd>`
   works; only attaching to an unrelated pid needs sudo.
-- **Split the VLM pass from the render pass** in `classify_stls.py`. Measured
-  again this session from the other side: gemma4:26b sits at 6818 MiB resident
-  on a 7834 MiB card, so it and SigLIP (2.2 GB) genuinely cannot coexist. Every
-  harness in `eval/` now phases render → SigLIP → VLM by construction
-  (`common.build_tiles` caches the pixels so the towers never overlap); the
-  production path still interleaves them.
+- ~~**Split the VLM pass from the render pass**~~ in `classify_stls.py` —
+  **closed 2026-08-17 by removal rather than by scheduling.** Measured from the
+  other side: gemma4:26b sits at 6818 MiB resident on a 7834 MiB card, so it and
+  SigLIP (2.2 GB) genuinely cannot coexist. Every harness in `eval/` phases
+  render → SigLIP → VLM by construction (`common.build_tiles` caches the pixels
+  so the towers never overlap), and ~~the production path still interleaves
+  them~~ — the production path no longer has a local VLM to interleave: the
+  Arbiter is a thread pool of *network* calls, and `--pose-vlm ollama` is
+  retired (C-R1-4, entry above). Nothing in the pipeline can put a second model
+  on the 4060 any more, so there is no pass to split. The question returns
+  intact the day a serialized-inline ollama mode is wanted.
 
 - **Should the contact sheet fill its cells?** `make_contact_sheet` uses
   `Image.thumbnail`, which never enlarges, so tiles rendered under
@@ -446,15 +473,34 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   and the evals' contact-sheet grid), and `make_renderer` now delegates to
   `renderer.make_offscreen`.
 
-- **Renders are not reproducible across pose-cache states.** A cold pose cache
-  renders the six up-candidate tiles through the same `OffscreenRenderer` first,
-  and the view renders that follow differ from a warm-cache run by up to 0.0098
-  per embedding component — a fifth of the ~0.03 gap between competing
+- **Renders are not reproducible across pose-cache states** — **and the cause
+  is more general than that** (amended 2026-08-18, the refactor's parity run:
+  LEARNINGS, "old against new"). The original observation: a cold pose cache
+  renders the six up-candidate tiles through the same `OffscreenRenderer`
+  first, and the view renders that follow differ from a warm-cache run by up to
+  0.0098 per embedding component — a fifth of the ~0.03 gap between competing
   categories. Measured on all three test STLs, identical on the old code, so it
   is long-standing rather than new. Every embedding in the live cache was
-  therefore computed in whichever state that file happened to hit. Cheapest
-  honest fix is to warm the renderer the same way on both paths; widening the
-  cache key would only make the irreproducibility explicit, not remove it.
+  therefore computed in whichever state that file happened to hit.
+
+  What the parity run adds: the pose cache is only one way to change the
+  **sequence of draws preceding a view**, and *any* such change moves the
+  pixels. Rendering a model in a three-model batch instead of alone moves its
+  embedding by up to 7.0e-03 per component and its pose margin from 0.0724 to
+  0.0791 with `front_view` 2 → 3 — measured on **unmodified old code**, so this
+  is the renderer, not the refactor. Within one code path *and* one
+  arrangement, both pipelines are bit-reproducible: two identical runs agree on
+  every byte, so the noise floor is exactly zero and the variable is the
+  arrangement alone.
+
+  ~~Cheapest honest fix is to warm the renderer the same way on both paths~~ —
+  there are not two paths to equalise. A fix has to make the renderer's output
+  independent of its history, which is `set_post_processing(False)` and the
+  cache-version bumps that come with it (the nondeterminism entry above), or a
+  renderer we control. Widening the cache key still only makes the
+  irreproducibility explicit rather than removing it. Until then: no
+  margin-level claim in this repo survives a change of arrangement, and that
+  now includes batch composition.
 - **Widen the labelled set.** 44 sampled models, ~45% exclusion rate, and the
   decisive comparisons come down to 6 disagreements. Most conclusions in
   LEARNINGS are one or two models from flipping. The `hard` set added since

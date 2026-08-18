@@ -7,6 +7,8 @@ save_renders (K6); EndOfInput flushes stdio then os._exit(0), never
 returning (K2/L4)."""
 import os
 import sys
+from contextlib import nullcontext
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -15,9 +17,9 @@ import pytest
 
 from src import render_child
 from src.loader import LoadedMesh
-from src.messages import (EmbedRenderTask, EmbedViews, EndOfInput, Failure,
-                          PoseRenderTask, PoseTiles, Release, Rendered,
-                          RenderConfig)
+from src.messages import (ChildStages, EmbedRenderTask, EmbedViews, EndOfInput,
+                          Failure, PoseRenderTask, PoseTiles, Release,
+                          Rendered, RenderConfig)
 from src.pose import Pose
 
 POSE = Pose(up=(0.0, 0.0, 1.0), confidence=0.9, source="geometry", v=4)
@@ -62,6 +64,9 @@ class RecordingResults:
         raise AssertionError("child must not recv on results")
 
     recv_nowait = recv
+
+    def flush(self):
+        self.log.append(("results.flush",))
 
     def close(self):
         pass
@@ -320,3 +325,86 @@ def test_end_of_input_flushes_stdio_then_exits_and_never_returns(monkeypatch):
     # both flushes happen, and strictly before os._exit — os._exit skips
     # buffered stdio on a pipe (L4)
     assert log == [("flush", "stdout"), ("flush", "stderr"), ("os._exit", 0)]
+
+
+# --- the instrument reply (F-7) ----------------------------------------------
+
+def test_no_stage_totals_are_sent_when_the_run_is_not_instrumented(monkeypatch,
+                                                                   trap_exit):
+    """Silence is the contract off the flag: the parent waits for this message
+    only under --instrument, so a child that sent one anyway would leave it on
+    the queue, and one that stayed silent under the flag would cost the parent
+    STAGES_S of waiting for nothing."""
+    log = []
+    results = RecordingResults(log)
+    monkeypatch.setattr(render_child, "Renderer", lambda cfg: FakeRenderer(log))
+    monkeypatch.setattr(render_child, "loader", FakeLoader(log))
+    with pytest.raises(ExitCalled):
+        render_child.run_child(ScriptedTasks([EndOfInput()]), results, CFG)
+    assert results.sent == []
+    assert ("results.flush",) not in log
+
+
+def test_the_config_is_what_turns_child_timing_on(monkeypatch, trap_exit):
+    """`--instrument` reaches the child only through RenderConfig — the flag
+    itself is parsed in a process this one never sees. It enables timing and
+    *not* sampling: one nvidia-smi per run belongs to the parent."""
+    calls = []
+    monkeypatch.setattr(render_child.instrument, "enable",
+                        lambda path, **kw: calls.append((path, kw)))
+    log = []
+    monkeypatch.setattr(render_child, "Renderer", lambda cfg: FakeRenderer(log))
+    monkeypatch.setattr(render_child, "loader", FakeLoader(log))
+    with pytest.raises(ExitCalled):
+        render_child.run_child(ScriptedTasks([EndOfInput()]),
+                               RecordingResults(log), CFG)
+    assert calls == []                            # instrument_path=None
+    with pytest.raises(ExitCalled):
+        render_child.run_child(
+            ScriptedTasks([EndOfInput()]), RecordingResults(log),
+            replace(CFG, instrument_path="run.json"))
+    assert calls == [("run.json", {"sample": False})]
+
+
+def test_stage_totals_go_home_flushed_before_the_exit(monkeypatch, trap_exit):
+    """Under --instrument the child times its own stages and ships the totals
+    as the last thing it does — and flushes the queue first, because os._exit
+    drops the feeder's buffer exactly the way it drops stdio's (F-7)."""
+    monkeypatch.setattr(render_child.instrument, "enabled", lambda: True)
+    monkeypatch.setattr(render_child.instrument, "stage_totals",
+                        lambda: (("main", "view-render", 1.5, 2),))
+    log = []
+    results = RecordingResults(log)
+    monkeypatch.setattr(render_child, "Renderer", lambda cfg: FakeRenderer(log))
+    monkeypatch.setattr(render_child, "loader", FakeLoader(log))
+    with pytest.raises(ExitCalled):
+        render_child.run_child(ScriptedTasks([EndOfInput()]), results, CFG)
+    (stats,) = results.sent
+    assert isinstance(stats, ChildStages)
+    assert stats.rows == (("main", "view-render", 1.5, 2),)
+    assert [e[0] for e in log if e[0] in ("send", "results.flush")] \
+        == ["send", "results.flush"]
+    assert trap_exit == [("os._exit", 0)]        # and then, only then, the exit
+
+
+def test_the_child_times_the_stages_the_parent_cannot_see(monkeypatch, trap_exit):
+    """The flag's promise: mesh-load/pose-geometry/pose-render on the pose
+    task, mesh-load/view-render/save-renders on the embed task. These are the
+    stages that moved into another process with the refactor, and nothing in
+    the parent can time them."""
+    timed = []
+    monkeypatch.setattr(render_child, "stage",
+                        lambda name: (timed.append(name), nullcontext())[1])
+    log = []
+    results = RecordingResults(log)
+    monkeypatch.setattr(render_child, "Renderer", lambda cfg: FakeRenderer(log))
+    monkeypatch.setattr(render_child, "loader", FakeLoader(log))
+    f = Path("/c/a.stl")
+    with pytest.raises(ExitCalled):
+        render_child.run_child(
+            ScriptedTasks([PoseRenderTask(f, 0),
+                           EmbedRenderTask(f, 1, POSE, needs_embed=True),
+                           EndOfInput()]),
+            results, CFG)
+    assert timed == ["mesh-load", "pose-geometry", "pose-render",
+                     "mesh-load", "view-render", "save-renders"]

@@ -94,6 +94,19 @@ class Rendered:                    # → Done: the needs_embed=False ack. The
                                    # render-only file (J1/J2/J4)
 
 
+@dataclass(frozen=True)
+class ChildStages:                 # → the parent's instrument, once, in reply
+    rows: tuple                    # to EndOfInput and only under --instrument
+                                   # (F-7). NOT a task result: it carries no
+                                   # file/index because it belongs to no file,
+                                   # and it is sent after quiescence, so the
+                                   # drain has already stopped reading results
+                                   # by the time it exists. `rows` is
+                                   # instrument.stage_totals()' plain tuples —
+                                   # the child must not pickle anything the
+                                   # parent would have to import to unpickle
+
+
 # --- Poser ↔ Embedder (the ensemble) — D5 -----------------------------------
 
 @dataclass(frozen=True)
@@ -140,7 +153,7 @@ class Failure:                     # any stage → Done; becomes a RENDER_ERROR 
     error: str
 
     def to_csv(self) -> dict:
-        # Parity with today's error rows (classify_stls.py:1127, :1169):
+        # Parity with main's error rows (main:classify_stls.py:1127, :1169):
         # DictWriter fills the missing columns.
         return {"file": str(self.file), "top1": f"RENDER_ERROR: {self.error}"}
 
@@ -162,7 +175,7 @@ class Resolved:                    # Poser → driver: this file's pose is settl
                                    # second-call rule, interfaces §route). The
                                    # Poser decides poses, never cache admission
     pose_changed: bool             # true when the fresh source is vlm/siglip
-                                   # (classify_stls.py:1146). The Poser knows
+                                   # (`src/poser.py`'s MOVED_SOURCES). The Poser knows
                                    # the source it just recorded, so it rides
                                    # here and the driver passes it straight to
                                    # route rather than re-deriving it from the
@@ -185,6 +198,11 @@ class RenderConfig:                # handed whole to the child at spawn — it
     render_format: str
     budget_bytes: int
     collection_root: Path
+    instrument_path: str | None = None   # --instrument's path, or None. A str,
+                                         # not a Path or a live handle: the
+                                         # child re-derives its own timing from
+                                         # it (F-7) and everything in here has
+                                         # to survive the pickle (I13)
 
 
 @dataclass                         # NOT frozen — live references, not a message
@@ -214,7 +232,7 @@ class ResultRow:
     top: tuple[tuple[str, float], ...]     # up to 3 of (category, score)
 
     def to_csv(self) -> dict:
-        # Today's CSV columns (classify_stls.py:1261-1262); `index` orders the
+        # Main's CSV columns (main:classify_stls.py:1261-1262); `index` orders the
         # flush, it is not a column.
         d = {"file": self.file, "up": self.up, "pose_conf": self.pose_conf,
              "pose_source": self.pose_source, "front_view": self.front_view}

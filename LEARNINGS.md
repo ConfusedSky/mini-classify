@@ -71,6 +71,14 @@ notes at the bottom are amended in place. Open work is tracked separately in
   residency keeps the parse and pays the ~275 ms upload, and the roundtrip
   spike's 1.11× was always measured on this design.
 
+- [2026-08-18 — old against new: the refactor's parity run](docs/learnings/2026-08-18-old-against-new-parity.md)
+  — the branch measured against `main` on real runs: every cache key, pose,
+  and top-3 ordering matches, and cold single-model runs are byte-identical on
+  two of three models. The differences that remain are the renderer's own —
+  the same old binary differs from itself by as much (7.0e-03) when a model is
+  rendered in company rather than alone, which generalises the pose-cache-state
+  entry to any change in the preceding draw sequence.
+
 ## Evergreen notes
 
 - [Queries and filters](docs/learnings/queries-and-filters.md) — open-set
