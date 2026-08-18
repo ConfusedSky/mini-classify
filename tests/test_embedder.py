@@ -22,6 +22,7 @@ import numpy as np
 import pytest
 import torch
 
+import src.embedder
 from src import pose
 from src.embedder import DEFAULT_MODEL, PROMPT_TEMPLATES, Embedder
 from src.messages import Embedded, EmbedTilesRequest, EmbedViews, TileEmbeds
@@ -197,7 +198,10 @@ def test_gpu_parity_with_old_path():
     categories = ["dragon", "terrain"]
     emb = Embedder(categories)                           # real load, cuda
     assert emb.device == "cuda"
-    assert PROMPT_TEMPLATES == old.PROMPT_TEMPLATES      # the duplicated copy
+    # One copy since the dedup pass: the CLI imports this from src.embedder
+    # rather than keeping its own, so the old cross-copy assertion would now
+    # ask classify_stls for a name it no longer defines (F-1).
+    assert PROMPT_TEMPLATES is src.embedder.PROMPT_TEMPLATES
 
     # -- text parity: category embeddings and the numpy prompt banks
     old_text = old.embed_texts(emb.model, emb.processor, categories, emb.device)
@@ -206,10 +210,18 @@ def test_gpu_parity_with_old_path():
     print(f"\ntext_embeds max|diff| = {text_diff:.3e}")
     assert torch.equal(emb.text_embeds, old_text)
 
-    old_up = old.embed_raw(emb.model, emb.processor, pose.UPRIGHT_PROMPTS,
-                           emb.device).float().cpu().numpy()
-    assert emb.up_T.dtype == old_up.dtype == np.float32
-    assert np.array_equal(emb.up_T, old_up)
+    # All four banks, not just up_T (D-R1-3): each is handed to a different
+    # consumer — up/down to the Poser's ensemble, front/back to Done's
+    # front_view — so a drift in any one of them moves cached results.
+    for name, prompts in (("up_T", pose.UPRIGHT_PROMPTS),
+                          ("down_T", pose.TOPPLED_PROMPTS),
+                          ("front_T", pose.FRONT_PROMPTS),
+                          ("back_T", pose.BACK_PROMPTS)):
+        old_bank = old.embed_raw(emb.model, emb.processor, prompts,
+                                 emb.device).float().cpu().numpy()
+        new_bank = getattr(emb, name)
+        assert new_bank.dtype == old_bank.dtype == np.float32, name
+        assert np.array_equal(new_bank, old_bank), name
 
     # -- image parity: same arrays through both paths
     rng = np.random.default_rng(42)

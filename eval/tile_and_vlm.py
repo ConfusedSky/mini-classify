@@ -26,7 +26,8 @@ from pathlib import Path
 
 from common import OUT, AX, IDX, load_labels, mark, score  # puts REPO on sys.path
 
-import classify_stls as C, pose
+import classify_stls as C
+from src import pose
 from transformers import AutoModel, AutoProcessor
 
 D = OUT / "siglip_up"
