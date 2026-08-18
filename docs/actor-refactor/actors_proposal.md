@@ -515,5 +515,13 @@ stages Spike 1 says pay for it. This does not foreclose the full version.
   `Arbiter's` window;
   `--no-defer-arbiter` loses its meaning entirely, since non-blocking deferral is
   structural here.
+* Retired outright (2026-08-17): `--no-up-ensemble` and `--up-conf` — the
+  ensemble always runs; C-R1-1 showed the off-mode had no home in the new
+  protocol (no message carries the bit, the geometry-only `needs_arbiter`
+  gate had nowhere to live) and the flag was chosen for retirement over
+  implementation. `--pose-vlm ollama` — `VlmConfig` rejects it at
+  construction; the pool has no inline arm and ollama+SigLIP never share
+  the 4060 (CLAUDE.md). A serialized-inline ollama mode can return as its
+  own design item.
 * `--up-axis z|y` is the one path that can skip the pose cache lookup, and the
   Cache Checker should keep that shortcut.

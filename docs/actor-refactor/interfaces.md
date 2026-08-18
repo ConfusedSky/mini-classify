@@ -17,6 +17,9 @@ unpins a resident mesh when retirement happens parent-side (K1).** Types
 named
 here are data_structures.md's, including the driver-side shapes it now
 carries (`RenderConfig`, `CacheContext`, `Redraw`, `Retired`, `EndOfInput`).
+Implementation-round findings (2026-08-17: `B-R1-*`, `C-R1-*`, `D-R1-*`,
+and the pending `A-R1-*`/`E-R1-*`) resolve through
+[docs/reviews/2026-08-17-wave1-implementation.md](../reviews/2026-08-17-wave1-implementation.md).
 
 Everything below is the v1 form: sequential driver, one renderer subprocess.
 Where a signature exists only so the threaded successor can slot a queue in
@@ -68,7 +71,7 @@ imports open3d too — import only; no renderer is ever created parent-side.)
 │ parent is a function     │ | EndOfInput         │      │ LoadedMesh           │
 │ call — the next diagram  │                      │      ▼                      │
 │                          │  results (bounded)   │  renderer.pose_tiles /      │
-│                          │ ◀────────────────────┤  renderer.views (up in cam) │
+│                          │ ◀────────────────────┤  renderer.views (rot. copy) │
 │                          │ PoseTiles(geo,tiles) │  save renders (child owns)  │
 │                          │ | EmbedViews         │      │                      │
 │                          │ | Rendered | Failure │  resident LRU (bytes)       │
@@ -98,13 +101,15 @@ arrow above) and `done.on` (rows and retirement — not always both; the
                 embedder.embed_tiles
                      │ TileEmbeds
                      ▼
-                poser.on_tile_embeds ─┬─ EmbedRenderTask ──────────▶ tasks.send
-                                      ├─ Retired ──────────────────▶ done.on
+                poser.on_tile_embeds ─┬─ Resolved ─▶ route(f, i) again — the
+                                      │             pose store is warm now, so
+                                      │             the warm-.npy + redraw arms
+                                      │             above apply (parity)
                                       └─ None — parked on
                                          arbiter.submit(call) ── Future ──┐
                                                                           │
    poser.poll(), every iteration — resumes parked files ◀─────────────────┘
-        └─▶ EmbedRenderTask ─▶ tasks.send;  Retired | Failure ─────▶ done.on
+        └─▶ Resolved ─▶ route(f, i) again;  Failure ───────────────▶ done.on
 
  done ─▶ Release, every retirement ────────────────────────────────▶ tasks.send
 ```
@@ -159,9 +164,18 @@ class Transport(Protocol):            # src/transport.py
 ### Cache Checker — a pure decision
 
 ```python
-def route(f: Path, index: int, ctx: CacheContext) \
+def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False) \
         -> PoseRenderTask | EmbedRenderTask | CachedHit | Redraw | Retired
 ```
+
+`route` runs twice for a file that needed a fresh pose: once cold
+(→ `PoseRenderTask`), and again on the Poser's `Resolved` — the pose store
+is warm by then, so the same table serves the warm-`.npy` shortcut instead
+of a re-embed (today's post-resolution check, `classify_stls.py:1148-1155`;
+its loss was the regression B's reviewer escalated). `pose_changed` is the
+driver's one extra input on that second call — true when the fresh source
+is `vlm`/`siglip` — and the renders-wanted arm treats it like missing
+renders: the redraw is forced even when the render set is complete.
 
 `CacheContext` (shape in data_structures.md) bundles what today is closure
 state: the pose store, embeds dir, render index, parsed args. `route`
@@ -191,17 +205,22 @@ terminates it. Conventions:
 * `PoseRenderTask` → `loader.get` → `up_axis_scores` → `renderer.pose_tiles`
   → `PoseTiles(geo_scores, tiles)`. The geometry evidence crosses with the
   tiles because the mesh does not.
-* `EmbedRenderTask` → `renderer.views(lm, pose.up)` — up-rotation in the
-  camera, never `mesh.rotate`. **This is a precondition to verify while
-  building `renderer.views`, not a settled fact** (I11): the proposal's
-  Spike 3 lists it first among the unmeasured, and the roundtrip spike that
-  produced the residency numbers *rotated held meshes*
-  (`eval/overlap_spike.py:101-103`) — `R.T` is proven pixel-identical only
-  for the tile grid at one elevation, and the classification views are
-  8 azimuths × 2 elevations. Build `renderer.views`, then check it
-  pixel-identical against `mesh.rotate` across the full view set (the
-  harness pattern exists in `eval/render_determinism.py`); residency is
-  inert without it. `needs_embed=False` → save renders, then send
+* `EmbedRenderTask` → `renderer.views(lm, pose.up)` — **`mesh.rotate` on a
+  copy of the resident mesh, never in the camera** (I11 resolved
+  2026-08-17, reversing this note's draft rule). Measured:
+  `eval/views_camera_rotation.py` compared camera-carried rotation against
+  `mesh.rotate` over the full view set (3 STLs × 6 ups × 16 views) and
+  found max 75/255 differences on half the pixels under the production
+  config, against a 2/255 repeat floor — the IBL fill light is
+  world-fixed and this Open3D build cannot rotate it, so camera rotation
+  changes what the fill illuminates and would shift embeddings under
+  existing cache keys. Rotating a *copy* keeps every cache entry valid and
+  keeps residency's real win — the parse+load is still saved; the revisit
+  pays the ~275 ms re-upload (Spike 3's measurement). The resident
+  original is never mutated. `pose_tiles` keeps the camera rotation: the
+  pose path has always rendered that way in production, and the pose
+  cache's provenance is camera-rotated tiles. `needs_embed=False` → save
+  renders, then send
   **`Rendered(file, index)`** — the retirement ack (§P2.3), sent strictly
   **after** `save_renders` returns (K6): "quiescence means the child is
   idle" and the untimed join both rest on the ack being last. The child's
@@ -243,8 +262,8 @@ class Poser:
                                        # not a bool predicate
     def __init__(self, up_T, down_T, arbiter: Arbiter, record_pose, vlm_cfg): ...
     def on_tiles(self, m: PoseTiles) -> EmbedTilesRequest
-    def on_tile_embeds(self, m: TileEmbeds) -> EmbedRenderTask | Retired | None
-    def poll(self) -> list[EmbedRenderTask | Retired | Failure]   # J3; O5
+    def on_tile_embeds(self, m: TileEmbeds) -> Resolved | None
+    def poll(self) -> list[Resolved | Failure]                    # J3; O5
     def fold_done(self) -> int         # abort step 1: fold every ALREADY-resolved
                                        # future. No wait, so no exposure. What it
                                        # leaves in `parked` is the wait's size
@@ -259,15 +278,17 @@ class Poser:
 * `on_tile_embeds` pulls the tensor off the GPU (the one
   `.float().cpu().numpy()`), runs `upright_scores` → `combine_up`, records
   the resolved `Pose` through `record_pose` — **`Done`'s write API, not a
-  dict reference** (I9) — and returns one of three things: the
-  `EmbedRenderTask` (embeds or renders wanted), `Retired` (`--skip-embed`
-  and no renders wanted — pose resolution was the whole job, Q2), or `None`
+  dict reference** (I9) — and returns `Resolved(file, index)`, or `None`
   having parked the file on a submitted arbiter `Future` (Q1 of the
-  data-structures review: the `Future` *is* the transport).
-* `poll() -> list[EmbedRenderTask | Retired | Failure]` is called every
-  driver iteration: resolved futures are folded in via `apply_arbiter`
-  semantics; each resumed file yields its task — or `Retired`, under
-  `--skip-embed`. Failed *calls* keep the ensemble's pose; a fold that
+  data-structures review: the `Future` *is* the transport). The driver
+  re-routes every `Resolved` through `route` (the second-call rule there):
+  that is where `EmbedRenderTask`, the warm-`.npy` `CachedHit`/`Redraw`,
+  and Q2's `Retired` now come from — the Poser decides poses, never cache
+  admission.
+* `poll() -> list[Resolved | Failure]` is called every driver iteration:
+  resolved futures are folded in via `apply_arbiter` semantics; each
+  resumed file yields its `Resolved`, re-routed by the driver like any
+  other. Failed *calls* keep the ensemble's pose; a fold that
   itself raises yields `Failure` for that file rather than ending the run
   (J3) — `poll` is its own error boundary, because a raise inside it cannot
   be attributed by the driver.
@@ -280,7 +301,11 @@ class Poser:
   (they raise `CancelledError`); those were queued, never billed.
 * **Abandonment is `settle`'s fallback, not the abort policy** (I15
   narrowed): a parked file that is still unanswered when `timeout` expires
-  keeps the ensemble pose it recorded at park time. That is the floor, and
+  keeps the ensemble pose it recorded at park time. One cross-run
+  consequence, accepted deliberately (C-R1-3): that park-time entry
+  persists, so an escalation abandoned by an abort reads as sufficient on
+  the next run and is not retried — today's unwritten park would have
+  retried it. That is the floor, and
   before this ordering it was also the ceiling — see Shutdown for why every
   in-flight answer was being paid for and then discarded.
 * The contact sheet is built here — `Image.fromarray` over the grid's first
@@ -321,6 +346,8 @@ has no notion of the 300 s transport deadline.
 class Embedder:
     text_embeds: torch.Tensor                     # read-only after __init__
     up_T: np.ndarray; down_T: np.ndarray          # handed to Poser at wiring
+    front_T: torch.Tensor; back_T: torch.Tensor   # handed to Done for
+                                                  #   front_view (D-R1-2)
     def embed_tiles(self, m: EmbedTilesRequest) -> TileEmbeds
     def embed_views(self, m: EmbedViews) -> Embedded
 ```
@@ -619,7 +646,7 @@ driver          child                poser          embedder   arbiter    done
   │                                  │ poll(): Future done ◀──────┘
   │                                  │ fold answer, record_pose ─────────────▶│
   │◀─EmbedRenderTask(pose)───────────┤
-  ├──send──────▶│ views (up in camera; resident hit)
+  ├──send──────▶│ views (rotated copy; resident hit)
   │             ├──EmbedViews────────▶ (driver drain)
   │                                             │ forward
   │                                        Embedded ──────────────────▶│ score,

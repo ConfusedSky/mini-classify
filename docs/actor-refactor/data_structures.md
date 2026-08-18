@@ -7,7 +7,9 @@ calling conventions between the modules that hold them. Revised the same day aga
 [docs/reviews/2026-08-14-data-structures.md](../reviews/2026-08-14-data-structures.md)
 (findings D1–D15); the review's two gating questions are answered inline —
 **Q1: the Arbiter stays a `Future` the Poser holds; Q2: the render child saves
-renders itself.**
+renders itself.** Implementation-round findings (2026-08-17, e.g. the D11
+correction from `B-R1-4`) resolve through
+[docs/reviews/2026-08-17-wave1-implementation.md](../reviews/2026-08-17-wave1-implementation.md).
 
 It describes the form the proposal's own postscript converged on — modules
 under `src/`, frozen per-edge message types, a **sequential driver**, and
@@ -235,6 +237,15 @@ does not apply to it.
 
 ```python
 @dataclass(frozen=True)
+class Resolved:                    # Poser → driver: this file's pose is settled
+    file: Path                     # and recorded. The driver re-routes it
+    index: int                     # through route(f, index, pose_changed=...) —
+                                   # the pose store is warm by then, so the
+                                   # warm-.npy and redraw arms apply (the
+                                   # second-call rule, interfaces §route). The
+                                   # Poser decides poses, never cache admission
+
+@dataclass(frozen=True)
 class Redraw:                      # route's redraw return: both halves of the
     task: EmbedRenderTask          # decision in one value, so a test of route
     hit: CachedHit                 # covers what the driver dispatches (I14)
@@ -251,7 +262,11 @@ class RenderConfig:                # handed whole to the child at spawn — it
 
 @dataclass
 class CacheContext:                # route()'s read-only world: the pose store
-    poses: dict                    # (THE object Done owns, not a copy — route
+    poses: dict                    # values are the on-disk entry DICTS, never
+                                   # Pose objects (D11) — load/save_pose_cache
+                                   # are JSON and route/pose_is_sufficient
+                                   # subscript them.
+                                   # (THE object Done owns, not a copy — route
     embeds_dir: Path | None        # must see this run's resolutions), the
     render_index: dict             # render index, and the parsed args the
     args: argparse.Namespace       # cache keys derive from
@@ -345,11 +360,16 @@ class Pose:
   `from_cache` therefore carries `v` through rather than defaulting it — a
   field default of `POSE_CACHE_VERSION` would stamp unversioned entries as
   freshly resolved and silently defeat that drop rule (D10).
-* **`pose_is_sufficient` stays a module function over `Pose | None`** (D11):
-  it is the miss test, called with a possibly-absent entry
-  (`classify_stls.py:964`, `:1003`), and `None → False` is load-bearing.
-  Absence is the Cache Checker's dict lookup, not `Pose`'s job.
-  `embed_cache_token` can become a method.
+* **`pose_is_sufficient` stays a module function over the raw entry
+  `dict | None`** (D11, corrected 2026-08-17 — B's review proved the
+  earlier `Pose | None` wording wrong: the store holds what
+  `load_pose_cache` returns and `save_pose_cache` `json.dumps`, and both
+  it and `embed_cache_token` subscript entry dicts; a `Pose`-valued store
+  would not serialize). It is the miss test, called with a possibly-absent
+  entry (`classify_stls.py:964`, `:1003`), and `None → False` is
+  load-bearing. Absence is the Cache Checker's dict lookup. `Pose` objects
+  exist at the edges — `Pose.from_cache(entry)` into messages, `to_cache()`
+  back through `record_pose` — never as the store's values.
 * The on-disk pose cache stays JSON dicts; `from_cache`/`to_cache` are the
   only crossing points.
 
