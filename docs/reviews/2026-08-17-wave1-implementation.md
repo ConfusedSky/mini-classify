@@ -276,3 +276,60 @@ cycle). Notes: `typing.get_type_hints(DriverConfig)` would now raise
 (pydantic/typeguard) is ever added; a three-method `Protocol` for
 `child` would state the fake-substitution contract more precisely than
 `BaseProcess` + comment (taste, not correctness).
+
+## Final whole-branch review (2026-08-18, fresh eyes): APPROVE WITH REQUIRED FIXES
+
+A reviewer that saw no individual wave walked the branch diff
+(`main..actor-refactor`) end-to-end and, crucially, *broke things to see
+what the tests caught*. Cold/warm/redraw/forced-axis/skip-embed/SIGINT
+all execute correctly; no message-type mismatch at any hand-off, no arm
+that drops a file, no index retiring twice or not at all. E-R1-1's token
+agreement confirmed end-to-end (forced `--up-axis z` re-run added zero
+`.npy`), and the `Resolved → route` loop proven terminating
+(`combine_up` always writes a margin, so the second call is always
+sufficient).
+
+**Fixed same day**: F-1 (MAJOR) the GPU suite had been failing since the
+dedup pass — its parity test asserted a `classify_stls.PROMPT_TEMPLATES`
+the dedup removed, so the branch's only bitwise embedding guard was
+itself dead (parity intact; the guard was not). F-2 (MAJOR)
+`eval/tile_and_vlm.py` still imported the top-level `pose` wave 0 moved
+— the one file its 22-script sweep missed.
+
+**Open, all minor**: F-3 invariant 5 (never block on a send / never a
+blocking recv holding dispatchable work) has no test behind it —
+`maxsize=1` on `tasks` and `drain(block=False)→True` both pass all 395,
+because `FakeResults.recv is recv_nowait`; F-4 dead
+`classify_stls.save_renders` (module-function vs method, which the dedup
+AST sweep could not see); F-5/F-6 docstrings claiming no-copies and
+not-yet-rewired; F-7 `--instrument` lost every child-side stage (the
+child never calls `instrument.enable()`), so the flag's help and the
+proposal's stage table promise attribution the code no longer produces;
+F-8 47 `classify_stls.py:NNNN` citations are stale (40 past EOF, 7
+landing on unrelated code — the dangerous kind), all correct against
+`main:classify_stls.py`; F-9/F-10/F-11 design notes, OPEN_QUESTIONS and
+`--pose-vlm-model` help contradicted by the shipped code; F-12 latent
+`args.up_conf` read in `resolve_up`, reachable only from a caller that
+supplies its own namespace.
+
+**Invariant audit** — the value of the exercise was finding which
+invariants are prose rather than pinned. Strongly pinned: 1 (retire
+exactly once, though the headline test survived all four breaks — the
+real coverage is in the boundary tests), 2, 3a, 4, 5c. **Not pinned**:
+3b (Poser writes the store only via `record_pose` — true by
+construction, untestable from outside), 3c (a *consistent* second writer
+to `Admission.retired` passes), 3d (a genuine second writer to
+`Done.rows` passes), 5a/5b (F-3).
+
+**Riding notes resolved**: E-R1-5 verified closed by the dedup pass;
+D-R1-3 closed with F-1's fix; D-R1-4 closed (the docstring exists);
+C-R2-3 still correctly deferred (`min_interval` has no CLI surface, so
+the paced branch is unreachable in production); M4's optimism confirmed
+self-correcting by execution; the `pose_changed` SigLIP-confirmation
+quadrant still unpinned but right by construction.
+
+**Behavioural note, not a finding**: after `fail_outstanding`, a parked
+file's fold can re-route to a `CachedHit` whose row overwrites the
+`Failure` already written for it — the reverse of K5, and arguably an
+improvement (the row is a real score from a real cached embedding).
+Recorded so nobody rediscovers it as a bug.
