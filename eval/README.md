@@ -38,8 +38,25 @@ What changed to make that true: the harnesses used to import `classify_stls`'
 `render_views`, `resolve_up` and `embed_images` — a single-process
 re-arrangement of the same maths kept in the CLI *for them*, which had
 measurably drifted from what shipped. `eval/rig.py` replaced it with the
-production objects; those six (plus `_shoot`/`_upload`) leave `classify_stls`
-in phase 2. Nothing under `eval/` imports them any more.
+production objects; those six (plus `_shoot`/`_upload`) were deleted from
+`classify_stls.py` in phase 2 (2026-08-18) and no longer exist anywhere.
+
+**No harness imports `classify_stls` at all now.** What they used to reach for
+through it, they import from the module that owns it:
+
+| was | is |
+|---|---|
+| `classify_stls.add_cache_args` / `apply_run_params` / `cache_root` / `cache_key` / `load_file_list` / `embeds_dir` / `renders_dir` / `render_index` / `load_run_params` | `src.cachedir` |
+| `classify_stls.render_key` / `DEFAULT_ELEVATIONS` / `cache_key_from_identity` | `src.identity` |
+| `classify_stls.as_tensor` / `embed_raw` / `embed_texts` | `src.embedder` |
+| `classify_stls.pool_sims` | `src.done` |
+| `classify_stls.RENDER_FORMATS` and the camera/light constants | `src.renderer` |
+| `classify_stls.read_binary_stl` / `load_mesh` | `src.loader` |
+| `classify_stls.view_config` | `src.cachedir` |
+
+The point of the table is that each of those names has exactly one home, and a
+harness now names it. `classify_stls.py` imports from these modules like any
+other consumer and exports nothing.
 
 Two harness-only dependencies are worth knowing about, because both point at
 something production no longer has:

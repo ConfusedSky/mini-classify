@@ -44,7 +44,8 @@ from common import OUT  # puts REPO on sys.path
 import torch
 import rig
 from src import pose
-from classify_stls import add_cache_args, apply_run_params, as_tensor
+from src.cachedir import add_cache_args, apply_run_params
+from src.embedder import as_tensor
 
 PINNED = ("32mm_Pipe5",)
 

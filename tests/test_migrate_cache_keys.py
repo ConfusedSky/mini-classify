@@ -9,9 +9,9 @@ from PIL import Image
 
 from src import identity
 from src import pose
-from classify_stls import (CACHE_VERSION, EMBEDS_SUBDIR, RENDERS_SUBDIR,
-                           cache_key, cache_key_from_identity, cache_version,
-                           render_key, require_cache_version)
+from src.cachedir import (CACHE_VERSION, EMBEDS_SUBDIR, RENDERS_SUBDIR,
+                          cache_key, cache_version, require_cache_version)
+from src.identity import cache_key_from_identity, render_key
 from migrate_cache_keys import (old_cache_key, old_embed_cache_token,
                                 old_identity, old_render_key, plan_embeds,
                                 plan_poses, plan_renders, plan_token_moves,

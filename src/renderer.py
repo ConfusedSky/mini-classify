@@ -39,12 +39,14 @@ Hard constraints this module is built around (CLAUDE.md):
 
 Rendering extraction source: `classify_stls.py` (make_renderer, orbit_camera,
 view_angles, render_up_candidate_grid's camera trick, save_renders,
-RENDER_FORMATS). This module is now the one home for all of it: the CLI's
-eval-facing render path imports `orbit_camera`, `view_angles`,
-`rotation_to_z_up`, `rotated_cams`, `make_offscreen` and the light/tile
-constants from here rather than keeping copies, and `render_key` moved down to
-`identity` (the parent's cache checker needs it too). The child owns saving
-renders (data_structures Q2): the pixels are already in its memory.
+RENDER_FORMATS). This module is now the one home for all of it — the CLI's
+parallel single-process render path was deleted in the eval-debt cleanup
+(2026-08-18) and `eval/rig.py` drives the `Renderer` below instead — and
+`render_key` moved down to `identity` (the parent's cache checker needs it
+too). The child owns saving renders (data_structures Q2): the pixels are
+already in its memory. The CLI still reads `RENDER_FORMATS` for
+`--render-format`'s choices, inside `main()` so that its module scope stays
+open3d-free (interfaces.md's import table).
 """
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -139,9 +141,9 @@ def rotated_cams(R, center, radius, angles):
 
     Exact as *framing* when R is a signed axis permutation — the rotated AABB
     is the permuted box, so its centre is R @ center and the framing radius is
-    unchanged — which is why the pose path (`_shoot_rotated`, and the evals'
-    `classify_stls.render_up_candidate_grid`) can shoot six candidate ups from
-    one upload. Exact as *framing*, not as pixels: the ambient fill is
+    unchanged — which is why the pose path (`_shoot_rotated`) can shoot six
+    candidate ups from one upload. Exact as *framing*, not as pixels: the
+    ambient fill is
     world-fixed, which is why the classification views rotate a copy of the
     mesh instead (I11, module docstring)."""
     c_rot = R @ center
@@ -156,10 +158,8 @@ def make_offscreen(size):
     """The one `OffscreenRenderer`, scene rig included (key light from above
     plus ambient fill — meshes are rotated into Z-up world space before
     rendering, so the rig is correct for any --up-axis choice). Module-level so
-    tests can substitute a fake without touching the GPU, and public because
-    the evals' single-process path builds the same rig through
-    `classify_stls.make_renderer`. The returned renderer is kept for the
-    process lifetime and never destroyed (CLAUDE.md)."""
+    tests can substitute a fake without touching the GPU. The returned renderer
+    is kept for the process lifetime and never destroyed (CLAUDE.md)."""
     renderer = rendering.OffscreenRenderer(size, size)
     scene = renderer.scene.scene
     renderer.scene.set_background([1.0, 1.0, 1.0, 1.0])

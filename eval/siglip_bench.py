@@ -39,8 +39,8 @@ from PIL import Image
 
 from common import OUT  # puts REPO on sys.path
 
-import classify_stls as C          # as_tensor + embed_texts, the CLI's own
 import rig
+from src.embedder import as_tensor, embed_texts
 
 # The production `Embedder`, built in main(). Module-level because every phase
 # below takes (model, processor, device) from the days when the forward was a
@@ -218,7 +218,7 @@ def sweep(model, processor, imgs, device, results):
 
                 @torch.no_grad()
                 def fwd():
-                    feat = C.as_tensor(model.get_image_features(pixel_values=pv))
+                    feat = as_tensor(model.get_image_features(pixel_values=pv))
                     return torch.nn.functional.normalize(feat, dim=-1)
 
                 clk = sm_clock()
@@ -314,7 +314,7 @@ def overlap_test(model, processor, imgs, device, results, batch=VIEW_TILES, call
     def inline():
         for b in lists:
             pv = processor(images=b, return_tensors="pt").to(device)["pixel_values"]
-            torch.nn.functional.normalize(C.as_tensor(
+            torch.nn.functional.normalize(as_tensor(
                 model.get_image_features(pixel_values=pv)), dim=-1)
 
     @torch.no_grad()
@@ -328,7 +328,7 @@ def overlap_test(model, processor, imgs, device, results, batch=VIEW_TILES, call
                     nxt = lists[i + 1]
                     fut = ex.submit(lambda b=nxt:
                                     processor(images=b, return_tensors="pt")["pixel_values"])
-                torch.nn.functional.normalize(C.as_tensor(
+                torch.nn.functional.normalize(as_tensor(
                     model.get_image_features(pixel_values=pv)), dim=-1)
 
     inline(), prefetched()
@@ -365,7 +365,7 @@ def drift_test(model, processor, imgs, device, results, batch=VIEW_TILES):
     print("\n-- compile drift against real category decisions --")
     cats = [l.strip() for l in open(Path(__file__).resolve().parent.parent
                                     / "categories.txt") if l.strip()]
-    text = C.embed_texts(model, processor, cats, device).float()
+    text = embed_texts(model, processor, cats, device).float()
 
     @torch.no_grad()
     def embed_all(fn):
@@ -374,7 +374,7 @@ def drift_test(model, processor, imgs, device, results, batch=VIEW_TILES):
             chunk = imgs[i:i + batch]
             pv = processor(images=chunk, return_tensors="pt").to(device)["pixel_values"]
             out.append(torch.nn.functional.normalize(
-                C.as_tensor(fn(pixel_values=pv)), dim=-1).float())
+                as_tensor(fn(pixel_values=pv)), dim=-1).float())
         return torch.cat(out)
 
     a = embed_all(model.get_image_features)
@@ -423,7 +423,7 @@ def prefetch_duty(model, processor, imgs, device, results, chunk=8, cycles=8,
             if nxt:
                 fut = ex.submit(lambda b=nxt:
                                 processor(images=b, return_tensors="pt")["pixel_values"])
-            out.append(C.as_tensor(model.get_image_features(pixel_values=pv)))
+            out.append(as_tensor(model.get_image_features(pixel_values=pv)))
         feat = out[0] if len(out) == 1 else torch.cat(out)
         return torch.nn.functional.normalize(feat, dim=-1)
 
@@ -496,7 +496,7 @@ def compile_test(model, processor, imgs, device, results, batch=None,
 
     @torch.no_grad()
     def eager():
-        feat = C.as_tensor(model.get_image_features(pixel_values=pv))
+        feat = as_tensor(model.get_image_features(pixel_values=pv))
         return torch.nn.functional.normalize(feat, dim=-1)
 
     ref = eager().float().clone()
@@ -507,7 +507,7 @@ def compile_test(model, processor, imgs, device, results, batch=None,
 
     @torch.no_grad()
     def compiled():
-        feat = C.as_tensor(fn(pixel_values=pv))
+        feat = as_tensor(fn(pixel_values=pv))
         return torch.nn.functional.normalize(feat, dim=-1)
 
     t0 = time.perf_counter()

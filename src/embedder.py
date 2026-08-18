@@ -19,6 +19,13 @@ conversion is the consumer's business (the Poser does the one
 `text_embeds` is read-only after `__init__` (interfaces.md); `up_T`/`down_T`
 are handed to the Poser at wiring, `front_T`/`back_T` to Done for
 `front_view` resolution — plain numpy, exactly as in main.
+
+The two text passes are also exported unbound (`as_tensor`, `embed_raw`,
+`embed_texts`), because the REPL and the eval harnesses embed one-off text
+against a model they loaded themselves. Those free functions came here from
+`classify_stls.py` in the eval-debt cleanup, and the methods now delegate to
+them — so the CLI holds no embedding code at all and there is one arrangement
+of each forward rather than two pinned equal by a parity suite.
 """
 from __future__ import annotations
 
@@ -33,10 +40,10 @@ from src.messages import Embedded, EmbedTilesRequest, EmbedViews, TileEmbeds
 
 DEFAULT_MODEL = "google/siglip2-so400m-patch14-384"
 
-# Category prompt templates (main:classify_stls.py:54-58). The one copy since
-# the dedup pass: the CLI's `embed_texts` imports this name rather than keeping
-# its own, and `DEFAULT_MODEL` below is `--model`'s default for the same reason
-# (D-R1-1). tests/test_embedder.py's parity suite pins the two paths equal.
+# Category prompt templates (main:classify_stls.py:54-58). The one copy: every
+# templated query in the project goes through `embed_texts` below, and
+# `DEFAULT_MODEL` above is `--model`'s default for the same reason (D-R1-1) —
+# `src/cachedir.py`'s `add_cache_args` imports it from here.
 PROMPT_TEMPLATES = [
     "a 3D render of a {} miniature",
     "a photo of a {} figurine",
@@ -44,10 +51,41 @@ PROMPT_TEMPLATES = [
 ]
 
 
-def _as_tensor(feat):
+def as_tensor(feat):
     """Some transformers versions return a pooled-output wrapper
     (main:classify_stls.py:50)."""
     return feat if isinstance(feat, torch.Tensor) else feat.pooler_output
+
+
+# --- the text passes as free functions --------------------------------------
+#
+# The Embedder's methods below *are* these, bound to the model it owns. They
+# also exist unbound because the REPL (`test_categories.py`) and four eval
+# harnesses hold their own model+processor — loaded for their own reasons, with
+# their own device — and want one text embedding, not a pipeline stage. That
+# pair used to be a genuine second copy living in `classify_stls.py`, kept in
+# step by tests/test_embedder.py's parity suite; now the methods delegate here,
+# so there is one arrangement of the forward and the suite has nothing left to
+# diverge.
+
+@torch.no_grad()
+def embed_raw(model, processor, texts, device):
+    """Embed raw text strings (no category templates), row-normalized."""
+    inputs = processor(text=list(texts), padding="max_length",
+                       return_tensors="pt").to(device)
+    feat = as_tensor(model.get_text_features(**inputs))
+    return torch.nn.functional.normalize(feat, dim=-1)  # (n_texts, dim)
+
+
+@torch.no_grad()
+def embed_texts(model, processor, categories, device):
+    """Category embeddings: each category through PROMPT_TEMPLATES, averaged."""
+    embeds = []
+    for cat in categories:
+        prompts = [t.format(cat) for t in PROMPT_TEMPLATES]
+        feat = embed_raw(model, processor, prompts, device).mean(0)
+        embeds.append(torch.nn.functional.normalize(feat, dim=-1))
+    return torch.stack(embeds)  # (n_categories, dim)
 
 
 class Embedder:
@@ -117,22 +155,13 @@ class Embedder:
 
     # --- the extracted forward passes (main:classify_stls.py:515-550) -------
 
-    @torch.no_grad()
     def _embed_raw(self, texts: Sequence[str]) -> torch.Tensor:
-        """Embed raw text strings (no category templates), row-normalized."""
-        inputs = self.processor(text=list(texts), padding="max_length",
-                                return_tensors="pt").to(self.device)
-        feat = _as_tensor(self.model.get_text_features(**inputs))
-        return torch.nn.functional.normalize(feat, dim=-1)  # (n_texts, dim)
+        """`embed_raw` bound to this Embedder's model, processor and device."""
+        return embed_raw(self.model, self.processor, texts, self.device)
 
-    @torch.no_grad()
     def _embed_texts(self, categories: Sequence[str]) -> torch.Tensor:
-        embeds = []
-        for cat in categories:
-            prompts = [t.format(cat) for t in PROMPT_TEMPLATES]
-            feat = self._embed_raw(prompts).mean(0)
-            embeds.append(torch.nn.functional.normalize(feat, dim=-1))
-        return torch.stack(embeds)  # (n_categories, dim)
+        """`embed_texts` bound to this Embedder's model, processor and device."""
+        return embed_texts(self.model, self.processor, categories, self.device)
 
     @torch.no_grad()
     def embed_images(self, images: Sequence[np.ndarray], batch: int = 0) -> torch.Tensor:
@@ -153,7 +182,7 @@ class Embedder:
         for i in range(0, len(images), batch):
             inputs = self.processor(images=images[i:i + batch],
                                     return_tensors="pt").to(self.device)
-            out.append(_as_tensor(self.model.get_image_features(**inputs)))
+            out.append(as_tensor(self.model.get_image_features(**inputs)))
         feat = out[0] if len(out) == 1 else torch.cat(out)
         return torch.nn.functional.normalize(feat, dim=-1)
 

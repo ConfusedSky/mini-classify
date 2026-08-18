@@ -1,6 +1,6 @@
 """What a model's filename says about it.
 
-One vocabulary, shared by the collection walk (`classify_stls.find_stls`) and
+One vocabulary, shared by the collection walk (`src.cachedir.find_stls`) and
 the archive unpacker (`unpack_models.py`), because they ask the same question
 about the same names — "is this the plain model, or a variant we do not
 classify?" — and had already drifted apart answering it separately.

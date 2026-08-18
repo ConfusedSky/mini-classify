@@ -76,8 +76,9 @@ class ParkedFile:
 @dataclass
 class VlmConfig:
     """Everything the Poser needs to build one arbiter call — and nothing
-    more. The call construction is the `ask_vlm_up` closure inside
-    `classify_stls.resolve_up`. No run-mode flags: `skip_embed`/`save_renders`
+    more. The call construction came from the `ask_vlm_up` closure inside
+    the CLI's old `resolve_up` (deleted 2026-08-18; this is the only
+    arrangement of it now). No run-mode flags: `skip_embed`/`save_renders`
     lived here only to pick EmbedRenderTask-vs-Retired, and that decision is
     `route`'s again (the second-call rule), so the Poser no longer needs to
     know what mode the run is in."""
@@ -133,8 +134,8 @@ class Poser:
         """Run the ensemble and return `Resolved` for the driver to re-route,
         or None having parked the file on a submitted arbiter Future.
 
-        The ensemble is `classify_stls.resolve_up`'s — still there as the
-        evals' single-process arrangement of the same tiers — with the
+        The ensemble is the CLI's old `resolve_up`'s, and now the only one
+        (that single-process arrangement was deleted 2026-08-18), with the
         geometry half already computed child-side: rank geo_scores, average
         SigLIP's upright margin per candidate, combine, and record which tier
         *moved* the answer. The resolved pose is recorded through record_pose

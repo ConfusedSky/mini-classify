@@ -11,7 +11,10 @@ more broadly than it was true:
   second copy of either forward. (Until 2026-08-18 there was: the harnesses
   called `classify_stls`' `make_renderer`/`render_up_candidate_grid`/
   `embed_images`, a single-process re-arrangement of the same maths that had
-  measurably drifted from what shipped.)
+  measurably drifted from what shipped. Those functions have since been
+  deleted, and nothing under `eval/` imports `classify_stls` at all —
+  cache layout comes from `src.cachedir`, keys from `src.identity`, text
+  embeddings from `src.embedder`.)
 * **The maths is production's.** `src.pose` — `up_axis_scores`,
   `rank_up_scores`, `combine_up`, `needs_arbiter_margin`, `upright_scores`,
   `make_contact_sheet` — is imported, never reimplemented.

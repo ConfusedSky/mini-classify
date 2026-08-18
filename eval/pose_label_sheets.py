@@ -73,7 +73,7 @@ def main():
 
     from PIL import Image
     import rig
-    from classify_stls import load_run_params
+    from src.cachedir import load_run_params
 
     walk = Path(args.walk) if args.walk else newest_walk()
     cache_dir = Path(args.cache_dir) if args.cache_dir else walk.parent
@@ -85,7 +85,7 @@ def main():
     sample = rng.sample(files, min(args.n, len(files)))
 
     # The pose cache is keyed relative to the root the cache was built against,
-    # not to anything on this command line (classify_stls.cache_root's rule).
+    # not to anything on this command line (src.cachedir.cache_root's rule).
     root = load_run_params(cache_dir).get("collection_root")
     cached = pose.load_pose_cache(cache_dir) if root else {}
     print(f"walk {walk} ({len(files)} files) | sample {len(sample)} seed {args.seed}\n"

@@ -8,7 +8,9 @@ a number measured on the copy was only ever a statement about the copy. This
 module is the adapter that removed the need for them. It constructs the
 *production* objects — `src.renderer.Renderer` on a real `RenderConfig`,
 `src.embedder.Embedder`, `src.loader.get` — and exposes them as the free
-functions the harnesses were written against.
+functions the harnesses were written against. Those five names no longer
+exist: they were deleted from `classify_stls.py` on 2026-08-18, once this
+module had left them with no callers.
 
 What it is not: a re-implementation. Every function below is a handful of
 lines of plumbing over a production call. If a harness needs behaviour that

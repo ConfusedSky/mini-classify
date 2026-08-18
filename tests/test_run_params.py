@@ -2,8 +2,9 @@ import argparse
 import json
 import sys
 
-from classify_stls import (DEFAULT_ELEVATIONS, RUN_PARAMS_FILE, RUN_PARAMS_KEYS,
-                           apply_run_params, cache_key)
+from src.cachedir import (RUN_PARAMS_FILE, RUN_PARAMS_KEYS, apply_run_params,
+                          cache_key)
+from src.identity import DEFAULT_ELEVATIONS
 
 
 def apply(tmp_path, monkeypatch, recorded, parser):

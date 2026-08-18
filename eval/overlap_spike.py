@@ -44,8 +44,8 @@ from common import OUT  # puts REPO on sys.path
 
 import rig
 from src import pose
-from classify_stls import (add_cache_args, apply_run_params, cache_root,
-                           load_file_list)
+from src.cachedir import (add_cache_args, apply_run_params, cache_root,
+                          load_file_list)
 
 
 def pick_models(args, n):

@@ -139,9 +139,15 @@ def detect_up_axis(mesh, n_samples=4000):
 
 
 def needs_arbiter(ratio, best_score, threshold=0.6):
-    """Geometry's own doubt. Superseded by needs_arbiter_margin for the
-    production gate — kept as the fallback when SigLIP is unavailable
-    (--no-up-ensemble), where there is no ensemble margin to ask about."""
+    """Geometry's own doubt. Superseded by needs_arbiter_margin, which is the
+    production gate (`poser.py`) and the only one on any live path — the CLI
+    arm that fell back to this went with `resolve_up` (2026-08-18) and
+    `--no-up-ensemble` was retired before it.
+
+    Kept because it is still a *measured* quantity: `eval/arbiter_gate.py`
+    scores this gate against the margin gate on the hand-labelled set, which is
+    the evidence for preferring the margin. Delete it and that comparison
+    becomes unreproducible."""
     return ratio > threshold or best_score < ABS_SCORE_FLOOR
 
 
@@ -266,7 +272,7 @@ def front_view(entry, cfg):
     """The cached front ("hero") view index for one view configuration.
 
     front_view indexes into a specific run's view list, so it is stored as a
-    dict keyed by classify_stls.view_config — an index cached at 8 views is
+    dict keyed by `cachedir.view_config` — an index cached at 8 views is
     out of range at 4 and silently wrong under different elevations. Legacy
     integer entries carry no record of the config that produced them and are
     treated as absent; a warm classify pass regenerates them from cached

@@ -4,34 +4,29 @@ Usage:
   python classify_stls.py /path/to/stls --categories categories.txt --out results.csv
   python classify_stls.py model.stl --save-renders   # single file, keep debug renders
                                                      # under <cache-dir>/renders/<camera config>/
+  python classify_stls.py ... --instrument           # per-stage timings, both GPUs
+  python classify_stls.py ... --profile              # torch trace of the parent, to ./log
 
 Renders each mesh from several viewpoints (Open3D offscreen, in a render child
 process), embeds the views with SigLIP in this process, and ranks the pooled
 similarities against text embeddings of the categories.
 
-**This file is the CLI entry, not the pipeline** (docs/actor-refactor/): args,
-run-params, the cache guards and the wiring live here; the loop lives in
-`src/driver.py`, and every stage it drives is one of the `src/` modules. The
-functions kept below are the ones the eval harnesses and the sibling tools
-import — the production render/embed helpers they measure against.
+**This file is the CLI entry, and now only that** (docs/actor-refactor/): its
+argparse, the run-params it writes, the cache guards it runs before touching
+anything, and the wiring. The loop lives in `src/driver.py` and every stage it
+drives is one of the `src/` modules.
 
-No *constant or helper* here is a second copy. The names the tools have always
-imported from this module (`render_key`, `load_mesh`, `view_angles`,
-`RENDER_FORMATS`, `PROMPT_TEMPLATES` via `embed_texts`, ...) are re-exported
-from the module that owns them, so there is exactly one of each to keep in
-step — and `pool_sims`/`view_config`, whose home `src/done.py` owns torch, are
-forwarded lazily by `__getattr__` at the bottom of this file rather than
-imported at module scope.
-
-What *is* a second arrangement, deliberately: the single-process render and
-embed helpers below (`render_views`, `render_up_candidate_grid`, `resolve_up`,
-`embed_raw`/`embed_texts`/`embed_images`). The pipeline's versions are a
-Renderer method in another process and an Embedder method holding its own
-model; the evals and the REPL hold their own model+processor and measure a
-single-process, in-line path, so they need these shapes. They are not a
-divergence risk by accident: each is built out of the owning module's
-functions and pinned equal to the production path by
-tests/test_embedder.py's parity suite (F-5).
+Nothing here is imported by anything else. That is the point of the eval-debt
+cleanup that emptied it: the evals, the tests and the sibling tools used to
+import a *script* for the cache layout (`src/cachedir.py` now), for reading
+cached embeddings back (`src/embed_store.py`), for a text embedding
+(`src/embedder.py`'s `embed_raw`/`embed_texts`), and for names this file only
+forwarded on behalf of `src/identity.py`, `src/loader.py`, `src/renderer.py`
+and `src/done.py`. Each consumer imports the owner now, so `classify_stls.py`
+can be read as one program rather than as a library with a `main()` attached.
+The single-process render helpers the pose evals once called
+(`render_views`, `render_up_candidate_grid`, `resolve_up`) went with it —
+`eval/rig.py` drives the production `Renderer` instead.
 
 Viewpoints are a turntable of --views azimuths at each --elevations pitch, so
 --views 4 --elevations 20,-10 gives 8 renders per mesh. Every run records its
@@ -46,137 +41,33 @@ geometry with a confidence ratio, a SigLIP vote over the six up-candidate tiles
 column) so downstream tools can show the render that actually faces the viewer,
 and resolved poses persist in <cache-dir>/pose-cache.json.
 
-**No module-scope torch here, deliberately.** `mp.get_context("spawn")` makes
-the render child re-import this file as `__mp_main__` before it runs
-`run_child`, so anything imported at module scope is imported in the child too
-— and a torch import there is exactly what the child-side import rule forbids
-(interfaces.md's import table: SigLIP lives in the parent, and torch in the
-child costs VRAM and startup for nothing). The four embed helpers and `main`
-import it where they use it.
+**Nothing heavy at module scope, deliberately.** `mp.get_context("spawn")`
+makes the render child re-import this file as `__mp_main__` before it runs
+`run_child`, so anything imported at module scope is imported in the child
+too — and a torch import there is exactly what the child-side import rule
+forbids (interfaces.md's import table: SigLIP lives in the parent, and torch
+in the child costs VRAM and startup for nothing). Since the cleanup the same
+reasoning is applied one step further: the module scope is stdlib plus
+`instrument`, `src.identity` and `src.cachedir`, all of which are cheap, and
+everything else — torch, open3d, numpy, PIL, transformers, and every `src/`
+module that pulls one of them — is imported inside `main()` or
+`resolve_pose_vlm()`, where it is used. `import classify_stls` is therefore
+free, which is what the child's `__mp_main__` import gets.
 """
 import argparse
-import os
-import hashlib
 import json
-import time
 import sys
 from pathlib import Path
 
-import numpy as np
-import open3d.visualization.rendering as rendering
-from PIL import Image
 from tqdm import tqdm
 
 import instrument
-from src import identity
-from src import pose
-from naming import SKIP_TAGS, skip
 from instrument import stage
-# The definitions the tools import from here, each from its one home — several
-# are unused *in* this file and imported for the re-export alone, which is the
-# point: one definition, and the callers' import path unchanged. None of these
-# pulls torch, which is what lets them sit at module scope (docstring):
-# `identity` is stdlib-only, `loader` and `renderer` are the child side.
-from src.identity import (DEFAULT_ELEVATIONS, EMBED_CACHE_VERSION,
-                          cache_key_from_identity, render_key)
-from src.loader import STL_RECORD, load_mesh, read_binary_stl
-from src.renderer import (FILL_INTENSITY, RENDER_FORMATS, SUN_INTENSITY,
-                          UP_TILE_AZIMUTHS, UP_TILE_ELEVATION, make_offscreen,
-                          orbit_camera, rotated_cams, rotation_to_z_up,
-                          view_angles)
-
-
-def as_tensor(feat):
-    import torch
-    return feat if isinstance(feat, torch.Tensor) else feat.pooler_output
-
-
-def make_renderer(size):
-    """The offscreen rig, the render child's own (`src.renderer`): the evals
-    measure the production path, so they must build the production rig."""
-    return make_offscreen(size)
-
-
-def _shoot(renderer, cams):
-    """Render one image per (center, eye, up, sun) with the geometry as loaded."""
-    images = []
-    for center, eye, up, sun in cams:
-        renderer.setup_camera(45.0, center, eye, up)
-        renderer.scene.scene.set_sun_light(sun, [1.0, 1.0, 1.0], SUN_INTENSITY)
-        images.append(Image.fromarray(np.asarray(renderer.render_to_image())))
-    return images
-
-
-def _upload(renderer, mesh):
-    """Put the mesh on the GPU and return its framing. Still the expensive half
-    of rendering — 275 ms on an 800k-triangle STL and ~1.0 s on a 4.4M-triangle
-    one, against ~30-50 ms per view — so callers should upload once and move the
-    camera.
-
-    (An earlier version of this said 15 s per upload. `eval/load_path.py`
-    measures ~10x less; the cost tracks *vertices*, and an STL is a soup at 3.00
-    verts per triangle, so quote a figure with its vertex count.)"""
-    mat = rendering.MaterialRecord()
-    mat.shader = "defaultLit"
-    mat.base_color = [0.7, 0.7, 0.7, 1.0]
-    renderer.scene.clear_geometry()
-    renderer.scene.add_geometry("mesh", mesh, mat)
-    bounds = mesh.get_axis_aligned_bounding_box()
-    return bounds.get_center(), np.linalg.norm(bounds.get_extent()) * 1.4
-
-
-def render_views(renderer, mesh, angles):
-    """Render one image per (azimuth, elevation) pair. The mesh must already be
-    rotated into Z-up world space (the light rig and camera 'up' assume it)."""
-    center, radius = _upload(renderer, mesh)
-    cams = [(center, *orbit_camera(center, radius, az, elev)) for az, elev in angles]
-    return _shoot(renderer, cams)
-
-
-def render_up_candidate_grid(renderer, mesh, n_az=UP_TILE_AZIMUTHS):
-    """[6][n_az] renders — each candidate up, seen from n_az azimuths.
-
-    One upload, not six. Rotating the mesh per candidate and re-uploading costs
-    the expensive half of rendering six times over — measured, an upload is
-    275 ms on an 800k-triangle STL against ~30 ms per tile, so five extra
-    uploads would roughly triple this call; moving the camera instead costs
-    nothing. The two are exactly
-    equivalent here because all six candidate rotations are signed axis
-    permutations: the rotated mesh's bounding box is the rotated box, so its
-    centre is R@c and its extent is a permutation of e — leaving the framing
-    radius ||e|| identical. `renderer.rotated_cams` does that arithmetic — the
-    same call the child's pose path makes, so these tiles and the pipeline's
-    are framed by one piece of code. Verified pixel-identical against the
-    rotate-the-mesh version."""
-    center, radius = _upload(renderer, mesh)
-    angles = view_angles(n_az, [UP_TILE_ELEVATION])
-    return [_shoot(renderer, rotated_cams(rotation_to_z_up(up), center, radius, angles))
-            for up in pose.UP_CANDIDATES]
-
-
-def render_up_candidate_tiles(renderer, mesh):
-    """One render per candidate up (fixed azimuth) — the VLM contact sheet."""
-    return [row[0] for row in render_up_candidate_grid(renderer, mesh, 1)]
-
-
-def render_subdir(args):
-    """Renders live under the camera config that produced them.
-
-    A filename carries only stem and view index, but cache_key covers render
-    size, views and elevations — so without this a rerun at a different size
-    leaves the previous config's images in place and the contact sheets stop
-    describing what was actually classified."""
-    # function-local: src.done owns torch and this module must not (docstring)
-    from src.done import view_config
-    return f"{args.render_size}px-{view_config(args)}"
-
-
-# Cache layout. Everything a run derives from the collection lives under
-# --cache-dir, so the cache is one directory rather than two that have to be
-# passed around in step: the embeddings and the debug renders are both
-# rebuildable, and both are worthless against a different --cache-dir.
-EMBEDS_SUBDIR = "embeds"
-RENDERS_SUBDIR = "renders"
+from src.cachedir import (RUN_PARAMS_FILE, RUN_PARAMS_KEYS, add_cache_args,
+                          apply_run_params, cache_root, embeds_dir,
+                          load_file_list, load_run_params, render_index,
+                          renders_dir, require_cache_version, total_views)
+from src.identity import render_key
 
 # What the render child may hold in host-side meshes before its LRU evicts
 # (RenderConfig.budget_bytes). A soft bound: in_flight meshes are never
@@ -185,397 +76,37 @@ RENDERS_SUBDIR = "renders"
 # knob is the admission window, and this follows it.
 RESIDENT_BUDGET_BYTES = 512 * 1024 * 1024
 
-
-def embeds_dir(cache_dir):
-    """Where the per-file .npy embeddings live, or None with caching off."""
-    return Path(cache_dir) / EMBEDS_SUBDIR if cache_dir else None
+# Where --profile writes its tensorboard trace when given no argument.
+PROFILE_DIR = "./log"
 
 
-def renders_dir(cache_dir, args):
-    """Where --save-renders writes, under the camera config that produced them.
+def profile_dir(argv=None):
+    """--profile, read before `main()` runs.
 
-    Derived rather than passed: a renders directory paired with the wrong cache
-    shows one run's images beside another run's embeddings, and the two have no
-    way to notice."""
-    return Path(cache_dir) / RENDERS_SUBDIR / render_subdir(args) if cache_dir else None
+    The flag is declared on main()'s own parser as well — that is what puts it
+    in --help and what stops argparse rejecting it — but the profiler has to be
+    entered *around* main(), so the value is also read here from a throwaway
+    parser that ignores every other argument.
 
-
-def render_index(rdir):
-    """Map '<render_key>_view<i>' to the saved render, from one listing of the dir.
-
-    Extension-agnostic on purpose: a directory may hold PNGs written before
-    --render-format existed alongside new JPEGs, and switching format must
-    neither re-render them nor hide them from the tools. Newest wins when a view
-    exists in both. One listing rather than a glob per view — the lookup runs
-    n_views times per model, and real stems contain '(' and '['."""
-    if rdir is None or not Path(rdir).is_dir():
-        return {}
-    files = sorted((p for p in Path(rdir).iterdir() if p.is_file()),
-                   key=lambda p: p.stat().st_mtime)
-    return {p.stem: p for p in files}
-
-
-# Writing the renders is `Renderer.save_renders` and only that (F-4): the
-# pixels are already in the child's memory (data_structures Q2), and the
-# module function that used to live here had no callers left after wave 1 —
-# only tests, which now measure the method that runs in production. The names
-# it wrote are the names `render_index` above still parses.
-
-
-def resolve_up(mesh, args, get_renderer, vlm_backend, score_upright=None,
-               sheet_path=None):
-    """Resolve the up axis for --up-axis auto, cheapest evidence first:
-    geometry, then SigLIP over the up-candidate tiles, then the VLM.
-
-    **Not the production path any more** — `src/poser.py` is, driven by
-    `src/driver.py`, with the geometry half computed in the render child. This
-    stays because the pose evals (`eval/parser_gate.py`) measure against a
-    single-process, in-line arrangement of the same three tiers, and they call
-    this function rather than a copy of it. Its ensemble math is `src/pose.py`'s,
-    the same functions the Poser calls.
-
-    Returns **(up, ratio, source, margin)** — four values on every path, the
-    ensemble's margin last (None when no ensemble ran). `source` records which
-    tier *moved* the answer, not which ran (review P2.3-A): geometry's pick
-    standing — including when the ensemble ran and agreed — stays "geometry";
-    an override becomes "siglip" or "vlm". Whether the ensemble ran at all is
-    `margin is not None`, which pose_is_sufficient already keys on.
-
-    `args` is a duck-typed namespace, not necessarily the CLI's parser output.
-    It must carry `up_margin`, `cache_dir`, `pose_vlm_model`, optionally
-    `gemini_project` — and `up_conf`, which the CLI no longer defines at all
-    (it retired with --no-up-ensemble). That last read is reachable only with
-    `score_upright=None`, and its one caller supplies its own namespace
-    (`eval/parser_gate.py`'s `ARGS`, which sets both thresholds). Passing
-    `argparse` output from a classify run with `score_upright=None` would
-    raise `AttributeError` here (F-12); nothing does.
-
-    score_upright(tiles) -> per-candidate SigLIP scores; None falls back to
-    geometry alone, which only an eval arm asks for now (the flag that did,
-    --no-up-ensemble, is retired) — and only that arm reaches the
-    `args.up_conf` gate below. The ensemble otherwise runs on *every* model
-    rather than only the low-confidence ones:
-    geometry can be confidently wrong with a real-looking base (32mm_Gate_L
-    scores a 0.43 ratio on the wrong face), and those never reach the arbiter.
-
-    sheet_path, when the arbiter runs at all, keeps that model's contact sheet
-    beside its renders — the scratch copy in the cache dir is one fixed name
-    every model overwrites, so it only ever shows the last file processed."""
-    with stage("pose-geometry"):
-        geo_scores = pose.up_axis_scores(mesh)
-        geo_idx, ratio, best = pose.rank_up_scores(geo_scores)
-    up, source, margin = pose.UP_CANDIDATES[geo_idx], "geometry", None
-
-    sheet_tiles = None
-    if score_upright is not None:
-        with stage("pose-render"):
-            grid = render_up_candidate_grid(get_renderer(), mesh)
-        sheet_tiles = [row[0] for row in grid]           # the VLM still sees six
-        flat = [im for row in grid for im in row]
-        with stage("pose-embed"):
-            sig = np.asarray(score_upright(flat)).reshape(len(grid), -1).mean(axis=1)
-        idx, margin = pose.combine_up(geo_scores, sig)
-        if idx != geo_idx:
-            up, source = pose.UP_CANDIDATES[idx], "siglip"
-
-    # Escalate on the ensemble's own doubt. Without SigLIP there is no ensemble
-    # and no margin, so fall back to geometry's confidence.
-    escalate = (pose.needs_arbiter_margin(margin, args.up_margin) if margin is not None
-                else pose.needs_arbiter(ratio, best, args.up_conf))
-    if vlm_backend and escalate:
-        if sheet_tiles is None:
-            with stage("pose-render"):
-                sheet_tiles = render_up_candidate_tiles(get_renderer(), mesh)
-        call = lambda: pose.ask_vlm_up(
-            sheet_tiles, vlm_backend, args.cache_dir or ".",
-            args.pose_vlm_model or pose.DEFAULT_VLM_MODELS.get(vlm_backend),
-            save_to=sheet_path, project=getattr(args, "gemini_project", None))
-        # Inline, always: deferral left with the pipeline. Parking a file on an
-        # in-flight call and folding the answer back is `src/poser.py` +
-        # `src/arbiter.py` now, and the fold that used to close the loop here
-        # (`apply_arbiter`) went with it.
-        with stage("arbiter-inline"):
-            idx = call()
-        if idx is not None and not np.allclose(pose.UP_CANDIDATES[idx], up):
-            return pose.UP_CANDIDATES[idx], ratio, "vlm", margin
-    return up, ratio, source, margin
-
-
-# The three embed helpers below are `src/embedder.py`'s methods in free-function
-# form: same forwards, same normalisation, same dtypes — pinned equal by
-# tests/test_embedder.py's parity suite. Production goes through the Embedder;
-# these stay for the evals and the REPL, which hold their own model+processor
-# and measure against exactly this arrangement. torch is imported inside each
-# (see the module docstring: the render child re-imports this file), which is
-# also why they carry `with torch.no_grad()` rather than the decorator.
-
-def embed_raw(model, processor, texts, device):
-    """Embed raw text strings (no category templates), row-normalized."""
-    import torch
-    with torch.no_grad():
-        inputs = processor(text=texts, padding="max_length", return_tensors="pt").to(device)
-        feat = as_tensor(model.get_text_features(**inputs))
-        return torch.nn.functional.normalize(feat, dim=-1)  # (n_texts, dim)
-
-
-def embed_texts(model, processor, categories, device):
-    import torch
-    from src.embedder import PROMPT_TEMPLATES      # one copy, the Embedder's
-    with torch.no_grad():                          # (D-R1-1)
-        embeds = []
-        for cat in categories:
-            prompts = [t.format(cat) for t in PROMPT_TEMPLATES]
-            feat = embed_raw(model, processor, prompts, device).mean(0)
-            embeds.append(torch.nn.functional.normalize(feat, dim=-1))
-        return torch.stack(embeds)  # (n_categories, dim)
-
-
-EMBED_BATCH = 0   # 0 = one call per image list, which is what --views implies
-
-
-def embed_images(model, processor, images, device, batch=None):
-    """Row-normalised embeddings, (n_images, dim).
-
-    batch caps how many images go to the GPU at once; 0/None sends the whole
-    list, which is the historical behaviour and fine at 16-40 images (measured
-    peak 2.5 GB of a 7.8 GB card). Raise it to keep the GPU busier when the
-    image list is long, lower it if SigLIP has to share the card."""
-    import torch
-    with torch.no_grad():
-        batch = batch or EMBED_BATCH or len(images)
-        out = []
-        for i in range(0, len(images), batch):
-            inputs = processor(images=images[i:i + batch], return_tensors="pt").to(device)
-            out.append(as_tensor(model.get_image_features(**inputs)))
-        feat = out[0] if len(out) == 1 else torch.cat(out)
-        return torch.nn.functional.normalize(feat, dim=-1)
-
-
-def find_stls(root):
-    found = []
-    for dirpath, dirnames, filenames in os.walk(root):
-        # prune skipped directories before descending — big win on slow drives
-        dirnames[:] = [d for d in dirnames if not d.startswith(".") and not skip(d)]
-        for name in filenames:
-            if (not name.startswith(".") and name.lower().endswith(".stl")
-                    and not skip(name)):
-                found.append(Path(dirpath) / name)
-    return sorted(found)
-
-
-def load_file_list(inp, cache_dir, rescan=False):
-    """Directory walk with cached file list (see --rescan)."""
-    walk_cache = None
-    if cache_dir:
-        walk_id = hashlib.sha1(f"{inp.resolve()}|{SKIP_TAGS}|unsupported-ok".encode()).hexdigest()
-        walk_cache = Path(cache_dir) / f"walk-{walk_id}.json"
-    if walk_cache and walk_cache.exists() and not rescan:
-        saved = json.loads(walk_cache.read_text())
-        files = [Path(p) for p in saved["files"]]
-        gone = [f for f in files if not f.exists()]
-        files = [f for f in files if f.exists()]
-        age_days = (time.time() - saved["scanned"]) / 86400
-        note = f", {len(gone)} vanished since scan" if gone else ""
-        print(f"using cached file list: {len(files)} files, scanned "
-              f"{age_days:.1f} days ago{note} (--rescan to refresh)")
-        return files
-    files = find_stls(inp)
-    if walk_cache:
-        walk_cache.parent.mkdir(parents=True, exist_ok=True)
-        walk_cache.write_text(json.dumps(
-            {"scanned": time.time(), "files": [str(f) for f in files]}))
-    return files
-
-
-def cache_key(f, args, up_token, root):
-    # The path is relative to the collection root (identity.py) so the library
-    # can change drives without re-embedding everything.
-    stat = f.stat()
-    return cache_key_from_identity(
-        f"{identity.rel_path(f, root)}|{identity.mtime_key(stat)}|{stat.st_size}",
-        args, up_token)
-
-
-def total_views(args):
-    return args.views * len(args.elevations)
-
-
-def parse_elevations(text):
-    """Comma-separated camera elevations in degrees: '20' or '20,-10,55'."""
-    if isinstance(text, list):  # already parsed (came from the run manifest)
-        return text
-    try:
-        elevs = [float(v) for v in text.split(",") if v.strip()]
-    except ValueError:
-        raise argparse.ArgumentTypeError(f"not a list of numbers: {text!r}")
-    if not elevs:
-        raise argparse.ArgumentTypeError("need at least one elevation")
-    if any(abs(e) > 90 for e in elevs):
-        # ±90 is straight down / straight up; render_views carries 'up' around the
-        # orbit so the poles are ordinary cameras, not a degenerate look-at
-        raise argparse.ArgumentTypeError("elevations must be within ±90 degrees")
-    return elevs
-
-
-def add_cache_args(parser, input_help):
-    """Args that identify an embedding cache. Every tool reading the cache must
-    agree on these, which is what the run manifest automates — declared in one
-    place so a new one can't be added to the classifier and forgotten in the
-    tools that read what it wrote."""
-    parser.add_argument("input", nargs="?", help=input_help)
-    parser.add_argument("--views", type=int, default=4,
-                        help="azimuths per elevation ring (default 4)")
-    parser.add_argument("--elevations", type=parse_elevations, default=DEFAULT_ELEVATIONS,
-                        help="comma-separated camera elevations in degrees; each gets a "
-                             "full ring of --views azimuths, so total views is the "
-                             "product (default 20)")
-    parser.add_argument("--render-size", type=int, default=512)
-    # the Embedder owns the default (D-R1-1): one copy, imported here rather
-    # than duplicated, and deferred because src.embedder imports torch
-    from src.embedder import DEFAULT_MODEL
-    parser.add_argument("--model", default=DEFAULT_MODEL)
-    parser.add_argument("--compile", action=argparse.BooleanOptionalAction, default=False,
-                        help="torch.compile the image forward: ~1.09x embed throughput for "
-                             "~1e-03 embedding drift, which flips only coin-toss margins "
-                             "(eval/compile_flips.py: 1 of 341, at margin 4.3e-06). "
-                             "Compiled embeddings cache under their own keys, so the two "
-                             "numeric regimes never mix")
-    parser.add_argument("--up-axis", choices=["auto", "z", "y"], default="auto",
-                        help="up axis of source meshes; auto detects the flat print base (default)")
-    parser.add_argument("--cache-dir", default="embed-cache",
-                        help="directory of cached per-file image embeddings; reruns with new "
-                             "categories skip rendering/embedding entirely (set '' to disable)")
-    # shared because every tool here walks the collection, and a stale list is
-    # not merely slow — migrate_cache_keys drops entries for files it cannot see
-    parser.add_argument("--rescan", action="store_true",
-                        help="re-walk the input directory instead of using the cached file list")
-
-
-RUN_PARAMS_FILE = "run-params.json"
-# What a classify run records for the tools that read its cache. Keys are
-# argparse dests; anything not declared by a given tool's parser is ignored.
-# "pool" is deliberately absent: it is a scoring-time choice, not cache
-# identity, and letting the classifier's afterthought default leak into
-# test_categories overrode the REPL's own deliberate softmax default —
-# querying happens there, so its default wins there.
-RUN_PARAMS_KEYS = ("input", "views", "elevations", "render_size", "model",
-                   "compile", "up_axis", "categories", "render_format",
-                   "collection_root")
-
-CACHE_META_FILE = "cache-meta.json"
-# Bumped only when the *key scheme* changes incompatibly — never for
-# byte-compatible additions like |compiled or |e:, which are designed to
-# leave existing keys alone. That is why this is a hand-set integer and not a
-# hash of the key format: an auto-derived stamp would fire on exactly the
-# changes this repo makes carefully so it does not have to.
-#   0 = unstamped (every cache from before the stamp existed): the up-token
-#       elision, where deterministic poses keyed as the --up-axis string
-#   1 = the up_str token (pose.embed_cache_token, review P2.3-B)
-CACHE_VERSION = 1
-
-
-def cache_version(cache_dir):
-    """0 for any cache written before the stamp — i.e. every unstamped one."""
-    p = Path(cache_dir) / CACHE_META_FILE
-    return json.loads(p.read_text())["cache_version"] if p.exists() else 0
-
-
-def stamp_cache_version(cache_dir):
-    d = Path(cache_dir)
-    d.mkdir(parents=True, exist_ok=True)
-    (d / CACHE_META_FILE).write_text(json.dumps({
-        "cache_version": CACHE_VERSION,
-        # informational only, never compared — see the CACHE_VERSION note
-        "cache_key_format": "sha1(rel|mtime|size|views|render_size|up_token"
-                            "|model|pv[|e:...][|compiled][|evN])",
-    }, indent=2))
-
-
-def require_cache_version(cache_dir):
-    """Refuse a cache whose key scheme this code cannot read.
-
-    A moved scheme does not error on its own — every lookup just misses, and
-    the run silently re-renders and re-embeds the whole collection: hours,
-    and real money once a pose entry is VLM-sourced. The stamp turns that
-    into one line naming the fix. An empty cache is simply stamped current."""
-    if not cache_dir:
-        return
-    v = cache_version(cache_dir)
-    if v == CACHE_VERSION:
-        return
-    d = Path(cache_dir)
-    # "populated" must include the pre-layout shape — root-level .npy with no
-    # pose-cache.json or embeds/ (a forced --up-axis cache writes no pose
-    # cache at all). Treating that as empty would stamp a genuinely
-    # unmigrated cache as current, which is the exact failure this guard
-    # exists to prevent (S2).
-    if ((d / "pose-cache.json").exists() or (d / EMBEDS_SUBDIR).exists()
-            or (d / RENDERS_SUBDIR).exists() or any(d.glob("*.npy"))):
-        raise SystemExit(
-            f"{cache_dir}: cache_version {v}, this code expects {CACHE_VERSION} — "
-            f"every key would miss and the collection would re-embed from "
-            f"scratch.\n  run: .venv/bin/python migrate_cache_keys.py "
-            f"--cache-dir {cache_dir} --apply")
-    stamp_cache_version(cache_dir)
-
-
-def cache_root(inp, cache_dir, confirm=True, reanchor=False):
-    """The root every cache key in `cache_dir` is taken relative to.
-
-    Deliberately not just `collection_root(inp)`. The anchor belongs to the
-    cache, not to the command line: running on one kit inside the library has
-    to key the same way the whole-library run did, or the same file is indexed
-    twice under two identities and re-rendered, re-embedded and re-arbitrated
-    for the privilege.
-
-    A mismatch stops to ask, because the two reasons for one are opposite: the
-    library moved (re-key, free, everything still matches) or this cache
-    belongs to a different collection (re-key, expensive, and the old entries
-    are orphaned). Read-only tools pass confirm=False and only warn — they
-    write nothing, and blocking a REPL on a prompt helps no one."""
-    recorded = load_run_params(cache_dir).get("collection_root")
-    root, note = identity.resolve_root(inp, recorded)
-    if note == "subdir":
-        print(f"cache keys stay anchored at {root} — this run is scoped to "
-              f"{identity.collection_root(inp)}, but the cache is the library's")
-    elif note in ("superdir", "mismatch"):
-        if note == "superdir":
-            why = (f"  every existing key is still valid under the wider root — it "
-                   f"needs\n    {root and Path(recorded).relative_to(root)}/\n"
-                   f"  on the front. migrate_cache_keys.py re-keys them; "
-                   f"--reanchor without it orphans them.")
-        else:
-            gone = "" if Path(recorded).exists() else \
-                " (which no longer exists, so this looks like the library moved)"
-            why = f"  the recorded root{gone or ' still exists'}."
-        print(f"\n  the cache in {cache_dir} was built against\n"
-              f"    {recorded}\n  and you have asked for\n    {root}\n{why}")
-        if reanchor:
-            print("  --reanchor given; re-keying to the new root")
-        elif not confirm:
-            print("  read-only tool: using the root you asked for, which may miss "
-                  "every cached entry")
-        elif not sys.stdin.isatty():
-            sys.exit("  refusing to re-key a cache without confirmation in a "
-                     "non-interactive run — pass --reanchor if that is what you want")
-        elif input("  re-key this cache to the new root? [y/N] ").strip().lower() \
-                not in ("y", "yes"):
-            sys.exit("  stopped; pass a path under the recorded root, or use a "
-                     "separate --cache-dir for a different collection")
-    return root
-
-
-def load_run_params(cache_dir):
-    if not cache_dir:
-        return {}
-    p = Path(cache_dir) / RUN_PARAMS_FILE
-    return json.loads(p.read_text()) if p.exists() else {}
+    Off by default, and that is the point: this used to be an unconditional
+    `torch.profiler.profile` around main(), which wrote a ~280 MB trace on
+    every single run."""
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("--profile", nargs="?", const=PROFILE_DIR, default=None)
+    known, _ = p.parse_known_args(argv)
+    return known.profile
 
 
 def save_run_params(args):
     """Record this run's parameters next to the cache it just wrote. Kept with
     the cache rather than in a committed config so the description can't drift
-    from what the embeddings actually are."""
+    from what the embeddings actually are.
+
+    The writer stays with the CLI while `load_run_params`/`apply_run_params`
+    live in `src/cachedir.py`, because the asymmetry is real: a classify run is
+    the only thing that writes this manifest, and every other tool only reads
+    it. What both halves have to agree on — the filename and RUN_PARAMS_KEYS —
+    is declared once, over there."""
     if not args.cache_dir:
         return
     params = {k: getattr(args, k, None) for k in RUN_PARAMS_KEYS}
@@ -588,25 +119,6 @@ def save_run_params(args):
     p.write_text(json.dumps(params, indent=2))
 
 
-def apply_run_params(parser):
-    """parse_args(), with defaults filled in from the last classify run.
-    Explicit command-line values still win — set_defaults only moves the
-    fallback."""
-    known, _ = parser.parse_known_args()
-    params = load_run_params(getattr(known, "cache_dir", None))
-    dests = {a.dest for a in parser._actions}
-    # RUN_PARAMS_KEYS gates the read as well as the write: a key dropped from
-    # the manifest must stop flowing even from run-params.json files that
-    # recorded it back when it was one
-    applied = {k: v for k, v in params.items() if k in dests and k in RUN_PARAMS_KEYS}
-    parser.set_defaults(**applied)
-    args = parser.parse_args()
-    if applied:
-        print(f"defaults from {Path(known.cache_dir) / RUN_PARAMS_FILE}: "
-              + ", ".join(sorted(applied)) + " (command line overrides)")
-    return args
-
-
 def resolve_pose_vlm(args):
     """--pose-vlm to the backend the Poser is built with, announcing the choice.
 
@@ -615,6 +127,7 @@ def resolve_pose_vlm(args):
     10.1 s of model reload against 0.49 s of inference, this repo's one hard
     GPU constraint. So `auto` is gemini or nothing, and `VlmConfig` refuses the
     name at construction if it ever reaches it another way."""
+    from src import pose        # module-local: pose pulls open3d (docstring)
     backend = args.pose_vlm
     if backend == "off":
         return None
@@ -659,6 +172,11 @@ def resolve_pose_vlm(args):
 
 
 def main():
+    # Both pull open3d/numpy (`pose` transitively, `renderer` directly), and
+    # neither is wanted at module scope — see the docstring.
+    from src import pose
+    from src.renderer import RENDER_FORMATS
+
     parser = argparse.ArgumentParser()
     add_cache_args(parser, "STL file or directory of STL files "
                            "(defaults to the last run's directory)")
@@ -735,6 +253,16 @@ def main():
                              "and reports them as their own table — it is a separate "
                              "process, so its time overlaps the parent's rather than "
                              "adding to it")
+    parser.add_argument("--profile", nargs="?", const=PROFILE_DIR,
+                        default=None, metavar="DIR",
+                        help=f"run the torch profiler over the whole run and write a "
+                             f"tensorboard trace to DIR (default {PROFILE_DIR}), then "
+                             f"print the top CPU-time table. Off by default: a trace is "
+                             f"~280 MB. Parent process only — the render child is a "
+                             f"separate process, so its work appears here as time spent "
+                             f"waiting on the results queue, not as rendering. Read by "
+                             f"`profile_dir()` before main() starts; declared here so it "
+                             f"shows in --help")
     args = apply_run_params(parser)
     if not args.input:
         sys.exit("no input given, and no directory recorded in "
@@ -844,32 +372,23 @@ def main():
     instrument.report()
 
 
-# The two names whose home imports torch. `src.done` owns the scoring, so
-# `pool_sims` and `view_config` live there — but the render child re-imports
-# this file as `__mp_main__` (module docstring), and a module-scope
-# `from src.done import ...` would hand it torch. PEP 562 defers the import to
-# first use, so `from classify_stls import pool_sims` keeps resolving for
-# test_categories.py, cluster_models.py and the evals, while the child — which
-# touches neither name — never pays for it. One definition either way.
-_FORWARDED = {"pool_sims": "src.done", "view_config": "src.done"}
-
-
-def __getattr__(name):
-    if name in _FORWARDED:
-        import importlib
-        return getattr(importlib.import_module(_FORWARDED[name]), name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
 if __name__ == "__main__":
-    import torch
-    with torch.profiler.profile(
-        activities=[
-            torch.profiler.ProfilerActivity.CPU,
-            torch.profiler.ProfilerActivity.CUDA,
-        ],
-        on_trace_ready=torch.profiler.tensorboard_trace_handler('./log'),
-        record_shapes=True
-    ) as prof:
+    trace_dir = profile_dir()
+    if not trace_dir:
         main()
-    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+    else:
+        # torch stays inside this block. `spawn` gives the render child
+        # `__mp_main__`, not `__main__`, so nothing here runs there — but a
+        # module-scope import would still land in the child and break the
+        # import rule (module docstring).
+        import torch
+        with torch.profiler.profile(
+            activities=[
+                torch.profiler.ProfilerActivity.CPU,
+                torch.profiler.ProfilerActivity.CUDA,
+            ],
+            on_trace_ready=torch.profiler.tensorboard_trace_handler(trace_dir),
+            record_shapes=True
+        ) as prof:
+            main()
+        print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))

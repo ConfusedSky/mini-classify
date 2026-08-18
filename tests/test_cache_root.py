@@ -3,7 +3,7 @@ import json
 import pytest
 
 from src import identity
-from classify_stls import RUN_PARAMS_FILE, cache_root
+from src.cachedir import RUN_PARAMS_FILE, cache_root
 
 
 def cache_with_root(tmp_path, recorded):

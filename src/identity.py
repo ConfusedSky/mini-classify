@@ -131,7 +131,8 @@ EMBED_CACHE_VERSION = 1
 
 # The --elevations default. It lives here because the key elides it: a single
 # 20 degree ring appends nothing, which is what keeps keys written before
-# --elevations existed byte-identical. classify_stls declares the flag with it.
+# --elevations existed byte-identical. `cachedir.add_cache_args` declares the
+# flag with it.
 DEFAULT_ELEVATIONS = [20.0]
 
 

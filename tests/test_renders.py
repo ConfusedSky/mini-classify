@@ -11,11 +11,11 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from classify_stls import (RENDER_FORMATS, embeds_dir, render_index, render_key,
-                           render_subdir, renders_dir)
 from src import renderer as renderer_mod
+from src.cachedir import embeds_dir, render_index, render_subdir, renders_dir
+from src.identity import render_key
 from src.messages import RenderConfig
-from src.renderer import Renderer
+from src.renderer import RENDER_FORMATS, Renderer
 
 
 def args(render_size=2048, views=8, elevations=(20.0, -20.0)):

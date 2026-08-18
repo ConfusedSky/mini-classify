@@ -17,8 +17,13 @@ That assertion is the one `eval/README.md` has always claimed and could not
 prove. It used to point at `classify_stls.embed_images` instead — a second
 arrangement of the same forward, kept in the CLI for the harnesses. The
 harnesses stopped needing it (2026-08-18), so the parity that matters is no
-longer CLI-vs-Embedder but harness-vs-Embedder. The text half still crosses to
-the CLI, because `embed_texts`/`embed_raw` are the CLI's own and stay.
+longer CLI-vs-Embedder but harness-vs-Embedder.
+
+The text half no longer crosses to the CLI either: `embed_raw`/`embed_texts`
+moved into `src/embedder.py` as free functions and the Embedder's methods
+delegate to them, so what those assertions now pin is the *binding* — that
+`__init__` really ran the shared forward with this instance's model,
+processor and device.
 """
 from __future__ import annotations
 
@@ -200,8 +205,8 @@ def test_views_batching_matches_whole_and_tiles_ignore_it(monkeypatch):
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs the 4060")
 def test_gpu_parity_of_the_eval_rig_with_the_embedder():
     """eval/rig.py's embedding path vs the Embedder's message-shaped ones."""
-    import classify_stls as old
     from PIL import Image
+    from src.embedder import embed_raw, embed_texts
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "eval"))
     import rig
@@ -210,13 +215,14 @@ def test_gpu_parity_of_the_eval_rig_with_the_embedder():
     emb = rig.embedder(categories=categories)            # real load, cuda
     assert isinstance(emb, Embedder)
     assert emb.device == "cuda"
-    # One copy since the dedup pass: the CLI imports this from src.embedder
-    # rather than keeping its own, so the old cross-copy assertion would now
-    # ask classify_stls for a name it no longer defines (F-1).
+    # One copy since the dedup pass: every templated query in the project goes
+    # through src.embedder, so the old cross-copy assertion would now ask
+    # classify_stls for a name it no longer defines (F-1).
     assert PROMPT_TEMPLATES is src.embedder.PROMPT_TEMPLATES
 
-    # -- text parity: category embeddings and the numpy prompt banks
-    old_text = old.embed_texts(emb.model, emb.processor, categories, emb.device)
+    # -- text binding: category embeddings and the numpy prompt banks came off
+    #    the shared free functions, with this instance's model/processor/device
+    old_text = embed_texts(emb.model, emb.processor, categories, emb.device)
     assert old_text.dtype == emb.text_embeds.dtype == torch.float16
     text_diff = (emb.text_embeds - old_text).abs().max().item()
     print(f"\ntext_embeds max|diff| = {text_diff:.3e}")
@@ -229,8 +235,8 @@ def test_gpu_parity_of_the_eval_rig_with_the_embedder():
                           ("down_T", pose.TOPPLED_PROMPTS),
                           ("front_T", pose.FRONT_PROMPTS),
                           ("back_T", pose.BACK_PROMPTS)):
-        old_bank = old.embed_raw(emb.model, emb.processor, prompts,
-                                 emb.device).float().cpu().numpy()
+        old_bank = embed_raw(emb.model, emb.processor, prompts,
+                             emb.device).float().cpu().numpy()
         new_bank = getattr(emb, name)
         assert new_bank.dtype == old_bank.dtype == np.float32, name
         assert np.array_equal(new_bank, old_bank), name

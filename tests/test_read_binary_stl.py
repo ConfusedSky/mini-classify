@@ -2,7 +2,7 @@ import struct
 
 import numpy as np
 
-from classify_stls import read_binary_stl
+from src.loader import read_binary_stl
 
 TRI = struct.pack("<12fH", 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0)   # 50 bytes
 

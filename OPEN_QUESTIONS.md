@@ -494,6 +494,21 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   became `renderer.rotated_cams` (one definition for the child's pose tiles
   and the evals' contact-sheet grid), and `make_renderer` now delegates to
   `renderer.make_offscreen`.
+  **Amended 2026-08-18 (eval-debt cleanup, phase 2).** The re-exports the
+  entry describes are gone, not just deduplicated: every consumer imports the
+  owning `src/` module, so the forwarding block and the `__getattr__` shim
+  were deleted along with `make_renderer`/`_shoot`/`_upload`/`render_views`/
+  `render_up_candidate_grid`/`render_up_candidate_tiles`/`resolve_up`/
+  `embed_images`. The shared plumbing that was never CLI code in the first
+  place became `src/cachedir.py` (cache layout, keys, the version stamp,
+  run-params, `add_cache_args`) and `src/embed_store.py`
+  (`load_embedding_matrix`, which `cluster_models.py` had been importing out
+  of `test_categories.py`); `view_config` moved from `done` to `cachedir` so
+  naming a view config no longer costs a torch import, and
+  `as_tensor`/`embed_raw`/`embed_texts` moved into `src/embedder.py` with the
+  Embedder's methods delegating to them. `classify_stls.py` went 875 → 394
+  lines and now exports nothing; `import classify_stls` pulls 186 modules
+  instead of 2653, with no numpy, open3d, PIL or torch among them.
 
 - **Renders are not reproducible across pose-cache states** — **and the cause
   is more general than that** (amended 2026-08-18, the refactor's parity run:

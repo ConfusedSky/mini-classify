@@ -15,8 +15,8 @@ be consulted until the pose is known. A forced `--up-axis z|y` is the one
 path that skips the pose-cache lookup and goes straight to the embedding key
 (the migration-notes shortcut).
 
-Import discipline: no torch, no renderer, no classify_stls (which imports
-both). Cache keying goes through `src.identity` / `src.pose` —
+Import discipline: no torch, no renderer, no top-level script. Cache keying
+goes through `src.identity` / `src.pose` —
 `pose.file_identity` is byte-identical to the embedding key's identity half
 (review §P3.1), so this module never re-derives an identity string, and the
 key builders themselves are `identity`'s: the child's renderer needs

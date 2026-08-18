@@ -42,18 +42,29 @@ src/done.py          scoring, rows, pose store, retirement, Release, flush
 src/driver.py        the sequential loop; owns admission
 src/pose.py          math + Pose + caches                  [moves from the root]
 src/identity.py      cache keying: collection_root + keys  [moves from the root]
+src/cachedir.py      the cache-dir layout: subdirs, cache_key, the version
+                     stamp, run-params, and the shared argparse block
+src/embed_store.py   reading the cached .npy embeddings back (Done writes them)
 classify_stls.py     CLI entry: args, run-params, cache guards -> driver
 ```
+
+The last three are the parts every *tool* needs — the CLI, `cluster_models.py`,
+`test_categories.py`, `migrate_cache_keys.py`, the eval harnesses and the
+tests. They used to live in `classify_stls.py`, which made a script the
+project's de-facto library; the eval-debt cleanup (2026-08-18) moved them here
+so the CLI imports them like everyone else and imports nothing back.
 
 Import rules, and why each is load-bearing:
 
 | module | may import | must NOT import | because |
 |---|---|---|---|
-| child side (`loader`, `renderer`, `render_child`) | open3d, PIL, numpy, `messages`, pose | **torch** | SigLIP lives in the parent; a torch import in the child costs VRAM and startup for nothing. **This binds `classify_stls.py` too** (wave 2, measured): `spawn` re-executes `__main__` in the child, so a module-scope torch import in the CLI would land in the render child — the CLI imports torch only inside function bodies |
+| child side (`loader`, `renderer`, `render_child`) | open3d, PIL, numpy, `messages`, pose | **torch** | SigLIP lives in the parent; a torch import in the child costs VRAM and startup for nothing. **This binds `classify_stls.py` too** (wave 2, measured): `spawn` re-executes `__main__` in the child, so a module-scope torch import in the CLI would land in the render child — the CLI imports torch only inside function bodies. Since the eval-debt cleanup the CLI goes further and keeps open3d/numpy/PIL out of its module scope too (`pose` and `renderer` are imported inside `main`/`resolve_pose_vlm`), so `import classify_stls` pulls 186 modules rather than 2653 |
 | `poser` | torch (one conversion), numpy, pose, PIL (contact sheet) | open3d renderer calls | the Poser consumes geometry *scores* (computed child-side) and tiles, never the mesh itself |
 | `embedder` | torch, transformers | — | the only owner of models |
 | `pose` | numpy, open3d, PIL, `identity` | torch, **any other `src/` module** | the standing rule, unchanged by the move: `pose` is the leaf both sides import (the child for `up_axis_scores`, the Poser for `combine_up`, `messages` for `Pose`), so it must depend on nothing in the pipeline. Living in `src/` makes it a sibling of its importers, not a peer that may import back |
 | `identity` | stdlib only | **anything in `src/`, and any third-party import** | the deepest leaf: every cache keys on it (invariant 2), `pose` imports it, and a leaf below the leaf must cost nothing to import anywhere — parent, child, or a bare test |
+| `cachedir` | stdlib, `naming`, `identity` | **torch, open3d, numpy, PIL** | the CLI imports it at module scope, so the first row's `spawn` argument binds it too; and the read-only tools (`cluster_models.py`) must be able to find their way around a cache without loading a model. The two names that would break the rule are imported inside the function that needs them: `--model`'s default from `embedder`, nothing else. `done` imports `view_config` from here rather than owning it, for the same reason |
+| `embed_store` | numpy, `pose`, `cachedir` | **torch** | the read side of what `done` writes. `cluster_models.py` clusters cached vectors and never loads SigLIP; keeping torch out of this module is what lets it stay that way |
 | `messages` | pose, numpy; torch **under `TYPE_CHECKING` only**, with `from __future__ import annotations` | a module-scope `import torch` | the child unpickles its tasks from `messages` — a real torch import there hands the child exactly the dependency the first row forbids (I8). The two tensor-typed messages never cross a queue, so the name is annotation-only |
 
 (pose.py imports open3d for `up_axis_scores`, so the parent transitively

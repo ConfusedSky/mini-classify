@@ -35,8 +35,9 @@ import numpy as np
 from common import OUT  # puts REPO on sys.path
 
 import torch
-from classify_stls import (add_cache_args, apply_run_params, embed_texts,
-                           embeds_dir, pool_sims)
+from src.cachedir import add_cache_args, apply_run_params, embeds_dir
+from src.done import pool_sims
+from src.embedder import embed_texts
 
 DRIFT = 9.8e-4          # torch.compile's max embedding drift, LEARNINGS
 

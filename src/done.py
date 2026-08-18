@@ -42,6 +42,11 @@ import numpy as np
 import torch
 
 from instrument import stage
+# `view_config` keys the front_view entries this module writes, but it is a
+# piece of cache identity rather than scoring — its home is the module that
+# owns the cache layout, so the CLI and the read-only tools can name a view
+# config without importing a module that loads torch.
+from src.cachedir import view_config
 from src.identity import cache_key_from_identity
 from src.messages import (
     CacheContext,
@@ -72,20 +77,6 @@ CSV_FIELDS = ["file", "top1", "score1", "top2", "score2", "top3", "score3",
               "up", "pose_conf", "pose_source", "front_view"]
 
 
-def view_config(args):
-    """The token keying `front_view` entries in the pose cache.
-
-    front_view is an index into this run's view list, and an index cached at 8
-    views is meaningless at 4 — or silently wrong at the same count with
-    different elevations — so the pose cache stores it per view config. Same
-    elevation formatting as the embedding key, so the two never disagree about
-    what one config is. The CLI's `render_subdir` names its renders directory
-    with this, importing it from here (function-local: this module owns torch,
-    and the CLI must stay torch-free at module scope)."""
-    elev = ",".join(f"{e:g}" for e in args.elevations)
-    return f"{args.views}v-e{elev}"
-
-
 def pool_sims(view_sims, mode, axis=-2):
     """Pool per-view similarity scores (..., n_views, n_categories) over views.
 
@@ -93,9 +84,9 @@ def pool_sims(view_sims, mode, axis=-2):
     ~25% weight). max: "clearly visible from some angle" — lets single-view
     features decide. softmax: in between (sharpness set by BETA).
 
-    The one copy: the REPL and the evals reach it through `classify_stls`,
-    which forwards here lazily rather than importing this torch-owning module
-    at module scope (classify_stls' module docstring)."""
+    The one copy: scoring is this module's, so the REPL and the evals import it
+    from here directly. They all hold a SigLIP model already, so the torch this
+    module owns costs them nothing they were not paying."""
     if mode == "mean":
         return view_sims.mean(axis)
     if mode == "max":

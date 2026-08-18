@@ -3,7 +3,8 @@ import os
 
 from src import identity
 from src import pose
-from classify_stls import cache_key, render_key
+from src.cachedir import cache_key
+from src.identity import render_key
 
 
 def args(**kw):

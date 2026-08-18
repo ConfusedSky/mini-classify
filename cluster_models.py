@@ -19,10 +19,10 @@ from PIL import Image
 from sklearn.cluster import KMeans
 
 from src import pose
-from classify_stls import (add_cache_args, apply_run_params, cache_root,
-                           load_file_list, render_index, render_key, renders_dir,
-                           view_config)
-from test_categories import load_embedding_matrix
+from src.cachedir import (add_cache_args, apply_run_params, cache_root,
+                          load_file_list, render_index, renders_dir, view_config)
+from src.embed_store import load_embedding_matrix
+from src.identity import render_key
 
 
 def contact_sheet(members, renders, out_base, root, cfg, thumb=160, cols=6,
@@ -31,7 +31,7 @@ def contact_sheet(members, renders, out_base, root, cfg, thumb=160, cols=6,
 
     One sheet lands on `out_base.png`; several become `out_base-1.png`,
     `out_base-2.png`, ... Returns the paths written. `renders` is a
-    classify_stls.render_index() mapping, so saved renders resolve whatever
+    `src.cachedir.render_index()` mapping, so saved renders resolve whatever
     format they were written in.
     """
     tiles, no_front, no_render = [], 0, 0

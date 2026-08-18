@@ -29,11 +29,13 @@ import numpy as np
 import torch
 
 from src import pose
-from classify_stls import (add_cache_args, apply_run_params, as_tensor, cache_key,
-                           cache_root, embed_raw, embed_texts, embeds_dir,
-                           load_file_list,
-                           pool_sims, render_index, render_key, renders_dir,
-                           require_cache_version, total_views, view_config)
+from src.cachedir import (add_cache_args, apply_run_params, cache_root,
+                          load_file_list, render_index, renders_dir,
+                          require_cache_version, total_views, view_config)
+from src.done import pool_sims
+from src.embed_store import load_embedding_matrix
+from src.embedder import embed_raw, embed_texts
+from src.identity import render_key
 
 
 def link(f, text):
@@ -41,23 +43,6 @@ def link(f, text):
     if not sys.stdout.isatty():
         return text
     return f"\033]8;;file://{quote(str(f))}\033\\{text}\033]8;;\033\\"
-
-
-def load_embedding_matrix(files, args, root):
-    cache_dir = embeds_dir(args.cache_dir)
-    poses = pose.load_pose_cache(args.cache_dir)
-    vecs, kept, missing = [], [], 0
-    for f in files:
-        token = pose.embed_cache_token(poses.get(pose.file_identity(f, root)), args.up_axis)
-        p = cache_dir / f"{cache_key(f, args, token, root)}.npy"
-        if p.exists():
-            vecs.append(np.load(p))
-            kept.append(f)
-        else:
-            missing += 1
-    if not vecs:
-        raise SystemExit("no cached embeddings found — run classify_stls.py first")
-    return np.stack(vecs).astype(np.float32), kept, missing  # (n_files, n_views, dim)
 
 
 def show_classification(sims, categories, names, prev):

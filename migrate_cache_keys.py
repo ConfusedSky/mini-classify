@@ -49,11 +49,12 @@ from pathlib import Path
 
 from src import identity
 from src import pose
-from classify_stls import (CACHE_VERSION, DEFAULT_ELEVATIONS, EMBEDS_SUBDIR,
-                           RENDERS_SUBDIR, add_cache_args, apply_run_params,
-                           cache_key, cache_key_from_identity, cache_version,
-                           load_file_list, load_run_params, render_key,
-                           stamp_cache_version)
+from src.cachedir import (CACHE_VERSION, EMBEDS_SUBDIR, RENDERS_SUBDIR,
+                          add_cache_args, apply_run_params, cache_key,
+                          cache_version, load_file_list, load_run_params,
+                          stamp_cache_version)
+from src.identity import (DEFAULT_ELEVATIONS, cache_key_from_identity,
+                          render_key)
 
 # "<render key>_view3" / "<render key>_pose", split off the right-hand end
 # because the stem itself may contain anything.
@@ -63,8 +64,8 @@ SUFFIX = re.compile(r"^(?P<key>.+)_(?P<tail>view\d+|pose)$")
 # --- the key formats this migrates *from*, preserved here on purpose ---------
 #
 # A migration is the one place old formats have to keep working. These mirror
-# pose.file_identity / classify_stls.cache_key / classify_stls.render_key as
-# they were, so the two can be diffed rather than recalled.
+# pose.file_identity / cachedir.cache_key / identity.render_key as they were,
+# so the two can be diffed rather than recalled.
 
 def old_base(f, old_root, new_root, absolute):
     """The path half of an old key, as the cache would have spelled it.

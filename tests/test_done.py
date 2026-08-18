@@ -28,11 +28,11 @@ import numpy as np
 import pytest
 import torch
 
-import classify_stls
 from src import pose
 from src.cache_checker import route
+from src.cachedir import cache_key, view_config
 from src.identity import cache_key_from_identity
-from src.done import CSV_FIELDS, Done, pool_sims, view_config
+from src.done import CSV_FIELDS, Done, pool_sims
 from src.messages import (
     CacheContext,
     CachedHit,
@@ -192,12 +192,13 @@ def test_embedded_saves_npy_where_todays_reader_looks(tmp_path):
     f, img, p = stl(rig), img_embeds(11), a_pose(source="siglip")
     rig.done.record_pose(f, 2, p)        # the Poser records before dispatching
     rig.done.on(Embedded(file=f, index=2, pose=p, embeds=img))
-    # The write must land exactly where classify_stls.cache_key (the
-    # production original, :639-645) derives the hit path from the store.
+    # The write must land exactly where `cachedir.cache_key` (the production
+    # original, main:classify_stls.py:639-645) derives the hit path from the
+    # store.
     token = pose.embed_cache_token(rig.ctx.poses[pose.file_identity(f, rig.root)],
                                    rig.ctx.args.up_axis)
     expect = rig.ctx.embeds_dir / \
-        f"{classify_stls.cache_key(f, rig.ctx.args, token, rig.root)}.npy"
+        f"{cache_key(f, rig.ctx.args, token, rig.root)}.npy"
     assert expect.exists()
     np.testing.assert_array_equal(np.load(expect), img.float().cpu().numpy())
     assert isinstance(rig.done.rows[2], ResultRow)
@@ -519,8 +520,8 @@ def test_flush_empty_rows_writes_header_only(tmp_path):
 
 
 # The two parity pins that lived here (`pool_sims` and `view_config` against
-# classify_stls' copies) are retired with the copies: this module is their one
-# home now, and classify_stls forwards to it, so both assertions had become a
+# classify_stls' copies) are retired with the copies: each has exactly one home
+# now (`src/done.py` and `src/cachedir.py`), so both assertions had become a
 # function compared with itself. `pool_sims` is still exercised through
 # `today_row` on every success-row test, and `view_config` through the
 # front_view keying below.

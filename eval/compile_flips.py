@@ -35,9 +35,11 @@ from common import OUT  # puts REPO on sys.path
 
 import torch
 from src import pose
-from classify_stls import (add_cache_args, apply_run_params, as_tensor,
-                           cache_key, cache_root, embed_texts, embeds_dir,
-                           load_file_list, pool_sims, render_key, renders_dir)
+from src.cachedir import (add_cache_args, apply_run_params, cache_key,
+                          cache_root, embeds_dir, load_file_list, renders_dir)
+from src.done import pool_sims
+from src.embedder import as_tensor, embed_texts
+from src.identity import render_key
 
 DRIFT = 9.8e-4          # torch.compile's max embedding drift, LEARNINGS
 

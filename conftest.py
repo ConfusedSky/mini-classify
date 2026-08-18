@@ -1,7 +1,8 @@
-"""Root conftest: puts the repo root on sys.path explicitly, so
-`import classify_stls` and `from src import pose` resolve under any pytest
-invocation — `pytest tests/`, `cd tests && pytest`, or an absolute path from
-elsewhere. pytest.ini pins rootdir here so this file is always collected."""
+"""Root conftest: puts the repo root on sys.path explicitly, so `from src
+import pose`, `import naming` and `import migrate_cache_keys` resolve under
+any pytest invocation — `pytest tests/`, `cd tests && pytest`, or an absolute
+path from elsewhere. pytest.ini pins rootdir here so this file is always
+collected."""
 import sys
 from pathlib import Path
 
