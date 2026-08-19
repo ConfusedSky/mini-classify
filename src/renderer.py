@@ -61,7 +61,7 @@ import open3d.visualization.rendering as rendering
 from PIL import Image
 
 from src import pose
-from src.pose import view_angles          # moved there 2026-08-19; one copy
+from src.pose import rotation_to_z_up, view_angles   # moved there 2026-08-19
 from src.identity import render_key
 from src.loader import LoadedMesh
 from src.messages import RenderConfig
@@ -99,18 +99,6 @@ RENDER_FORMATS = {
     "png": (".png", {"compress_level": 1}),
     "webp": (".webp", {"quality": 90}),
 }
-
-
-def rotation_to_z_up(up):
-    z = np.array([0.0, 0.0, 1.0])
-    if np.allclose(up, z):
-        return np.eye(3)
-    if np.allclose(up, -z):
-        return o3d.geometry.get_rotation_matrix_from_xyz((np.pi, 0, 0))
-    axis = np.cross(up, z)
-    axis = axis / np.linalg.norm(axis)
-    angle = np.arccos(np.clip(up @ z, -1, 1))
-    return o3d.geometry.get_rotation_matrix_from_axis_angle(axis * angle)
 
 
 def orbit_camera(center, radius, az, elev):

@@ -43,6 +43,61 @@ def test_cylinder_is_ambiguous():
     assert ratio > 0.6
 
 
+def test_rotation_to_z_up_matches_open3d_bit_for_bit():
+    """The table is byte-identical to the Open3D construction it replaced.
+
+    `Renderer.views` rotates by this before shooting, so it decides the pixels
+    — and therefore the cached embeddings — of every non-`+Z` model (1902 of
+    embed-cache2's 2945), while the embedding key records only the up *vector*.
+    A value that differed in the last bit would re-pose those models under
+    unchanged keys with nothing failing.
+
+    So this asserts against Open3D itself rather than against transcribed
+    constants: the point is the *equality*, and a test that only restated the
+    table would drift with it. Note `np.array_equal` is the right comparison
+    and `allclose` is not — the whole risk here lives in the last bits."""
+    z = np.array([0.0, 0.0, 1.0])
+    for up in pose.UP_CANDIDATES:
+        if np.allclose(up, z):
+            want = np.eye(3)
+        elif np.allclose(up, -z):
+            want = o3d.geometry.get_rotation_matrix_from_xyz((np.pi, 0, 0))
+        else:
+            axis = np.cross(up, z)
+            axis = axis / np.linalg.norm(axis)
+            angle = np.arccos(np.clip(up @ z, -1, 1))
+            want = o3d.geometry.get_rotation_matrix_from_axis_angle(axis * angle)
+        got = pose.rotation_to_z_up(up)
+        assert np.array_equal(got, want), tuple(up)
+        # and the properties that make it a legitimate rotation, so a rewrite
+        # that is merely *different* reads differently from one that is wrong
+        assert np.allclose(got @ np.asarray(up, float), z, atol=1e-12), tuple(up)
+        assert np.allclose(got @ got.T, np.eye(3), atol=1e-12), tuple(up)
+        assert abs(np.linalg.det(got) - 1.0) < 1e-12, tuple(up)
+
+
+def test_rotation_to_z_up_falls_back_for_a_non_axis_vector():
+    """Total, not a lookup that raises. Nothing in the pipeline reaches this —
+    poses are always one of the six — so agreement with Open3D at ~1e-15 is
+    the bar, not bit-identity."""
+    up = np.array([0.3, -0.5, 0.81])
+    up = up / np.linalg.norm(up)
+    axis = np.cross(up, [0.0, 0.0, 1.0])
+    axis = axis / np.linalg.norm(axis)
+    angle = np.arccos(np.clip(up @ np.array([0.0, 0.0, 1.0]), -1, 1))
+    want = o3d.geometry.get_rotation_matrix_from_axis_angle(axis * angle)
+    got = pose.rotation_to_z_up(up)
+    assert np.allclose(got, want, atol=1e-14)
+    assert np.allclose(got @ up, [0.0, 0.0, 1.0], atol=1e-14)
+
+
+def test_rotation_to_z_up_does_not_hand_out_its_table():
+    """A caller that mutates the result must not corrupt every later call."""
+    first = pose.rotation_to_z_up(np.array([0.0, 1.0, 0.0]))
+    first[0, 0] = 99.0
+    assert pose.rotation_to_z_up(np.array([0.0, 1.0, 0.0]))[0, 0] == 1.0
+
+
 def test_view_angles_rings_are_nested_subsets():
     """A ring of n azimuths is a subset of a ring of m when n divides m.
 

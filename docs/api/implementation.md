@@ -18,8 +18,9 @@ REPL is already a thin client of it.
 ## Phase 0 — prerequisites — **done 2026-08-19**
 
 Installed: `fastapi 0.141.1`, `uvicorn 0.52.4`, `starlette 1.6.0`, alongside
-the `pydantic 2.13.4` already present. `view_angles` now lives in `src/pose.py`
-with all five callers repointed; 463 passed, 1 skipped.
+the `pydantic 2.13.4` already present. `view_angles` **and
+`rotation_to_z_up`** now live in `src/pose.py`, both pure numpy, with every
+caller repointed; 465 passed, 1 skipped.
 
 **0.1 Install FastAPI.** The venv is uv-managed and has no pip:
 
@@ -129,20 +130,24 @@ azimuth offset from data instead of reimplementing `rotation_to_z_up`
 (surface.md §pose).
 
 ~~Either `rotation_to_z_up` moves to `pose.py` alongside `view_angles`, or the
-six rotations are tabulated; the move is cleaner.~~ **It must not move —
-settled while doing phase 0.2.** `rotation_to_z_up` computes with open3d, and
-`pose.py` may import open3d only inside `up_axis_scores`. It would not qualify
-for a deferred import either: the rule is that deferral only helps when the
-signature already implies the dependency, and this takes a *vector*, so the
-cost would land on every caller (interfaces.md's import-rule table — this is
-the `DEFAULT_MODEL` shape exactly). Rewriting it in numpy is worse: it is item
-one on the recipe list, and the rule there is that touching it is a bump
-however the pixels land.
+six rotations are tabulated.~~ ~~It must not move — it computes with open3d.~~
+**Both were wrong; it moved in phase 0.2 and is pure numpy now.** The second
+answer was the more instructive mistake: it reasoned entirely about the import
+rule and never asked whether a 3×3 matrix helper needed a rendering library at
+all. It does not — the two open3d calls were `Rx(π)` and Rodrigues, neither of
+which touches a mesh.
 
-So **tabulate the six**. `up` is always one of `pose.UP_CANDIDATES`, and
-`test_rotation_to_z_up_is_pinned_for_all_six_candidates` fixes what each
-rotation is, so a six-entry table in `collection.py` is exact, needs no
-open3d, and has a test that fails if it ever drifts from the renderer.
+The shape it took, because a naive rewrite would not have been safe: the six
+`UP_CANDIDATES` are served from a table of the exact matrices open3d produced,
+byte for byte, with Rodrigues as a fallback for anything else. A plain numpy
+Rodrigues differs from open3d by ~5e-17 on four of the six — in the entries
+that ought to be zero — and this function decides the pixels of every non-`+Z`
+render, so that difference would be a recipe change (OPEN_QUESTIONS) for no
+gain. `tests/test_pose.py` asserts the table against open3d itself with
+`array_equal`, not `allclose`, since the whole risk lives in the last bits.
+
+So `pose_of` computes `azimuth_zero` directly and `collection.py` needs no
+table of its own.
 
 The pose cache stores an up vector
 and a per-view-config `front_view` index; the viewer needs an angle. So:

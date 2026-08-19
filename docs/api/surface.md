@@ -265,7 +265,8 @@ fails. **Prefer `azimuth_zero`; the table is the explanation, not the
 contract.**
 
 That choice is now pinned on this side as well
-(`tests/test_renderer.py::test_rotation_to_z_up_is_pinned_for_all_six_candidates`),
+(`tests/test_pose.py::test_rotation_to_z_up_matches_open3d_bit_for_bit`, which
+asserts the six against Open3D itself with `array_equal`),
 because it was already load-bearing before any consumer existed: `views`
 rotates the mesh by this matrix before shooting, so it decides the pixels — and
 therefore the cached embeddings — for every non-`+Z` model, while the embedding

@@ -113,40 +113,9 @@ def test_pose_tiles_n_az_defaults_to_production_and_is_a_camera_subset(rig):
         assert all(a in four for a in want), n
 
 
-def test_rotation_to_z_up_is_pinned_for_all_six_candidates():
-    """Which rotation realises an up axis is cache identity, not an internal.
-
-    `views` rotates the mesh by this before shooting (I11), so the matrix
-    decides the pixels — and therefore the embeddings — for every non-+Z
-    model. The embedding key covers the *up vector* (`pose.embed_cache_token`)
-    and says nothing about which rotation took it to +Z, so changing this
-    function re-poses cached models under unchanged keys: 1902 of 2945 in
-    embed-cache2, the primary cache, silently.
-
-    The `-z` row is the load-bearing one. Any rotation taking -Z to +Z
-    satisfies the docstring; the antiparallel branch picks Rx(pi), and that
-    arbitrary choice is what fixes where azimuth 0 lands. It is also a
-    published contract now — docs/api/surface.md's `pose.azimuth_zero` is
-    derived from these matrices, and model-browser orbits by them without
-    rotating any mesh."""
-    want = {
-        (0, 0, 1):  [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
-        (0, 0, -1): [[1, 0, 0], [0, -1, 0], [0, 0, -1]],     # Rx(pi), the choice
-        (0, 1, 0):  [[1, 0, 0], [0, 0, -1], [0, 1, 0]],
-        (0, -1, 0): [[1, 0, 0], [0, 0, 1], [0, -1, 0]],
-        (1, 0, 0):  [[0, 0, -1], [0, 1, 0], [1, 0, 0]],
-        (-1, 0, 0): [[0, 0, 1], [0, 1, 0], [-1, 0, 0]],
-    }
-    for up, R in want.items():
-        u = np.array(up, dtype=float)
-        got = renderer_mod.rotation_to_z_up(u)
-        # the pinned matrix, and the two properties that make it a legitimate
-        # one — so a rewrite that is merely *different* is distinguishable
-        # from one that is wrong
-        assert np.allclose(got, R, atol=1e-12), up
-        assert np.allclose(got @ u, [0, 0, 1], atol=1e-12), up
-        assert np.allclose(got @ got.T, np.eye(3), atol=1e-12), up
-        assert abs(np.linalg.det(got) - 1.0) < 1e-12, up
+# `rotation_to_z_up`'s pin moved to tests/test_pose.py with the function
+# (2026-08-19). It asserts against Open3D directly now rather than against
+# transcribed matrices, which is the stronger form of the same claim.
 
 
 def test_views_count_is_views_times_elevations(rig):

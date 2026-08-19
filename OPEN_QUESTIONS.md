@@ -403,7 +403,7 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   **1902 of `embed-cache2`'s 2945**, 65% of the primary cache: the embeddings
   on disk answer a different question than the ones a fresh run would produce,
   and nothing anywhere fails.
-  `tests/test_renderer.py::test_rotation_to_z_up_is_pinned_for_all_six_candidates`
+  `tests/test_pose.py::test_rotation_to_z_up_matches_open3d_bit_for_bit`
   (2026-08-19) stops the accidental version of this. It cannot stop a
   deliberate one, which is the actual question.
 

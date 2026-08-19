@@ -265,6 +265,64 @@ BACK_PROMPTS = [
 ]
 
 
+# The exact rotations for the six `UP_CANDIDATES`, transcribed float-for-float
+# from the Open3D construction that used to compute them
+# (`get_rotation_matrix_from_xyz((pi,0,0))` for the antiparallel case, Rodrigues
+# about `up x z` otherwise). The near-zero entries are cos(pi/2) and sin(pi)
+# noise and are kept rather than cleaned to 0: this table exists to be
+# *bit-identical* to what the renderer drew every cached embedding with, and
+# tidying it would be a change to the render recipe (OPEN_QUESTIONS) for
+# cosmetic reasons. `tests/test_pose.py` asserts the equality against Open3D
+# itself, so the transcription cannot drift.
+_AXIS_ROTATIONS = {
+    (0.0, 0.0, 1.0):  [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+    (0.0, 0.0, -1.0): [[1.0, 0.0, 0.0], [0.0, -1.0, -1.2246467991473532e-16],
+                       [0.0, 1.2246467991473532e-16, -1.0]],
+    (0.0, 1.0, 0.0):  [[1.0, 0.0, 0.0], [0.0, 6.123233995736766e-17, -1.0],
+                       [0.0, 1.0, 6.123233995736766e-17]],
+    (0.0, -1.0, 0.0): [[1.0, -0.0, 0.0], [0.0, 6.123233995736766e-17, 1.0],
+                       [-0.0, -1.0, 6.123233995736766e-17]],
+    (1.0, 0.0, 0.0):  [[6.123233995736766e-17, -0.0, -1.0], [0.0, 1.0, -0.0],
+                       [1.0, 0.0, 6.123233995736766e-17]],
+    (-1.0, 0.0, 0.0): [[6.123233995736766e-17, 0.0, 1.0], [0.0, 1.0, -0.0],
+                       [-1.0, 0.0, 6.123233995736766e-17]],
+}
+
+
+def rotation_to_z_up(up):
+    """The rotation taking `up` to +Z. Pure numpy; it never touches a mesh.
+
+    Lived in `renderer` and computed with Open3D until 2026-08-19, which meant
+    a rotation matrix could not be named without a rendering library — the API
+    needs one to publish `pose.azimuth_zero` (docs/api/surface.md).
+
+    Two paths, and the split is the point. Every `up` this project resolves is
+    one of `UP_CANDIDATES`, so those six are served from a table of the exact
+    matrices Open3D produced, byte for byte: this function decides the pixels
+    of every non-`+Z` render (`Renderer.views` rotates by it), the embedding
+    key records only the up *vector*, and so a value that differed even in the
+    last bit would re-pose cached models under unchanged keys. A naive
+    Rodrigues rewrite is *not* bit-identical here — it differs by ~5e-17 on
+    four of the six, in the entries that ought to be zero.
+
+    Anything else falls through to Rodrigues, which agrees with Open3D to
+    ~1e-15. Nothing in the pipeline reaches it, since poses are always
+    axis-aligned; it is here so the function is total rather than a lookup
+    that raises on inputs it was never given."""
+    v = np.asarray(up, dtype=float)
+    exact = _AXIS_ROTATIONS.get(tuple(float(x) for x in v))
+    if exact is not None:
+        return np.array(exact)          # a fresh array per call, as before
+    z = np.array([0.0, 0.0, 1.0])
+    axis = np.cross(v, z)
+    axis = axis / np.linalg.norm(axis)
+    angle = np.arccos(np.clip(v @ z, -1, 1))
+    K = np.array([[0.0, -axis[2], axis[1]],
+                  [axis[2], 0.0, -axis[0]],
+                  [-axis[1], axis[0], 0.0]])
+    return np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
+
+
 def view_angles(n_views, elevations):
     """(azimuth, elevation) radian pairs: a full turntable ring per elevation.
 
