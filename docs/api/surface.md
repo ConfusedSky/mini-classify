@@ -114,6 +114,13 @@ Returns `{scope, results: [hit]}`, the query model itself excluded. 404 when
 `path` is not in the cache — a different answer from a scope with nothing
 indexed, see below.
 
+`pool` applies **twice**, because both sides are view stacks: the query
+model's per-view embeddings are used as the text matrix, so `score` pools over
+each candidate's views, and a second `pool_sims` over the query model's views
+reduces what is left (implementation.md §Open decisions, decided). No `weak`
+flag: weakness says a query is absent from the collection, and a model that is
+in the collection cannot be.
+
 ### `POST /reload`
 
 | field | type | default | note |
