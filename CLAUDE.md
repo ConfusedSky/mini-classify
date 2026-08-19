@@ -30,6 +30,9 @@ proposal.
   `I3`/`K6`/`C-R1-4`/`F-7` resolve through `docs/reviews/`.
 - `docs/reviews/` — dated review notes, including the implementation reviews
   every finding ID resolves to.
+- `docs/api/surface.md` — **proposal, not built**: the REPL's querying as an
+  HTTP surface for `~/Documents/model-browser` to search against. Unlike
+  `docs/actor-refactor/`, nothing here describes existing code yet.
 - `eval/README.md` — the measurement harnesses. They call the production code
   through `eval/rig.py`, which builds the real `Renderer`/`Embedder` — true
   again since 2026-08-18, when the CLI's parallel single-process render/embed
