@@ -87,6 +87,20 @@ bind first, warm in the background, answer `/status` throughout with
 `ready: false`, and reject `/query` and `/similar` with **503** until it flips.
 A caller that sees a reply at all knows the server exists.
 
+Bind-before-warm is load-bearing rather than polite: it is what makes warming
+*observable* instead of inferred from a connection refusal, and model-browser's
+`semantic-search` change depends on it — a 503 racing its probe folds back into
+the warming state there rather than surfacing as a failure.
+
+**`elapsed` (seconds since process start) rides alongside it, and is
+deliberately not an ETA.** Asked whether it wanted a time-remaining estimate,
+the consumer said no: an estimate would be shown to a person as a fact, and
+this side cannot honestly produce one. What elapsed buys is a re-probe policy —
+it separates *warming* from *wedged*, so a bounded backoff can keep checking a
+load that started four seconds ago and stop re-probing (and read differently in
+the UI) one that has plainly gone wrong. Neither side has to pretend to know
+how long is left.
+
 **`collection_root` comparison is the caller's, and prefix equality is a
 trap.** model-browser has no configured root — `/api/dir` takes any absolute
 path — so gating on this field is the only scoping that exists on that side.
