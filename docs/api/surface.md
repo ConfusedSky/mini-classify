@@ -212,8 +212,9 @@ embedding.
 **`up` is discrete, and that is a guarantee, not an accident.** Pose resolution
 picks from `pose.UP_CANDIDATES` — `(0,0,±1)`, `(0,±1,0)`, `(±1,0,0)` — and
 returns the winner unchanged; `FORCED_UPS` (`--up-axis z|y`) is drawn from the
-same set. Verified against the live cache: `embed-cache4`'s 133 entries hold
-exactly six distinct values, all unit axis vectors. So the six map 1:1 onto
+same set. Verified against the live caches: `embed-cache2`'s 2945 entries and
+`embed-cache4`'s 133 hold exactly six distinct values between them, all unit
+axis vectors. So the six map 1:1 onto
 model-browser's `OrbitAxis`, and **a consumer must not snap defensively** as
 if this were a continuous rotation — there is nothing to snap, and a snap
 would hide a bug rather than absorb one. If a non-axis vector ever appears
@@ -226,22 +227,27 @@ continuous orientation.
 **The 1:1 mapping is for labelling and storage. It is not a substitute for the
 up rotation below.** The tempting shortcut — set the viewer's spindle to the
 model's up axis, pass `azimuth_deg` straight through, skip step 1 — is wrong
-for half the axes, and wrong in the way that survives a demo: the common case
-works. Measured against `rotation_to_z_up` and model-browser's spindle frames
-over a 24×5 az/el grid, with model counts from `embed-cache4`:
+for half the axes. Measured against `rotation_to_z_up` and model-browser's
+spindle frames over a 24×5 az/el grid; counts are from **`embed-cache2`, the
+primary cache** (2945 models), with the 133-model test cache `embed-cache4`
+beside it:
 
-| `up` | models | shortcut agrees | azimuth offset if used anyway |
-|---|---|---|---|
-| `z` | 106 | yes | 0 |
-| `-y` | 7 | yes | 0 |
-| `-x` | 1 | yes | 0 |
-| `y` | 9 | **no** | +90° |
-| `-z` | 7 | **no** | +90° |
-| `x` | 3 | **no** | −90° |
+| `up` | cache2 | cache4 | shortcut agrees | azimuth offset if used anyway |
+|---|---|---|---|---|
+| `y` | 1118 | 9 | **no** | +90° |
+| `z` | 1043 | 106 | yes | 0 |
+| `-z` | 226 | 7 | **no** | +90° |
+| `-y` | 207 | 7 | yes | 0 |
+| `x` | 176 | 3 | **no** | −90° |
+| `-x` | 175 | 1 | yes | 0 |
 
-19 of 133 models — 14% silently rotated a quarter turn while 86% look correct.
-The offsets are exact (residual < 1e-15), so the table also serves as a
-diagnostic: a model that reads 90° off is a skipped step 1, not a bad pose.
+**1520 of 2945 — 52% of the real collection**, because `+Y` is its most common
+up axis, ahead of `+Z`. An earlier revision of this document said 14% and
+called it "the failure that survives a demo"; that figure came from the test
+cache, where 80% of models are `+Z`, and a kit-sized slice of this library does
+not have the library's axis distribution. The offsets are exact (residual
+< 1e-15), so the table also serves as a diagnostic — a model that reads 90° off
+is a skipped step 1, not a bad pose.
 
 **`azimuth_zero` exists so no consumer has to depend on that table.** It is
 the model-space direction azimuth 0 is measured from — `rotation_to_z_up(up)ᵀ
@@ -260,8 +266,9 @@ That choice is now pinned on this side as well
 because it was already load-bearing before any consumer existed: `views`
 rotates the mesh by this matrix before shooting, so it decides the pixels — and
 therefore the cached embeddings — for every non-`+Z` model, while the embedding
-key records only the up *vector*. Changing it re-poses 27 of `embed-cache4`'s
-133 models under unchanged cache keys.
+key records only the up *vector*. Changing it re-poses every non-`+Z` model
+under unchanged cache keys — **1902 of `embed-cache2`'s 2945**, 65% of the
+primary cache.
 
 Two transforms, applied in this order, and the viewer needs both:
 

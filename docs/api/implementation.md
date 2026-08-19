@@ -109,9 +109,9 @@ does is one `stat` for the 404.
 Load time is the exception, and it is smaller than an earlier draft of this
 plan said. `load_file_list` stats every cached entry to drop vanished files, so
 startup and `/reload` pay that on spinning media — but the figure is the *STL
-list*, not a tree walk: 133 for `embed-cache4`, 2890 for the largest cached
-list here (`embed-cache2`). The "~10k" in an earlier draft was model-browser's
-whole-tree entry count and measured a different thing.
+list*, not a tree walk: 2890 for `embed-cache2`, the primary cache, and 133 for
+the `embed-cache4` test cache. The "~10k" in an earlier draft was
+model-browser's whole-tree entry count and measured a different thing.
 
 **A one-line fix halves it**, and belongs in this phase: `cachedir.py:139-140`
 calls `f.exists()` twice per entry — once to build `gone` for the log line,
@@ -199,7 +199,10 @@ Root-level CLI entry, mirroring `classify_stls.py`: `add_cache_args` +
 `Embedder`, calls `uvicorn.run`. **Nothing imports it** — same rule as the
 classifier, and for the same reason.
 
-*Proves:* a live run against `embed-cache4` (133 models, 8 views): `/status`
+*Proves:* a live run against **`embed-cache2`, the primary cache** (2945
+models) — `embed-cache4` is a 133-model test cache and is not representative,
+of scale or of axis distribution. Use cache4 only for a fast smoke pass. With
+the real cache: `/status`
 reports the right `collection_root` and counts; a query returns the same
 top-10 the REPL gives for the same text and pool; a scoped query narrows;
 `/similar` on a known model returns its obvious neighbours. Measure query

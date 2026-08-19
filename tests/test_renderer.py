@@ -117,8 +117,8 @@ def test_rotation_to_z_up_is_pinned_for_all_six_candidates():
     decides the pixels — and therefore the embeddings — for every non-+Z
     model. The embedding key covers the *up vector* (`pose.embed_cache_token`)
     and says nothing about which rotation took it to +Z, so changing this
-    function re-poses cached models under unchanged keys: 27 of 133 in
-    embed-cache4, silently.
+    function re-poses cached models under unchanged keys: 1902 of 2945 in
+    embed-cache2, the primary cache, silently.
 
     The `-z` row is the load-bearing one. Any rotation taking -Z to +Z
     satisfies the docstring; the antiparallel branch picks Rx(pi), and that

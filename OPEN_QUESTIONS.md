@@ -377,7 +377,10 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   byte-identically, so the same mesh under two paths earns the same embedding
   and therefore the same cosine score to every query. What is unknown is how
   often the *live* cache produces them: the 2124 figure is fuzzed data rounded
-  to force ties, not a measurement of `embed-cache4`. First thing to run, and
+  to force ties, not a measurement of any real cache. Run it against
+  `embed-cache2` (2945 models), the primary one — a duplicate-heavy library is
+  exactly where duplicated kits accumulate, and the 133-model `embed-cache4` is
+  too small and too unrepresentative to answer it. First thing to run, and
   it is cheap — score the real matrix against a few dozen queries and count
   how many top-10 listings contain an exact score tie, then check whether the
   tied rows of `matrix` are bit-identical, which is the thing that causes the
@@ -396,9 +399,10 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   `cache_key` covers views, elevations, render size, model, `--compile` and the
   up *vector* — not `rotation_to_z_up`, which decides *which* rotation realised
   that vector and therefore which side of the model each azimuth sees. Change
-  that function and 27 of `embed-cache4`'s 133 non-`+Z` models are re-posed
-  under unchanged keys: the embeddings on disk answer a different question than
-  the ones a fresh run would produce, and nothing anywhere fails.
+  that function and every non-`+Z` model is re-posed under unchanged keys —
+  **1902 of `embed-cache2`'s 2945**, 65% of the primary cache: the embeddings
+  on disk answer a different question than the ones a fresh run would produce,
+  and nothing anywhere fails.
   `tests/test_renderer.py::test_rotation_to_z_up_is_pinned_for_all_six_candidates`
   (2026-08-19) stops the accidental version of this. It cannot stop a
   deliberate one, which is the actual question.
@@ -449,14 +453,29 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   The five split on whether that scoping is possible at all:
 
   * `rotation_to_z_up` is **conditional on data**: it is the identity for
-    `+Z`-up models, so only the rest are affected — 27 of `embed-cache4`'s 133,
-    and the ratio is what it is because most of the collection is `+Z`.
+    `+Z`-up models, so only the rest are affected. On `embed-cache2` that is
+    1902 of 2945 — **65%**, because this collection is mostly *not* `+Z`-up
+    (`+Y` is its commonest axis at 1118, ahead of `+Z`'s 1043). Scoping saves
+    the other 35% and no more.
   * `orbit_camera`, the radius factor, the sun direction and the material are
     **global**: every render goes through them, so a change invalidates
     everything and there is nothing to scope.
 
-  So the "hours" cost is real for four of the five and avoidable for the one
-  most likely to be touched. A rotation invalidation should also drop the pose
+  ~~So the cost is avoidable for the one item most likely to be touched.~~
+  Measured on the primary cache rather than the test one, that is not true:
+  scoping turns a 2945-model re-render into a 1902-model re-render. Better than
+  nothing and not a reprieve. (The 20%-affected figure this entry first carried
+  was `embed-cache4`, the 133-model test cache, whose axis distribution is
+  nothing like the library's.)
+
+  **A cold cache invalidates nothing**, so the cost lands only on a bump
+  against a populated one — and the *introduction* can be free too, if version
+  1 is defined as today's recipe and elided from the key the way `|compiled`
+  and `|e:` already are (`cachedir.py`: byte-compatible additions are designed
+  to leave existing keys alone). Building the mechanism and paying for it are
+  separable decisions; only the second one costs hours.
+
+  A rotation invalidation should also drop the pose
   cache's `front_view` entries (derived from the views, so they move with the
   rotation) while keeping `up`, `source`, `confidence` and `margin` — which is
   the part that cost money to resolve, and which a rotation change does not
