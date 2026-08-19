@@ -58,7 +58,7 @@ def as_tensor(feat):
     return feat if isinstance(feat, torch.Tensor) else feat.pooler_output
 
 
-# --- the text passes as free functions --------------------------------------
+# --- the text passes as free functions (main:classify_stls.py:515-550) --------
 #
 # The Embedder's methods below *are* these, bound to the model it owns. They
 # also exist unbound because the REPL (`test_categories.py`) and four eval
@@ -154,7 +154,8 @@ class Embedder:
         return Embedded(file=m.file, index=m.index, pose=m.pose,
                         embeds=self.embed_images(m.views, batch=self.embed_batch))
 
-    # --- the extracted forward passes (main:classify_stls.py:515-550) -------
+    # --- the forwards: the text pair bound to this model, and the image pass
+    #     the evals call directly (main:classify_stls.py:515-550) ------------
 
     def _embed_raw(self, texts: Sequence[str]) -> torch.Tensor:
         """`embed_raw` bound to this Embedder's model, processor and device."""
