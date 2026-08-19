@@ -40,9 +40,12 @@ Hard constraints this module is built around (CLAUDE.md):
 Rendering extraction source: `classify_stls.py` (make_renderer, orbit_camera,
 view_angles, render_up_candidate_grid's camera trick, save_renders,
 RENDER_FORMATS). This module is the one home for all of it except
-`view_angles`, which moved on to `src/pose.py` (2026-08-19) so a consumer can
-turn a `front_view` index into an angle without importing open3d; it is
-imported back here and `Renderer` still takes its cameras from it — the CLI's
+`view_angles` and `rotation_to_z_up`, which moved on to `src/pose.py`
+(2026-08-19) so a consumer can name a camera angle, or the rotation a pose
+implies, without importing open3d — both are pure numpy and neither ever
+touched a mesh. `Renderer` calls them through `pose.` rather than importing
+the names, so that `renderer.view_angles` does not resolve and this module
+cannot become a re-export of them (review, 2026-08-19) — the CLI's
 parallel single-process render path was deleted in the eval-debt cleanup
 (2026-08-18) and `eval/rig.py` drives the `Renderer` below instead — and
 `render_key` moved down to `identity` (the parent's cache checker needs it
@@ -61,7 +64,6 @@ import open3d.visualization.rendering as rendering
 from PIL import Image
 
 from src import pose
-from src.pose import rotation_to_z_up, view_angles   # moved there 2026-08-19
 from src.identity import render_key
 from src.loader import LoadedMesh
 from src.messages import RenderConfig
@@ -303,8 +305,8 @@ class Renderer:
         azimuths are `view_angles(n_az, [UP_TILE_ELEVATION])`, so a smaller
         n_az is an exact camera subset of a larger one."""
         center, radius = self._show(lm, index, pin=True)
-        angles = view_angles(n_az, [UP_TILE_ELEVATION])
-        return [self._shoot_rotated(rotation_to_z_up(up), center, radius, angles)
+        angles = pose.view_angles(n_az, [UP_TILE_ELEVATION])
+        return [self._shoot_rotated(pose.rotation_to_z_up(up), center, radius, angles)
                 for up in pose.UP_CANDIDATES]
 
     def views(self, lm: LoadedMesh | None, index: int, up) -> list[np.ndarray]:
@@ -318,12 +320,12 @@ class Renderer:
         by design). Consuming the mesh clears `in_flight` (K1)."""
         rm = self._admit(lm, index, pin=False)
         rot = o3d.geometry.TriangleMesh(rm.mesh)            # copy, then rotate
-        rot.rotate(rotation_to_z_up(np.asarray(up, dtype=float)),
+        rot.rotate(pose.rotation_to_z_up(np.asarray(up, dtype=float)),
                    center=(0, 0, 0))
         bounds = rot.get_axis_aligned_bounding_box()        # framing from the
         center = np.asarray(bounds.get_center(), dtype=float)   # rotated copy,
         radius = float(np.linalg.norm(bounds.get_extent()) * 1.4)  # as today's
-        angles = view_angles(self.cfg.views, list(self.cfg.elevations))  # path
+        angles = pose.view_angles(self.cfg.views, list(self.cfg.elevations))  # path
         cams = [(center, *orbit_camera(center, radius, az, elev))
                 for az, elev in angles]
         self._hide_visible()                     # only the copy in the shot

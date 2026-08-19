@@ -68,7 +68,11 @@ def test_rotation_to_z_up_matches_open3d_bit_for_bit():
             angle = np.arccos(np.clip(up @ z, -1, 1))
             want = o3d.geometry.get_rotation_matrix_from_axis_angle(axis * angle)
         got = pose.rotation_to_z_up(up)
-        assert np.array_equal(got, want), tuple(up)
+        # `.tobytes()`, not `array_equal` — the latter reports -0.0 == 0.0, and
+        # four of the six matrices carry signed zeros the table transcribes
+        # deliberately. array_equal let a sign-flipped table pass (found in
+        # review, 2026-08-19)
+        assert got.tobytes() == np.ascontiguousarray(want, np.float64).tobytes(), tuple(up)
         # and the properties that make it a legitimate rotation, so a rewrite
         # that is merely *different* reads differently from one that is wrong
         assert np.allclose(got @ np.asarray(up, float), z, atol=1e-12), tuple(up)
@@ -89,6 +93,35 @@ def test_rotation_to_z_up_falls_back_for_a_non_axis_vector():
     got = pose.rotation_to_z_up(up)
     assert np.allclose(got, want, atol=1e-14)
     assert np.allclose(got @ up, [0.0, 0.0, 1.0], atol=1e-14)
+
+
+def test_rotation_to_z_up_handles_collinear_and_non_unit_input():
+    """A vector along Z but not unit must not reach Rodrigues.
+
+    Its cross product with Z is zero, so the axis is 0/0 and the matrix comes
+    out all-NaN. Open3D's version hid exactly this: handed a nan axis-angle it
+    returned the *identity*, so `[0,0,-2]` rendered upside down and said
+    nothing. Normalising first sends these to the table, where `-2*z` is
+    `Rx(pi)` and not the identity — which is the answer the old code got
+    wrong, not merely differently."""
+    z_up = pose.rotation_to_z_up(np.array([0.0, 0.0, 1.0]))
+    z_down = pose.rotation_to_z_up(np.array([0.0, 0.0, -1.0]))
+    for scale in (2.0, 0.5, 1.0000001, 0.99999):
+        assert np.array_equal(pose.rotation_to_z_up(np.array([0.0, 0.0, scale])), z_up), scale
+        assert np.array_equal(pose.rotation_to_z_up(np.array([0.0, 0.0, -scale])), z_down), scale
+    # and an off-axis vector still normalises to a proper rotation
+    R = pose.rotation_to_z_up(np.array([0.0, 3.0, 3.0]))
+    assert np.isfinite(R).all()
+    assert np.allclose(R @ (np.array([0.0, 3.0, 3.0]) / np.linalg.norm([0.0, 3.0, 3.0])),
+                       [0.0, 0.0, 1.0], atol=1e-12)
+
+
+@pytest.mark.parametrize("bad", [[0.0, 0.0, 0.0], [np.nan, 0.0, 1.0], [np.inf, 0.0, 0.0]])
+def test_rotation_to_z_up_rejects_a_degenerate_vector(bad):
+    """No rotation takes nothing to +Z. Raising beats returning NaN, which
+    `azimuth_zero` would otherwise publish to a consumer as a pose."""
+    with pytest.raises(ValueError, match="finite non-zero"):
+        pose.rotation_to_z_up(np.array(bad))
 
 
 def test_rotation_to_z_up_does_not_hand_out_its_table():
@@ -358,11 +391,17 @@ def test_importing_pose_does_not_import_torch_or_src_peers():
     torch import would hand the render child VRAM/startup cost for nothing.
     `src.identity` is the table's one sanctioned dependency (the leaf below
     the leaf). Mirrors test_messages.py's I8 guard: fresh interpreter, then
-    inspect sys.modules."""
+    inspect sys.modules.
+
+    **open3d counts too**, and did not until review caught the gap
+    (2026-08-19): the table permits it only inside `up_axis_scores`, and both
+    functions that moved here from `renderer` are pure numpy precisely so that
+    stays true. Without this clause the whole premise of the move rested on a
+    manual check nobody would rerun."""
     allowed = "{'src', 'src.pose', 'src.identity'}"
     code = ("import sys; from src import pose; "
-            "bad = [k for k in sys.modules if k == 'torch' "
-            "or k.startswith('torch.')]; "
+            "bad = [k for k in sys.modules if k in ('torch', 'open3d') "
+            "or k.startswith(('torch.', 'open3d.'))]; "
             "bad += [k for k in sys.modules if (k == 'src' "
             f"or k.startswith('src.')) and k not in {allowed}]; "
             "print(', '.join(bad)); sys.exit(1 if bad else 0)")

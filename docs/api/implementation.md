@@ -33,11 +33,11 @@ weight. Flask 3.1.3 is there too, transitively — it is not a chosen
 dependency and does not reopen the framework decision (surface.md §Stack).
 Record the resolved versions here once installed.
 
-**0.2 Move `view_angles` into `src/pose.py`.** It lives in `src/renderer.py`,
-which is child-side and imports open3d; the API must name a front view's
-azimuth without loading a rendering library. The function is pure numpy and
-`renderer` already imports `pose`, so the move itself is cycle-free and
-mechanical.
+**0.2 Move `view_angles` into `src/pose.py`** — *done; `rotation_to_z_up`
+moved with it, see below.* It lived in `src/renderer.py`, which is child-side
+and imports open3d, and the API must name a front view's azimuth without
+loading a rendering library. Both functions are pure numpy and `renderer`
+already imported `pose`, so the move was cycle-free.
 
 **The callers are the work, and leaving them alone is the trap.** After the
 move `renderer` still needs `view_angles`, so it imports the name — and every
@@ -52,7 +52,7 @@ keeps a name→owner table so each name has one home). Repoint all of them:
 | `src/renderer.py:41` | module docstring lists `view_angles` among what this module is "the one home for" — no longer true, amend it |
 | `eval/tile_count.py:93` | repoint the import; prose at `:14,:18,:87` names `src.renderer.view_angles` |
 | `eval/gold_upright.py:37,50` | repoint the import |
-| `eval/views_camera_rotation.py:63,162` | repoint the import (keeps `Renderer`, `orbit_camera`, `rotation_to_z_up` from `renderer`) |
+| `eval/views_camera_rotation.py:63,162` | repoint the import; it keeps `Renderer` and `orbit_camera` from `renderer`, and takes `rotation_to_z_up` from `pose` too once that moved as well |
 | `tests/test_renderer.py:107,109` | resolves it as a `renderer_mod` **attribute**, not an import. Import from `src.pose` instead — the test's own claim is about `pose_tiles`' cameras, and `view_angles` is its oracle, so it should name the oracle's new home. The ring-subset property itself (a ring of `n` is a subset of a ring of 4) is `pose`'s to own now and belongs in `tests/test_pose.py` |
 | `eval/README.md:53` | the camera-constants row needs `view_angles` split out to `src.pose` |
 

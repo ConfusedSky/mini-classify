@@ -276,8 +276,8 @@ primary cache.
 
 Two transforms, applied in this order, and the viewer needs both:
 
-1. **Up rotation.** Rotate the mesh so `up` points at world +Z (the renderer's
-   `rotation_to_z_up`: the axis-angle taking `up` to `[0,0,1]`). Without it the
+1. **Up rotation.** Rotate the mesh so `up` points at world +Z
+   (`pose.rotation_to_z_up`: the axis-angle taking `up` to `[0,0,1]`). Without it the
    azimuth below means nothing — half the collection is modelled Y-up.
 2. **Camera.** Orbit the Z-up model at `azimuth_deg` / `elevation_deg`, looking
    at the bounding-box centre. Elevation is above the horizon; azimuth is CCW
@@ -305,10 +305,10 @@ whenever the pose cache has no `front_view` entry for the server's view config
 (`views`/`elevations`): the viewer should fall back to azimuth 0 at the first
 elevation, which is what view 0 always is.
 
-**Code note:** `view_angles` currently lives in `src/renderer.py`, which is
-child-side and imports open3d. It is pure numpy and needs to move to
-`src/pose.py` so the server can name an angle without loading a rendering
-library — same shape as the `up_axis_scores` deferral. One copy, not two.
+**Code note:** ~~`view_angles` currently lives in `src/renderer.py` and needs
+to move.~~ Done 2026-08-19 — `view_angles` and `rotation_to_z_up` both live in
+`src/pose.py` now, pure numpy, so the server names an angle and the rotation a
+pose implies without loading a rendering library. One copy of each.
 
 ### `scope` — path filtering, and telling the caller what isn't indexed
 

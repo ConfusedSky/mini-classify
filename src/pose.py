@@ -307,9 +307,24 @@ def rotation_to_z_up(up):
 
     Anything else falls through to Rodrigues, which agrees with Open3D to
     ~1e-15. Nothing in the pipeline reaches it, since poses are always
-    axis-aligned; it is here so the function is total rather than a lookup
-    that raises on inputs it was never given."""
+    axis-aligned.
+
+    **The input is normalised first, and that is load-bearing rather than
+    tidiness.** A vector collinear with Z but not unit — `[0,0,2]`, or `[0,0,1]`
+    off by a rounding step — has a zero cross product with Z, so Rodrigues
+    divides by zero and yields an all-NaN matrix. Open3D's version hid this: it
+    took `nan` axis-angle input and returned the *identity*, so `[0,0,-2]`
+    silently rendered upside down rather than failing. Normalising sends every
+    such vector to the table, where the answer is right. Bit-fidelity survives
+    it because the six candidates are exactly unit, and `x / 1.0 == x`.
+
+    A zero vector raises: there is no rotation taking nothing to +Z, and a
+    caller that has one is holding a bug, not an edge case."""
     v = np.asarray(up, dtype=float)
+    n = float(np.linalg.norm(v))
+    if not np.isfinite(n) or n == 0.0:
+        raise ValueError(f"up must be a finite non-zero vector, got {up!r}")
+    v = v / n
     exact = _AXIS_ROTATIONS.get(tuple(float(x) for x in v))
     if exact is not None:
         return np.array(exact)          # a fresh array per call, as before

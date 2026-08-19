@@ -51,7 +51,7 @@ through it, they import from the module that owns it:
 | `classify_stls.as_tensor` / `embed_raw` / `embed_texts` | `src.embedder` |
 | `classify_stls.pool_sims` | `src.query` (via `src.done` until 2026-08-19) |
 | `classify_stls.RENDER_FORMATS` and the camera/light constants | `src.renderer` |
-| `classify_stls.view_angles` | `src.pose` (via `src.renderer` until 2026-08-19) |
+| `classify_stls.view_angles` / `rotation_to_z_up` | `src.pose` (via `src.renderer` until 2026-08-19) |
 | `classify_stls.read_binary_stl` / `load_mesh` | `src.loader` |
 | `classify_stls.view_config` | `src.cachedir` |
 
