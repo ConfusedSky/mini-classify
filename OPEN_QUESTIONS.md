@@ -361,6 +361,37 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   one-renderer-per-process limit was refuted (four coexisted in one process;
   the abort is teardown-only, `docs/reviews/2026-08-13.md` §3.1), so the
   decoupling needs only a second renderer kept alive for the process lifetime.
+- **Which duplicate wins a tied query is now decided, but it was never
+  chosen.** `rank`'s sort is stable as of `0f524e7`, so exact ties break by
+  ascending collection index. That fixed a real non-determinism — the previous
+  quicksort ordered equal scores arbitrarily, so two consumers of the same
+  cache could list different models — but it settles *which* copy is shown by
+  accident: "lowest index" is whatever order `load_file_list` happened to walk,
+  and nothing about it says the winner is the better copy. The effect is not
+  confined to ordering: when a tie straddles the top-N cut, a different model
+  is **listed at all** (2124 of 16000 fuzzed cases, always at an equal score;
+  `tests/test_query.py` pins the winner). The other copies vanish from the
+  listing with no indication they existed.
+
+  Ties are real here rather than theoretical because duplicated kits render
+  byte-identically, so the same mesh under two paths earns the same embedding
+  and therefore the same cosine score to every query. What is unknown is how
+  often the *live* cache produces them: the 2124 figure is fuzzed data rounded
+  to force ties, not a measurement of `embed-cache4`. First thing to run, and
+  it is cheap — score the real matrix against a few dozen queries and count
+  how many top-10 listings contain an exact score tie, then check whether the
+  tied rows of `matrix` are bit-identical, which is the thing that causes the
+  tie. Note `pose.file_identity` cannot answer this: it keys on relative path,
+  mtime and size, so two copies of one mesh are deliberately *different*
+  identities — file-level duplication needs size plus a content hash, and the
+  embeddings answer the query question without touching the STLs at all.
+
+  Only then is the design question worth arguing: leave it arbitrary-but-
+  deterministic (one copy is probably what a browser wants), collapse exact
+  duplicates and report a count, or return all of them and let the caller
+  collapse. It bites the API sketch harder than the REPL — `docs/api/surface.md`
+  caps hits at `top`/`cap`, so a duplicate-heavy query spends its budget
+  listing the same mesh repeatedly, and model-browser has no way to tell.
 
 ## Performance work not done
 
