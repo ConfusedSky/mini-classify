@@ -19,11 +19,15 @@ import numpy as np
 import pytest
 
 from src import pose
-from src.cachedir import cache_key, embeds_dir
+from src.cachedir import cache_key, embeds_dir, view_config
 from src.collection import (COVERS, Collection, NoSuchPath, OutsideCollection,
-                            Scope, VirtualPath)
+                            Scope, ScopeError, VirtualPath, VolumeUnavailable)
 
 DIM = 8
+
+
+def _replace(args, **over):
+    return argparse.Namespace(**{**vars(args), **over})
 
 
 def make_args(tmp_path, **over):
@@ -59,12 +63,22 @@ def build(tmp_path, layout, *, embed=None, ups=None, front=None, **over):
         e = {"up": list(up), "confidence": 0.9, "source": "geometry",
              "margin": 0.5, "v": pose.POSE_CACHE_VERSION}
         if rel in front:
-            e["front_view"] = {f"{args.views}v-e20": front[rel]}
+            # through the production function, so a fixture with non-default
+            # elevations keys its entry the way a real run would
+            e["front_view"] = {view_config(args): front[rel]}
         entries[pose.file_identity(f, root)] = e
     cache = tmp_path / "cache"
     cache.mkdir(parents=True, exist_ok=True)
     # flat {identity: entry}, exactly what `pose.save_pose_cache` writes
     (cache / "pose-cache.json").write_text(json.dumps(entries))
+    # every real cache carries one, and it is what anchors the keys: without
+    # it `cache_root` falls back to the input, so a run scoped to a subdirectory
+    # would silently re-anchor and the root/input distinction would vanish
+    (cache / "run-params.json").write_text(json.dumps(
+        {"input": args.input, "collection_root": str(root),
+         "views": args.views, "elevations": args.elevations,
+         "render_size": args.render_size, "model": args.model,
+         "compile": args.compile, "up_axis": args.up_axis}))
 
     ed = embeds_dir(args.cache_dir)
     ed.mkdir(parents=True, exist_ok=True)
@@ -139,6 +153,36 @@ def test_a_path_that_does_not_exist_is_not_found(tmp_path):
         c.resolve("a/nowhere")
 
 
+@pytest.mark.parametrize("bad", [
+    "a\x00b",                       # ValueError from the null byte
+    "x" * 5000,                     # OSError ENAMETOOLONG
+    5,                              # TypeError
+    b"bytes",                       # TypeError
+])
+def test_a_malformed_path_is_a_scope_error_not_a_500(tmp_path, bad):
+    """`path` is a request-body string, so anything that escapes as itself is
+    a 500 from a crafted input. An earlier version caught only OSError — and
+    its comment named symlink loops, which `Path.resolve` raises as
+    RuntimeError, so it was dead code describing the one case it could not
+    catch (review, 2026-08-19)."""
+    args, *_ = build(tmp_path, ["a/one.stl"])
+    c = Collection.load(args)
+    with pytest.raises(ScopeError):
+        c.resolve(bad)
+
+
+def test_a_symlink_loop_is_a_scope_error(tmp_path):
+    """The case that comment named. `Path.resolve()` swallows the OSError
+    internally and raises RuntimeError, which sailed past."""
+    args, root, _ = build(tmp_path, ["a/one.stl"])
+    loop = root / "loop"
+    loop.symlink_to(root / "loop2")
+    (root / "loop2").symlink_to(loop)
+    c = Collection.load(args)
+    with pytest.raises(ScopeError):
+        c.resolve("loop")
+
+
 def test_a_real_directory_with_nothing_embedded_is_an_answer_not_an_error(tmp_path):
     """The distinction the whole scope block exists for: 'nothing matched' and
     'nothing here is classified' must not look the same to the UI."""
@@ -165,6 +209,40 @@ def test_covers_is_published_so_a_3mf_folder_is_not_read_as_covered(tmp_path):
     s = c.resolve("b")
     assert s.status == "unindexed" and s.n_scanned == 0
     assert s.as_dict()["covers"] == ["stl"]         # the disambiguator
+
+
+def test_a_scope_is_matched_by_realpath_not_by_string(tmp_path):
+    """The commit that introduced this claimed realpath comparison and nothing
+    pinned it (review, 2026-08-19). A symlink is the cheap stand-in for the
+    real case: the library remounts as .../STLLibrary1 for the same tree, and
+    a string prefix stops matching."""
+    args, root, _ = build(tmp_path, ["a/one.stl", "b/two.stl"])
+    link = tmp_path / "by-another-name"
+    link.symlink_to(root / "a")
+    c = Collection.load(args)
+    assert c.resolve(str(link)).rows.tolist() == c.resolve("a").rows.tolist()
+
+
+def test_a_symlinked_input_still_produces_root_relative_paths(tmp_path):
+    """Walking a symlink to the collection used to yield absolute `_rel`
+    tuples: every subdirectory scope returned zero rows while the collection
+    reported them indexed, and `rel_path` came out with a doubled leading
+    slash — the documented join key, silently unusable (review, 2026-08-19)."""
+    args, root, _ = build(tmp_path, ["Kits/Baal/x.stl"])
+    link = tmp_path / "link"
+    link.symlink_to(root)
+    c = Collection.load(_replace(args, input=str(link)))
+    assert c.hit(0, 0.1, 1.0)["rel_path"] == "Kits/Baal/x.stl"
+    assert len(c.resolve("Kits").rows) == 1          # not silently unindexed
+
+
+def test_a_run_scoped_to_a_subdirectory_keeps_root_relative_paths(tmp_path):
+    """Cache keys stay anchored at the collection root even when the run walks
+    one kit, so `rel_path` must carry the intervening directories."""
+    args, root, _ = build(tmp_path, ["Kits/Baal/x.stl", "Kits/Other/y.stl"])
+    c = Collection.load(_replace(args, input=str(root / "Kits" / "Baal")))
+    assert c.hit(0, 0.1, 1.0)["rel_path"] == "Kits/Baal/x.stl"
+    assert len(c.resolve("Kits").rows) == 1          # only what was walked
 
 
 # --- pose ------------------------------------------------------------------
@@ -195,11 +273,25 @@ def test_azimuth_zero_is_the_direction_azimuth_zero_is_measured_from(tmp_path):
         assert not np.isnan(want).any()
 
 
-def test_front_is_null_when_the_view_config_has_no_entry(tmp_path):
-    """An index cached at another view config is not this run's; the viewer
-    falls back to view 0 rather than being handed a wrong camera."""
+def test_front_is_null_when_no_front_view_was_ever_cached(tmp_path):
     args, *_ = build(tmp_path, ["a/one.stl"])          # no front_view written
     c = Collection.load(args)
+    assert c.pose_of(0)["front"] is None
+
+
+def test_front_cached_under_another_view_config_is_not_used(tmp_path):
+    """The state the null actually guards, and the one the previous test could
+    not distinguish (review, 2026-08-19): an entry exists, but it indexes some
+    other run's view list. An index cached at 8 views is out of range at 4 and
+    silently wrong at the same count with different elevations."""
+    args, root, files = build(tmp_path, ["a/one.stl"])
+    ident = pose.file_identity(files["a/one.stl"], root)
+    cache = tmp_path / "cache" / "pose-cache.json"
+    entries = json.loads(cache.read_text())
+    entries[ident]["front_view"] = {"8v-e20,-20": 3}    # another config entirely
+    cache.write_text(json.dumps(entries))
+    c = Collection.load(args)
+    assert c.view_cfg == "2v-e20"
     assert c.pose_of(0)["front"] is None
 
 
@@ -236,24 +328,75 @@ def test_hit_does_not_validate_the_path(tmp_path):
 
 # --- the load-once property -------------------------------------------------
 
-def test_a_query_touches_the_filesystem_only_for_the_404_stat(tmp_path, monkeypatch):
-    """The reason `n_scanned` reads a cached walk instead of walking: this
-    collection lives on spinning exfat where a cold walk is ~32 s, and two
-    processes walking one platter contend. If a scope ever calls `iterdir`,
-    `walk`, or `stat` per file, that budget is gone."""
+def count_syscalls(fn):
+    """Real syscalls `fn()` makes, by name. Counts `os`-level calls rather than
+    patching `Path` methods, because pathlib reaches straight through: an
+    earlier version of this test blocked `iterdir`/`glob`/`rglob`/`os.walk`
+    and missed `hit` doing nine `lstat`s per result (review, 2026-08-19).
+
+    Restores in a `finally` rather than leaving it to fixture teardown — the
+    spies stay installed otherwise and the counter keeps absorbing whatever
+    the rest of the test does, including building the next fixture."""
+    import collections
+    import os
+    seen = collections.Counter()
+    names = ("stat", "lstat", "scandir", "listdir", "readlink", "open")
+    real = {n: getattr(os, n) for n in names}
+    for name in names:
+        def spy(*a, _n=name, _f=real[name], **k):
+            seen[_n] += 1
+            return _f(*a, **k)
+        setattr(os, name, spy)
+    try:
+        fn()
+    finally:
+        for name, f in real.items():
+            setattr(os, name, f)
+    return seen
+
+
+def test_a_hit_touches_the_filesystem_not_at_all(tmp_path):
+    """A `top=10` query must not pay 90 syscalls on a slow USB volume.
+
+    `hit` used to call `identity.render_key`, which resolves the path and so
+    lstats every component — 89 syscalls for ten results on the real
+    collection. The key is precomputed at load now, and this asserts the
+    budget rather than the absence of a few named walk functions, which is
+    what let that through."""
     args, *_ = build(tmp_path, ["a/one.stl", "b/two.stl"])
     c = Collection.load(args)
+    calls = count_syscalls(lambda: [c.hit(i, 0.5, 2.0) for i in range(2)])
+    assert sum(calls.values()) == 0, dict(calls)
 
-    import os
-    from pathlib import Path as P
-    for name in ("iterdir", "glob", "rglob"):
-        monkeypatch.setattr(P, name, lambda *a, **k: pytest.fail(f"scope called {name}"))
-    monkeypatch.setattr(os, "walk", lambda *a, **k: pytest.fail("scope walked"))
 
-    s = c.resolve("a")                  # resolve + exists are the allowed stats
-    assert len(s.rows) == 1
-    h = c.hit(int(s.rows[0]), 0.5, 2.0)  # and a hit must touch nothing at all
-    assert h["pose"] is not None
+def test_pose_of_touches_the_filesystem_not_at_all(tmp_path):
+    """It must not re-read pose-cache.json per call — the poses are in memory."""
+    args, *_ = build(tmp_path, ["a/one.stl", "b/two.stl"])
+    c = Collection.load(args)
+    calls = count_syscalls(lambda: [c.pose_of(i) for i in range(2)])
+    assert sum(calls.values()) == 0, dict(calls)
+
+
+def test_a_scope_costs_a_bounded_handful_of_syscalls(tmp_path):
+    """The reason `n_scanned` reads a cached walk instead of walking: this
+    collection lives on removable media where a cold walk is ~32 s and two
+    processes walking one platter contend for the head.
+
+    The budget is small and constant — a `resolve()` of the scope path plus
+    one `exists()` — and explicitly *not* proportional to the collection, so
+    adding a per-file `stat` anywhere fails here rather than in production."""
+    # both collections at the same directory depth: `resolve` lstats one
+    # component per level, so depth is a legitimate cost and file count is not
+    args, *_ = build(tmp_path / "small", ["a/one.stl", "a/two.stl", "b/four.stl"])
+    c = Collection.load(args)
+    calls = count_syscalls(lambda: c.resolve("a"))
+    assert sum(calls.values()) < 16, dict(calls)
+    assert calls["scandir"] == calls["listdir"] == 0, dict(calls)
+
+    args2, *_ = build(tmp_path / "big", [f"a/m{i}.stl" for i in range(40)] + ["b/x.stl"])
+    c2 = Collection.load(args2)
+    big = count_syscalls(lambda: c2.resolve("a"))
+    assert sum(big.values()) == sum(calls.values()), (dict(calls), dict(big))
 
 
 def test_reload_returns_a_new_instance_and_leaves_the_old_one_usable(tmp_path):
@@ -270,9 +413,61 @@ def test_reload_returns_a_new_instance_and_leaves_the_old_one_usable(tmp_path):
     assert len(first.files) == 1 and first.matrix.shape[0] == 1   # untouched
 
 
+# --- the volume ------------------------------------------------------------
+
+def test_an_absent_volume_raises_rather_than_reading_as_an_empty_cache(tmp_path, capsys):
+    """The library lives on removable media. Unmounted, `load_file_list` drops
+    every entry and `load_embedding_matrix` says "no cached embeddings found —
+    run classify_stls.py first", which is wrong twice: the embeddings are
+    intact and local, and re-running would not help. Fail early, and say so."""
+    import shutil
+    args, root, _ = build(tmp_path, ["a/one.stl"])
+    Collection.load(args)                       # loads while it is there
+    shutil.rmtree(root)                         # "unplug the drive"
+
+    with pytest.raises(VolumeUnavailable) as e:
+        Collection.load(args)
+    assert e.value.as_dict() == {"present": False, "root": str(root),
+                                 "missing": str(root)}
+    out = capsys.readouterr().out
+    assert "not available" in out and str(root) in out
+    assert "intact and local" in out            # the console explanation
+    assert "classify_stls" not in out           # never the misleading advice
+
+
+def test_a_present_volume_is_reported_as_present(tmp_path):
+    args, root, _ = build(tmp_path, ["a/one.stl"])
+    assert Collection.load(args).volume == {"present": True, "root": str(root),
+                                            "missing": None}
+
+
+def test_a_missing_input_under_a_mounted_volume_says_something_different(tmp_path, capsys):
+    """Mounted drive, deleted scope directory — a different problem with a
+    different fix, and the message must not blame the volume."""
+    import shutil
+    args, root, _ = build(tmp_path, ["a/one.stl"], input=str(tmp_path / "stl" / "a"))
+    shutil.rmtree(root / "a")
+    with pytest.raises(VolumeUnavailable) as e:
+        Collection.load(args)
+    assert e.value.missing == root / "a" and e.value.root == root
+    out = capsys.readouterr().out
+    assert "input path is not available" in out and "is mounted" in out
+
+
+def test_the_volume_check_precedes_the_walk(tmp_path):
+    """Order matters: the walk's own failure is a silent zero-file result that
+    reads as an empty cache, so the check has to come first."""
+    import shutil
+    args, root, _ = build(tmp_path, ["a/one.stl"])
+    shutil.rmtree(root)
+    with pytest.raises(VolumeUnavailable):      # not SystemExit from embed_store
+        Collection.load(args)
+
+
 def test_importing_collection_costs_no_torch_or_open3d(tmp_path):
-    """implementation.md's row for this module: numpy, pose, cachedir,
-    embed_store, query — never a model and never a renderer."""
+    """interfaces.md's row for this module: numpy, `pose`, `cachedir`,
+    `embed_store`, `identity` — never a model and never a renderer. (It does
+    not import `query`; scoring is the caller's.)"""
     import subprocess
     import sys
     from pathlib import Path as P

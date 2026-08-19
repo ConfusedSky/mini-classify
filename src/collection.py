@@ -12,9 +12,17 @@ property, not an optimisation: the collection lives on spinning exfat over USB
 where model-browser measured a cold tree walk at ~32 s, and two processes
 walking one platter contend for the head (docs/api/surface.md §scope). So the
 walk is the *classify run's*, read from its cached file list; every per-file
-identity and display name is computed once at load; and `resolve` answers from
-precomputed path tuples. The one exception is the existence check in `resolve`,
-which is a single `stat` of the scope path — the I/O budget for a 404.
+identity, render key and display name is computed once at load; and `resolve`
+answers from precomputed path tuples.
+
+To be exact about the budget, since an earlier version of this docstring
+claimed "a single stat" and was wrong by an order of magnitude (review,
+2026-08-19): **`pose_of` and `hit` do no I/O at all**, and `resolve` costs one
+`Path.resolve()` plus one `exists()` on the scope path — which is a handful of
+`lstat`s, proportional to that path's *depth* and never to the size of the
+collection. `tests/test_collection.py` asserts both as budgets, because the
+first version of that guard patched four walk functions and missed `hit`
+resolving a path nine times per result.
 
 `reload` returns a **new instance** rather than mutating this one, which is
 what lets the server rebind a name and never lock a reader (implementation.md
@@ -57,6 +65,36 @@ class OutsideCollection(ScopeError):
 class NoSuchPath(ScopeError):
     """Nothing on disk at that path. 404 — and distinct from a real directory
     with nothing classified in it, which is a 200."""
+
+
+class VolumeUnavailable(Exception):
+    """The collection's storage is not there — typically the library's USB
+    volume is unmounted.
+
+    Raised instead of letting the load fall through, because falling through
+    is *misleading*: `load_file_list` drops every entry whose file is missing
+    and `load_embedding_matrix` then reports "no cached embeddings found — run
+    classify_stls.py first", which is the wrong advice twice over. The
+    embeddings are intact and local; nothing needs re-running; the drive needs
+    plugging in.
+
+    Deliberately not a degraded load. The file identity is `rel|mtime|size`,
+    so serving without the volume would mean trusting the pose cache's keys
+    over the filesystem, and this project would rather refuse than answer from
+    a snapshot it cannot check.
+
+    Carries `as_dict()` in the same shape as `Collection.volume`, so a server
+    reports the absence through the same field it reports the presence
+    (docs/api/surface.md §`GET /status`) rather than inventing a second."""
+
+    def __init__(self, root, missing, what="collection volume"):
+        self.root = Path(root)
+        self.missing = Path(missing)
+        super().__init__(f"{what} is not available: {missing}")
+
+    def as_dict(self) -> dict:
+        return {"present": False, "root": str(self.root),
+                "missing": str(self.missing)}
 
 
 @dataclass(frozen=True)
@@ -106,12 +144,30 @@ class Collection:
         self.view_cfg = view_config(args)   # keys front_view entries
         self.n_views = total_views(args)
         self._angles = pose.view_angles(args.views, list(args.elevations))
+        # The root, resolved once. `resolve()` compared realpaths by calling
+        # `Path.resolve()` on *both* sides per request, which lstats every
+        # component of each — and the root never changes (review, 2026-08-19).
+        self._real_root = _real(root)
+        # Files come from walking `args.input`, which may be the root, a
+        # subdirectory of it, or a symlink to either. Relating the two once is
+        # what lets every path below be pure tuple arithmetic — and what stops
+        # a symlinked input from producing absolute `_rel` tuples, where every
+        # scope silently matched nothing and `rel_path` came out with a doubled
+        # leading slash (review, 2026-08-19).
+        self._inp = Path(args.input)
+        try:
+            self._prefix = _real(self._inp).relative_to(self._real_root).parts
+        except ValueError:
+            self._prefix = ()
         # Everything below is why a request needs no filesystem: paths as
-        # tuples for prefix matching, identities for the pose lookup (one stat
-        # each, here rather than per hit), and the display name.
+        # tuples for prefix matching, identities for the pose lookup, and the
+        # render key and display name — all one stat each here rather than per
+        # hit. `render_key` is the expensive one: it resolves the path, so
+        # leaving it in `hit` cost 9 syscalls per result.
         self._rel = [self._parts(f) for f in files]
         self._scanned_rel = [self._parts(f) for f in scanned]
         self._ident = [pose.file_identity(f, root) for f in files]
+        self._keys = [identity.render_key(f, root) for f in files]
         self._names = [self._display_name(f) for f in files]
 
     # --- loading ------------------------------------------------------------
@@ -120,9 +176,14 @@ class Collection:
     def load(cls, args) -> "Collection":
         """The preamble, once. Prints the file-list note `load_file_list`
         always prints — a server logs it at startup and on reload, nowhere
-        else."""
+        else.
+
+        Raises `VolumeUnavailable` when the collection's storage is missing,
+        before the walk rather than after it: the walk's own failure mode is a
+        silent zero-file result that reads as an empty cache."""
         inp = Path(args.input)
         root = cache_root(inp, args.cache_dir, confirm=False)
+        cls._require_volume(root, inp, args.cache_dir)
         scanned = load_file_list(inp, args.cache_dir, args.rescan)
         matrix, files, missing = load_embedding_matrix(scanned, args, root)
         poses = pose.load_pose_cache(args.cache_dir)
@@ -135,6 +196,38 @@ class Collection:
         args = _with(self.args, rescan=rescan)
         return Collection.load(args)
 
+    @staticmethod
+    def _require_volume(root: Path, inp: Path, cache_dir) -> None:
+        """Two stats, and the console line that explains a failure nobody
+        should have to diagnose from "run classify_stls.py first".
+
+        The root is checked before the input because they fail for opposite
+        reasons: the root missing means the storage is gone, while the root
+        present and the input missing means the library is mounted and the
+        directory this run is scoped to has been moved or deleted."""
+        for path, what in ((root, "collection volume"), (inp, "input path")):
+            if path.exists():
+                continue
+            print(f"\n{what} is not available: {path}")
+            if what == "collection volume":
+                print(f"  the caches in {cache_dir} are intact and local — nothing "
+                      f"needs re-running.\n"
+                      f"  mount the volume and retry. File identities are "
+                      f"rel|mtime|size, so the\n"
+                      f"  files have to be present to key what is already cached.")
+            else:
+                print(f"  the volume at {root} is mounted, but this run's input "
+                      f"directory is gone.\n"
+                      f"  check the path, or point at the collection root.")
+            raise VolumeUnavailable(root, path, what)
+
+    @property
+    def volume(self) -> dict:
+        """What `/status` reports about the storage. Present by construction —
+        a Collection cannot be loaded without it — so the interesting case is
+        the exception's `as_dict()`, which carries the same keys."""
+        return {"present": True, "root": str(self.root), "missing": None}
+
     # --- scoping ------------------------------------------------------------
 
     def resolve(self, path: str | None) -> Scope:
@@ -145,32 +238,41 @@ class Collection:
         `NoSuchPath` — see each for why they are not one error."""
         if path is None:
             return Scope(None, np.arange(len(self.files)), len(self.files),
-                         len(self.scanned), COVERS)
+                         len(self.scanned), list(COVERS))
         if "!/" in str(path):
             raise VirtualPath(f"zip entries are not indexed: {path}")
 
-        p = Path(path)
-        p = p if p.is_absolute() else self.root / p
-        # realpath both sides, never a string prefix: the library is on
-        # removable media and remounts under a different name
-        # (/run/media/.../STLLibrary vs ...STLLibrary1) for the same tree,
-        # where prefix equality silently stops matching (surface.md §status).
+        # realpath, never a string prefix: the library is on removable media
+        # and remounts under a different name (/run/media/.../STLLibrary vs
+        # ...STLLibrary1) for the same tree, where prefix equality silently
+        # stops matching (surface.md §status). The root half is precomputed.
+        #
+        # Everything here runs on a request-body string, so the catch is wide
+        # on purpose. `Path.resolve()` raises RuntimeError on a symlink loop
+        # (not OSError — it swallows that internally), ValueError on an
+        # embedded null, OSError on an over-long name, and TypeError on a
+        # non-string; an earlier version caught only OSError and named symlink
+        # loops in the comment, which was the one case it could not catch
+        # (review, 2026-08-19). All of them mean the same thing to a caller:
+        # that is not a usable path.
         try:
-            real = p.resolve()
-            root = self.root.resolve()
-        except OSError as e:                       # broken symlink loop, etc.
-            raise NoSuchPath(f"cannot resolve {path}: {e}") from e
-        if real != root and not real.is_relative_to(root):
+            p = Path(path)
+            p = p if p.is_absolute() else self.root / p
+            real = _real(p)
+            exists = real.exists()
+        except (OSError, ValueError, RuntimeError, TypeError) as e:
+            raise NoSuchPath(f"unusable path {path!r}: {e}") from e
+        if not real.is_relative_to(self._real_root):
             raise OutsideCollection(f"{path} is not under {self.root}")
-        if not real.exists():                      # the one stat of a request
+        if not exists:                             # the one stat of a request
             raise NoSuchPath(f"no such path: {path}")
 
-        want = real.relative_to(root).parts
+        want = real.relative_to(self._real_root).parts
         n = len(want)
         rows = np.array([i for i, rel in enumerate(self._rel) if rel[:n] == want],
                         dtype=np.intp)
         n_scanned = sum(1 for rel in self._scanned_rel if rel[:n] == want)
-        return Scope(str(path), rows, len(rows), n_scanned, COVERS)
+        return Scope(str(path), rows, len(rows), n_scanned, list(COVERS))
 
     # --- per-model detail ---------------------------------------------------
 
@@ -211,7 +313,7 @@ class Collection:
         design, and checking would mean a stat per hit on the volume this
         module refuses to walk."""
         f = self.files[i]
-        return {"id": identity.render_key(f, self.root),
+        return {"id": self._keys[i],            # precomputed: render_key resolves
                 "path": str(f),
                 "rel_path": "/".join(self._rel[i]),
                 "name": self._names[i],
@@ -222,20 +324,44 @@ class Collection:
     # --- helpers ------------------------------------------------------------
 
     def _parts(self, f: Path) -> tuple:
-        """Path relative to the collection root, as parts. Files outside the
-        root keep their absolute parts, so they simply match no scope rather
-        than raising during a load."""
+        """Path relative to the collection root, as parts.
+
+        Routed through the *input* rather than the root, because the walk that
+        produced `f` started at the input: when the two differ only by a
+        symlink, `f.relative_to(root)` fails and the old fallback kept the
+        absolute parts — which matched no scope and emitted a `rel_path` with
+        a doubled leading slash, the documented join key silently unusable
+        (review, 2026-08-19). `_prefix` is the input's offset from the root, so
+        this stays exact for a run scoped to a subdirectory too."""
+        try:
+            return self._prefix + f.relative_to(self._inp).parts
+        except ValueError:
+            pass
         return f.relative_to(self.root).parts if f.is_relative_to(self.root) else f.parts
 
     def _display_name(self, f: Path) -> str:
         """The REPL's rule, one copy: root-relative, filler directory dropped,
         extension dropped (`test_categories.py`)."""
-        rel = str(f.relative_to(self.root)) if f.is_relative_to(self.root) else str(f)
+        rel = "/".join(self._parts(f))
         return rel.replace("/No Supports", "").removesuffix(".stl")
 
 
+def _real(p: Path) -> Path:
+    """`Path.resolve()`, named so the cost is visible at the call site: it
+    lstats every component, which is why the root's is computed once at load
+    and never per request."""
+    return Path(p).resolve()
+
+
 def _with(args, **over):
-    """A shallow copy of an argparse.Namespace with fields replaced — the
-    Namespace is the cache identity and must not be mutated under a reader."""
+    """A copy of an argparse.Namespace with fields replaced — the Namespace is
+    the cache identity and must not be mutated under a reader.
+
+    `elevations` is copied rather than aliased: it is the one mutable field,
+    and two Collections sharing a list is the kind of aliasing that only shows
+    up once something sorts it in place."""
     import argparse
-    return argparse.Namespace(**{**vars(args), **over})
+    d = {**vars(args), **over}
+    if isinstance(d.get("elevations"), list):
+        d["elevations"] = list(d["elevations"])
+    return argparse.Namespace(**d)
