@@ -241,11 +241,14 @@ beside it:
 | `x` | 176 | 3 | **no** | −90° |
 | `-x` | 175 | 1 | yes | 0 |
 
-**1520 of 2945 — 52% of the real collection**, because `+Y` is its most common
-up axis, ahead of `+Z`. An earlier revision of this document said 14% and
-called it "the failure that survives a demo"; that figure came from the test
-cache, where 80% of models are `+Z`, and a kit-sized slice of this library does
-not have the library's axis distribution. The offsets are exact (residual
+**The structural claim is the durable one: the shortcut is wrong for three of
+the six axes, and `y` is one of them** — the library's single most common up.
+The share of any given collection that lands on those three is whatever that
+collection happens to hold: 52% of `embed-cache2` (1520/2945), 27% of
+`embed-cache3`, 14% of `embed-cache4`. An earlier revision of this document led
+with that last figure and called it "the failure that survives a demo", which
+was a claim about a 133-model test cache rather than about the shortcut. Lead
+with the axes; cite a percentage only with the cache named beside it. The offsets are exact (residual
 < 1e-15), so the table also serves as a diagnostic — a model that reads 90° off
 is a skipped step 1, not a bad pose.
 
