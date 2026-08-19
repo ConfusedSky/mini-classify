@@ -118,7 +118,17 @@ calls `f.exists()` twice per entry — once to build `gone` for the log line,
 once to filter — so the real cost is 2× the list. Keep the count, drop the
 second pass. Measure the 2890 case in phase 3, not the 133 one.
 
-**`pose_of` is where phase 0.2 pays off.** The pose cache stores an up vector
+**`pose_of` is where phase 0.2 pays off.** It also emits `azimuth_zero` —
+`rotation_to_z_up(up).T @ [1,0,0]`, the model-space direction azimuth 0 is
+measured from — so a consumer that cannot rotate meshes derives its own
+azimuth offset from data instead of reimplementing `rotation_to_z_up`
+(surface.md §pose). Note this makes `pose_of` the one place in `collection.py`
+that needs a rotation matrix; `rotation_to_z_up` lives in `renderer.py` with
+open3d, so either it moves to `pose.py` alongside `view_angles` in phase 0.2,
+or the six rotations are tabulated. The move is cleaner and the pin test
+already fixes what the six values are.
+
+The pose cache stores an up vector
 and a per-view-config `front_view` index; the viewer needs an angle. So:
 `view_angles(n_views, elevations)[front]` converted to degrees, and `None`
 when the pose cache holds no `front_view` for this view config — which is a

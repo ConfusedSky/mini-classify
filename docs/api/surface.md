@@ -198,6 +198,7 @@ embedding.
 ```jsonc
 {
   "up": [0.0, 0.0, 1.0],        // ALWAYS one of six axis vectors — see below
+  "azimuth_zero": [1.0, 0.0, 0.0],  // model-space direction azimuth 0 is measured from
   "source": "geometry",         // forced | geometry | siglip | vlm
   "confidence": 0.83,           // how sure we are WHICH of the six
   "front": {                    // null when no front view is cached for this view config
@@ -241,6 +242,26 @@ over a 24×5 az/el grid, with model counts from `embed-cache4`:
 19 of 133 models — 14% silently rotated a quarter turn while 86% look correct.
 The offsets are exact (residual < 1e-15), so the table also serves as a
 diagnostic: a model that reads 90° off is a skipped step 1, not a bad pose.
+
+**`azimuth_zero` exists so no consumer has to depend on that table.** It is
+the model-space direction azimuth 0 is measured from — `rotation_to_z_up(up)ᵀ
+· [1,0,0]` — and with it a viewer that cannot rotate meshes derives its own
+offset from data rather than inheriting this side's rotation implementation.
+That matters because the table is not a fact about geometry: it falls out of
+one arbitrary choice inside `rotation_to_z_up`, whose antiparallel branch
+resolves the `-Z` degeneracy with `Rx(π)` when infinitely many rotations would
+have satisfied "take `up` to `+Z`". Rewrite that branch and the table moves,
+seven models in the current cache rotate 90°, and nothing on either side
+fails. **Prefer `azimuth_zero`; the table is the explanation, not the
+contract.**
+
+That choice is now pinned on this side as well
+(`tests/test_renderer.py::test_rotation_to_z_up_is_pinned_for_all_six_candidates`),
+because it was already load-bearing before any consumer existed: `views`
+rotates the mesh by this matrix before shooting, so it decides the pixels — and
+therefore the cached embeddings — for every non-`+Z` model, while the embedding
+key records only the up *vector*. Changing it re-poses 27 of `embed-cache4`'s
+133 models under unchanged cache keys.
 
 Two transforms, applied in this order, and the viewer needs both:
 
