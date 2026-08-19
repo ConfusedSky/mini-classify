@@ -412,16 +412,37 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   than merely stale. That is the shape of a fix here too, and it is not free —
   a bump invalidates every cached embedding, and a full pass is hours.
 
-  What makes it genuinely open rather than merely undone: `CACHE_VERSION`
-  deliberately versions the *key scheme*, not the recipe, so a recipe version
-  is a second, differently-behaved integer. And pixel-exactness is already not
-  a property this project has — Filament's output depends on draw history
-  (LEARNINGS), so renders are reproducible only for a fixed sequence. The line
-  worth drawing is probably between a **semantic re-pose** (a model shown from
-  a different side, which a rotation change causes) and **numerical drift**
-  (which the draw-history finding says is normal and which a recipe version
-  must not fire on). Nobody has tried to write that distinction down as a rule
-  a future change can be checked against.
+  ~~The line worth drawing is probably between a semantic re-pose and
+  numerical drift, and nobody has written that distinction down.~~ **That
+  framing was wrong, and the fix came from model-browser (2026-08-19): phrase
+  the trigger over the recipe *surface*, not over the output.** `RIG_VERSION`
+  reads "bumped whenever rendered output changes for the same input", and then
+  enumerates what that means — rig contents, materials, tone mapping — with
+  the shadow-fit constants pinned by a separate test whose comment says
+  changing one needs a bump. So the trigger is *did an author touch a named
+  part of the recipe*: a judgement about intent at the call site, not a
+  measurement of pixels.
+
+  That dissolves the drift problem instead of solving it. Numerical drift does
+  not touch the enumerated surface, so it cannot trip a rule phrased over that
+  surface, and no tolerance has to be defined. Filament's draw-history
+  dependence stops mattering too, because nothing ever compares two renders to
+  decide. What is needed is a *list* — `rotation_to_z_up`, `orbit_camera`, the
+  1.4 radius factor, the sun direction, the material — and a rule that touching
+  any of them is a bump however the pixels happen to land.
+
+  What remains genuinely open, then, is narrower than this entry first claimed:
+  **what belongs on that list**, and whether the cost is worth paying at all —
+  a bump invalidates every cached embedding and a full pass is hours, which is
+  a real reason to keep pinning behaviour by test and bump nothing. Two things
+  to carry if it is ever built: `CACHE_VERSION` versions the *key scheme* by
+  design, so this would be a second integer with different rules and the two
+  will be confused unless the difference is written down; and it wants a
+  changelog rather than a bare integer, in the shape `RIG_VERSION` uses
+  (`1 = pre-rim rig, 2 = rim accents, … 6 = STL normals from winding`). An
+  integer only says the cache is invalid. The log says which models to look at
+  and why, which is the difference between a deliberate re-pose being
+  reviewable and merely being loud.
 
 ## Performance work not done
 
