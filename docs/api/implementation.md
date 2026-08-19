@@ -41,17 +41,27 @@ that no longer owns it. That is precisely the re-export shape the eval-debt
 cleanup deleted (`OPEN_QUESTIONS.md`, amended 2026-08-18; `eval/README.md`
 keeps a name→owner table so each name has one home). Repoint all of them:
 
-| site | what it does |
+| site | what to do |
 |---|---|
 | `src/renderer.py:324,344` | internal use — import from `pose` |
-| `eval/tile_count.py:93` | imports it to check the azimuth subset; prose at `:14,:18,:87` names `src.renderer.view_angles` |
-| `eval/gold_upright.py:37,50` | imports it to assert the ring |
-| `eval/views_camera_rotation.py:63,162` | imports it alongside `Renderer` |
-| `tests/test_renderer.py:107,109` | reaches it as a `renderer_mod` attribute |
-| `eval/README.md` | the camera-constants row now needs `view_angles` split out to `src.pose` |
+| `src/renderer.py:41` | module docstring lists `view_angles` among what this module is "the one home for" — no longer true, amend it |
+| `eval/tile_count.py:93` | repoint the import; prose at `:14,:18,:87` names `src.renderer.view_angles` |
+| `eval/gold_upright.py:37,50` | repoint the import |
+| `eval/views_camera_rotation.py:63,162` | repoint the import (keeps `Renderer`, `orbit_camera`, `rotation_to_z_up` from `renderer`) |
+| `tests/test_renderer.py:107,109` | resolves it as a `renderer_mod` **attribute**, not an import. Import from `src.pose` instead — the test's own claim is about `pose_tiles`' cameras, and `view_angles` is its oracle, so it should name the oracle's new home. The ring-subset property itself (a ring of `n` is a subset of a ring of 4) is `pose`'s to own now and belongs in `tests/test_pose.py` |
+| `eval/README.md:53` | the camera-constants row needs `view_angles` split out to `src.pose` |
 
 *Proves:* full suite green; `import src.pose` still adds ~196 modules with
-open3d absent; `grep -rn "renderer import.*view_angles"` returns nothing.
+open3d absent; and **no caller resolves `view_angles` through `renderer`** —
+which needs two patterns, not one, because the test site reaches it by
+attribute:
+
+```
+grep -rn "renderer import.*view_angles\|renderer_mod\.view_angles" eval/ tests/ src/
+```
+
+An import-only grep reports clean while `tests/test_renderer.py` still goes
+through `renderer`, which is the kind of green that ends a phase early.
 
 ## Phase 1 — `src/collection.py`, the in-memory index
 
