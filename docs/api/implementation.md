@@ -303,9 +303,35 @@ The rejected alternative was mean-pooling A to a single vector first: cheaper,
 blurrier, and it answers differently for models whose own views disagree —
 exactly the models where "similar" is a hard question.
 
-**2. Does `/similar` report `weak`?** Recommendation: no. `z` yes, computed
-the same way. Weakness is a statement about a *query* being absent from the
-collection; a model that is in the collection is never absent from it.
+~~**2. Does `/similar` report `weak`?**~~ **Decided 2026-08-19, by
+measurement: `z` yes, `weak` no — it would never fire.** The question was
+whether the `/query` weak rule transfers to "this model has no near
+neighbours", which sounds like the same shape of claim.
+
+Measured over 200 random query models from `embed-cache2` (2801 rows, the
+`/similar` reduction above, softmax):
+
+| best-neighbour robust z | min | p10 | median | p90 | max |
+|---|---|---|---|---|---|
+| | 2.0 | 2.5 | 3.3 | 4.7 | 7.8 |
+
+**Nothing fell below `WEAK_Z` (2.0) — 0.0%.** A `weak` flag here would be a
+field that is always `false`, which is worse than no field: it invites a
+consumer to branch on something that never happens.
+
+The reason is that the two distributions are not the same shape at all.
+Text-query cosines against this collection run around 0.1; model-to-model
+best-neighbour cosines run 0.850–0.990, median 0.952. `WEAK_Z` was measured on
+the former (docs/learnings/queries-and-filters.md: correct matches at z 2.4+,
+near-misses to 3.7), so reusing it would have been importing a threshold from
+a distribution it was never fitted to.
+
+`z` is still worth returning per hit: it varies 2.0–7.8 and is the caller's to
+interpret. And if "this model is an outlier" is ever wanted as a signal, the
+measurement says **robust z is the wrong instrument** — it barely separates
+here. Raw best-neighbour cosine does: 0.850 at the low end against a 0.952
+median. That would be its own field with its own measured threshold, not a
+reuse of this one.
 
 ~~**3. Eager or lazy SigLIP load?**~~ **Decided: bind the port first, warm in
 the background.** Neither "eager then serve" nor lazy: the model loads eagerly,

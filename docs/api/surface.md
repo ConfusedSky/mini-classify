@@ -147,9 +147,15 @@ indexed, see below.
 `pool` applies **twice**, because both sides are view stacks: the query
 model's per-view embeddings are used as the text matrix, so `score` pools over
 each candidate's views, and a second `pool_sims` over the query model's views
-reduces what is left (implementation.md §Open decisions, decided). No `weak`
-flag: weakness says a query is absent from the collection, and a model that is
-in the collection cannot be.
+reduces what is left (implementation.md §Open decisions, decided).
+
+Hits carry `z`, but there is **no `weak` flag**, and that is a measurement
+rather than a definition: over 200 random query models from `embed-cache2`,
+the best neighbour's robust z never once fell below the 2.0 cutoff (min 2.0,
+median 3.3). Model-to-model cosines run 0.85–0.99 where text-query cosines run
+around 0.1, so the threshold `/query` uses was fitted to a different
+distribution entirely. A flag that is always `false` invites a consumer to
+branch on something that cannot happen.
 
 ### `POST /reload`
 
