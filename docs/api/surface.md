@@ -222,6 +222,26 @@ here, that is a defect on this side, not rounding.
 number a UI can gate on. It is the ensemble's margin, not a claim about a
 continuous orientation.
 
+**The 1:1 mapping is for labelling and storage. It is not a substitute for the
+up rotation below.** The tempting shortcut — set the viewer's spindle to the
+model's up axis, pass `azimuth_deg` straight through, skip step 1 — is wrong
+for half the axes, and wrong in the way that survives a demo: the common case
+works. Measured against `rotation_to_z_up` and model-browser's spindle frames
+over a 24×5 az/el grid, with model counts from `embed-cache4`:
+
+| `up` | models | shortcut agrees | azimuth offset if used anyway |
+|---|---|---|---|
+| `z` | 106 | yes | 0 |
+| `-y` | 7 | yes | 0 |
+| `-x` | 1 | yes | 0 |
+| `y` | 9 | **no** | +90° |
+| `-z` | 7 | **no** | +90° |
+| `x` | 3 | **no** | −90° |
+
+19 of 133 models — 14% silently rotated a quarter turn while 86% look correct.
+The offsets are exact (residual < 1e-15), so the table also serves as a
+diagnostic: a model that reads 90° off is a skipped step 1, not a bad pose.
+
 Two transforms, applied in this order, and the viewer needs both:
 
 1. **Up rotation.** Rotate the mesh so `up` points at world +Z (the renderer's
@@ -284,8 +304,11 @@ are different answers and the UI must be able to say which:
 - Unscoped calls still get the block, with `path: null` and collection totals.
 
 **No directory walk happens in a request.** `n_scanned` is a filter over the
-*cached* file list the last classify run wrote — a claim about the index, not
-about the folder right now. That is deliberate, and the reason is measured on
+*cached* file list the last classify run wrote, minus anything that had already
+vanished when the server loaded it (`load_file_list` drops missing entries at
+load). So it is "walked by the last classify run, and still present at
+startup" — closer to the folder-now than a pure index claim, and it can shift
+across a `/reload`. That is deliberate, and the reason is measured on
 this hardware: the library lives on spinning exfat over USB, where
 model-browser measured a full cold walk at ~32 s (10,614 entries at 2.4 ms
 each, plus ~6.7 s of zip central-directory seeks that persist after the FS

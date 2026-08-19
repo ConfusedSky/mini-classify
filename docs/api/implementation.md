@@ -104,10 +104,19 @@ lists exist separately for exactly this.
 
 **No walk in a request** (surface.md §scope): `scanned` is the classify run's
 *cached* list, `resolve` filters it in memory, and the only I/O the whole path
-does is one `stat` for the 404. Watch one thing at load time — `load_file_list`
-stats every cached entry to drop vanished files, so startup and `/reload` pay
-~10k stats on spinning media even though no request does. Measure it in phase 3
-before deciding whether `/reload` needs a cheaper path.
+does is one `stat` for the 404.
+
+Load time is the exception, and it is smaller than an earlier draft of this
+plan said. `load_file_list` stats every cached entry to drop vanished files, so
+startup and `/reload` pay that on spinning media — but the figure is the *STL
+list*, not a tree walk: 133 for `embed-cache4`, 2890 for the largest cached
+list here (`embed-cache2`). The "~10k" in an earlier draft was model-browser's
+whole-tree entry count and measured a different thing.
+
+**A one-line fix halves it**, and belongs in this phase: `cachedir.py:139-140`
+calls `f.exists()` twice per entry — once to build `gone` for the log line,
+once to filter — so the real cost is 2× the list. Keep the count, drop the
+second pass. Measure the 2890 case in phase 3, not the 133 one.
 
 **`pose_of` is where phase 0.2 pays off.** The pose cache stores an up vector
 and a per-view-config `front_view` index; the viewer needs an angle. So:
