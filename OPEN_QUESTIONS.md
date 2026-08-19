@@ -392,6 +392,36 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   collapse. It bites the API sketch harder than the REPL — `docs/api/surface.md`
   caps hits at `top`/`cap`, so a duplicate-heavy query spends its budget
   listing the same mesh repeatedly, and model-browser has no way to tell.
+- **The cache key records the pose but not the recipe that drew it.**
+  `cache_key` covers views, elevations, render size, model, `--compile` and the
+  up *vector* — not `rotation_to_z_up`, which decides *which* rotation realised
+  that vector and therefore which side of the model each azimuth sees. Change
+  that function and 27 of `embed-cache4`'s 133 non-`+Z` models are re-posed
+  under unchanged keys: the embeddings on disk answer a different question than
+  the ones a fresh run would produce, and nothing anywhere fails.
+  `tests/test_renderer.py::test_rotation_to_z_up_is_pinned_for_all_six_candidates`
+  (2026-08-19) stops the accidental version of this. It cannot stop a
+  deliberate one, which is the actual question.
+
+  `rotation_to_z_up` is only the instance that surfaced. The whole render
+  recipe is outside cache identity — `orbit_camera`'s framing, the 1.4 radius
+  factor, the sun direction, the material. model-browser hit this class and
+  answered it with `RIG_VERSION`: a hand-set integer in the cache key that
+  anything altering thumbnail pixels must bump, on the reasoning that a cache
+  keyed on inputs which do not capture the recipe is silently *wrong* rather
+  than merely stale. That is the shape of a fix here too, and it is not free —
+  a bump invalidates every cached embedding, and a full pass is hours.
+
+  What makes it genuinely open rather than merely undone: `CACHE_VERSION`
+  deliberately versions the *key scheme*, not the recipe, so a recipe version
+  is a second, differently-behaved integer. And pixel-exactness is already not
+  a property this project has — Filament's output depends on draw history
+  (LEARNINGS), so renders are reproducible only for a fixed sequence. The line
+  worth drawing is probably between a **semantic re-pose** (a model shown from
+  a different side, which a rotation change causes) and **numerical drift**
+  (which the draw-history finding says is normal and which a recipe version
+  must not fire on). Nobody has tried to write that distinction down as a rule
+  a future change can be checked against.
 
 ## Performance work not done
 
