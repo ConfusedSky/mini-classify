@@ -483,7 +483,10 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
 
   What remains open, then, is only whether the cost is worth paying — a global
   bump invalidates every cached embedding and a full pass is hours, which is a
-  real reason to keep pinning behaviour by test and bump nothing. Two things
+  real reason to keep pinning behaviour by test and bump nothing. **The answer
+  changes if a rebuild is happening anyway**: the invalidation is then already
+  paid for, which makes a rebuild the cheapest moment this will ever have
+  (`docs/cache-rebuild.md` §6). Two things
   to carry if it is ever built: `CACHE_VERSION` versions the *key scheme* by
   design, so this would be a second integer with different rules and the two
   will be confused unless the difference is written down; and it wants a

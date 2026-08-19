@@ -35,6 +35,10 @@ proposal.
   no route, no handler exists. The one exception is its "where the code goes"
   section: the shared query path it called for is `src/query.py` (2026-08-19),
   and that section describes what shipped, marked in place.
+- `docs/cache-rebuild.md` — the debt that is only payable when the whole cache
+  is regenerated: shims that exist so an old cache keeps working, and which a
+  rebuild is the one chance to delete. Read it **before** planning a rebuild,
+  and add to it whenever you write a back-compat path.
 - `eval/README.md` — the measurement harnesses. They call the production code
   through `eval/rig.py`, which builds the real `Renderer`/`Embedder` — true
   again since 2026-08-18, when the CLI's parallel single-process render/embed
