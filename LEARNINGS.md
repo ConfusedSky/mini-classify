@@ -78,6 +78,13 @@ notes at the bottom are amended in place. Open work is tracked separately in
   the same old binary differs from itself by as much (7.0e-03) when a model is
   rendered in company rather than alone, which generalises the pose-cache-state
   entry to any change in the preceding draw sequence.
+- [2026-08-18 — the refactored pipeline at scale](docs/learnings/2026-08-18-the-refactored-pipeline-at-scale.md)
+  — first real run of the actor architecture: 133 models cold in 6:34, then a
+  warm re-run in 12.4 s with a byte-identical CSV and no re-embedding. A
+  baseline, not a speedup — but the 32× warm path, the exact 133×16 render
+  count and the 1:1:1 rows/embeds/poses are `route()` and invariant 1 holding
+  at scale. Tag filtering takes 292 files to 133, so per-model estimates off a
+  raw file count run ~2× high.
 - [2026-08-18 — the eval rig's tiles are not the old tiles](docs/learnings/2026-08-18-pose-tiles-and-the-draw-sequence-again.md)
   — porting the harnesses onto the render child's own `pose_tiles` changes
   pixels by up to 30/255 on ~1% of them, with geometry, cameras, material and
