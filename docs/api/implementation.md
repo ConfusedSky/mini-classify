@@ -30,11 +30,28 @@ Record the resolved versions here once installed.
 
 **0.2 Move `view_angles` into `src/pose.py`.** It lives in `src/renderer.py`,
 which is child-side and imports open3d; the API must name a front view's
-azimuth without loading a rendering library. Pure numpy, so the move is
-mechanical — `renderer` imports it from `pose` afterwards.
+azimuth without loading a rendering library. The function is pure numpy and
+`renderer` already imports `pose`, so the move itself is cycle-free and
+mechanical.
+
+**The callers are the work, and leaving them alone is the trap.** After the
+move `renderer` still needs `view_angles`, so it imports the name — and every
+existing `from src.renderer import view_angles` keeps working against a module
+that no longer owns it. That is precisely the re-export shape the eval-debt
+cleanup deleted (`OPEN_QUESTIONS.md`, amended 2026-08-18; `eval/README.md`
+keeps a name→owner table so each name has one home). Repoint all of them:
+
+| site | what it does |
+|---|---|
+| `src/renderer.py:324,344` | internal use — import from `pose` |
+| `eval/tile_count.py:93` | imports it to check the azimuth subset; prose at `:14,:18,:87` names `src.renderer.view_angles` |
+| `eval/gold_upright.py:37,50` | imports it to assert the ring |
+| `eval/views_camera_rotation.py:63,162` | imports it alongside `Renderer` |
+| `tests/test_renderer.py:107,109` | reaches it as a `renderer_mod` attribute |
+| `eval/README.md` | the camera-constants row now needs `view_angles` split out to `src.pose` |
 
 *Proves:* full suite green; `import src.pose` still adds ~196 modules with
-open3d absent; `eval/views_camera_rotation.py` still resolves its import.
+open3d absent; `grep -rn "renderer import.*view_angles"` returns nothing.
 
 ## Phase 1 — `src/collection.py`, the in-memory index
 
@@ -120,9 +137,18 @@ once, so:
 * A lock around the *text forward only*. The matmul is CPU numpy and does not
   touch the 4060; locking it too would serialise for nothing.
 * `/reload` builds a whole new `Collection` and rebinds `state.collection`
-  when it is finished. Readers need no lock at all — an in-flight query keeps
-  using the instance it started with, and a half-loaded matrix is never
-  visible. This is why `reload` returns a new instance rather than mutating.
+  when it is finished. Readers need no lock — an in-flight query keeps using
+  the instance it started with, and a half-loaded matrix is never visible.
+  This is why `reload` returns a new instance rather than mutating.
+
+  **The condition on that is bind once.** The rebind is atomic under the GIL,
+  so a handler that reads `state.collection` a single time into a local is
+  safe for its whole lifetime. A handler that reads it *twice* can straddle a
+  reload and use row indices resolved against the old matrix to index the new
+  one — silently wrong rows, not an exception. Every handler starts with
+  `collection = state.collection` and never touches `state` again. Stated
+  explicitly because "lock-free reads" is the framing that invites the second
+  read.
 
 *Proves:* `tests/test_api.py` with `TestClient` and the stub embedder — each
 route's happy path, the four scope rejections with their status codes, a
@@ -144,6 +170,17 @@ top-10 the REPL gives for the same text and pool; a scoped query narrows;
 latency and record it — the text forward is the only GPU work and everything
 downstream is a matmul over ~1000 rows, so if a query is slow, that is a
 finding.
+
+**Also measure whether the server may run during a classify run**, because
+that is the only way `/reload` is ever exercised — surface.md describes it as
+"for after a `classify_stls.py` run adds models", which implies someone
+running both. That puts two resident so400m models plus the render child on an
+8188 MiB card. The in-process GPU lock says nothing about a second process,
+and the repo's existing rule covers ollama, not a second SigLIP. One
+measurement settles it and belongs in `CLAUDE.md`'s constraints beside the
+ollama line: either they coexist, or the server has to be told to unload —
+and if it must unload, `/reload` is the wrong shape and needs to drop the
+model too.
 
 ## Phase 4 — docs
 
