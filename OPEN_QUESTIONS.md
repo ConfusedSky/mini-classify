@@ -431,10 +431,40 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   1.4 radius factor, the sun direction, the material — and a rule that touching
   any of them is a bump however the pixels happen to land.
 
-  What remains genuinely open, then, is narrower than this entry first claimed:
-  **what belongs on that list**, and whether the cost is worth paying at all —
-  a bump invalidates every cached embedding and a full pass is hours, which is
-  a real reason to keep pinning behaviour by test and bump nothing. Two things
+  **The list is settled (2026-08-19), and it is those five:**
+  `rotation_to_z_up`, `orbit_camera`, the 1.4 radius factor, the sun
+  direction, and the material. Anything else that reaches the pixels joins it.
+
+  **`migrate_cache_keys.py` cannot migrate a recipe bump, but it is the right
+  home for what one needs.** The distinction is the tool's own: it performs
+  *renames*, and says so — "a rename, not a re-embed — the .npy content only
+  depends on the up, which does not move". A recipe change is the mirror image:
+  the key is still right and the *content* is now wrong. Nothing can be moved
+  to fix that; the pixels have to be drawn again.
+
+  What the tool can do instead is **scoped invalidation** — delete exactly the
+  entries the changed item would have drawn differently, so the next classify
+  run redoes only those — and it already holds the machinery, since
+  `plan_embeds` walks cache entries per file with the pose cache in hand.
+  The five split on whether that scoping is possible at all:
+
+  * `rotation_to_z_up` is **conditional on data**: it is the identity for
+    `+Z`-up models, so only the rest are affected — 27 of `embed-cache4`'s 133,
+    and the ratio is what it is because most of the collection is `+Z`.
+  * `orbit_camera`, the radius factor, the sun direction and the material are
+    **global**: every render goes through them, so a change invalidates
+    everything and there is nothing to scope.
+
+  So the "hours" cost is real for four of the five and avoidable for the one
+  most likely to be touched. A rotation invalidation should also drop the pose
+  cache's `front_view` entries (derived from the views, so they move with the
+  rotation) while keeping `up`, `source`, `confidence` and `margin` — which is
+  the part that cost money to resolve, and which a rotation change does not
+  affect at all: the resolved axis is the same whichever rotation realises it.
+
+  What remains open, then, is only whether the cost is worth paying — a global
+  bump invalidates every cached embedding and a full pass is hours, which is a
+  real reason to keep pinning behaviour by test and bump nothing. Two things
   to carry if it is ever built: `CACHE_VERSION` versions the *key scheme* by
   design, so this would be a second integer with different rules and the two
   will be confused unless the difference is written down; and it wants a
