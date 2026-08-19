@@ -78,7 +78,7 @@ third copy of that preamble.
 class Collection:
     matrix: np.ndarray        # (n_indexed, n_views, dim), float32 unit rows
     files: list[Path]         # aligned with matrix rows
-    walked: list[Path]        # everything the walk saw, indexed or not
+    scanned: list[Path]       # the last classify run's cached file list
     root: Path                # collection_root: the anchor and the display base
     poses: dict               # pose-cache entries by file_identity
     view_cfg: str             # keys front_view entries
@@ -99,8 +99,15 @@ a path containing `!/` is a zip virtual path (422), a path outside `root` is
 unanswerable (400), a path that does not exist is 404. A real directory with
 no indexed models under it is **not** an error — empty rows, `status:
 "unindexed"`, and `rank` is already total so it flows through to a 200 with
-zero hits. `n_on_disk` comes from `walked`, `n_indexed` from `files`; the two
+zero hits. `n_scanned` comes from `scanned`, `n_indexed` from `files`; the two
 lists exist separately for exactly this.
+
+**No walk in a request** (surface.md §scope): `scanned` is the classify run's
+*cached* list, `resolve` filters it in memory, and the only I/O the whole path
+does is one `stat` for the 404. Watch one thing at load time — `load_file_list`
+stats every cached entry to drop vanished files, so startup and `/reload` pay
+~10k stats on spinning media even though no request does. Measure it in phase 3
+before deciding whether `/reload` needs a cheaper path.
 
 **`pose_of` is where phase 0.2 pays off.** The pose cache stores an up vector
 and a per-view-config `front_view` index; the viewer needs an angle. So:
@@ -228,9 +235,15 @@ exactly the models where "similar" is a hard question.
 the same way. Weakness is a statement about a *query* being absent from the
 collection; a model that is in the collection is never absent from it.
 
-**3. Eager or lazy SigLIP load?** Recommendation: eager, at startup. It makes
-the first query fast and makes a broken model path fail at launch rather than
-on someone's first request.
+~~**3. Eager or lazy SigLIP load?**~~ **Decided: bind the port first, warm in
+the background.** Neither "eager then serve" nor lazy: the model loads eagerly,
+but the server answers `/status` from the moment it starts, with `ready: false`
+until the load finishes, and `/query`/`/similar` return 503 meanwhile
+(surface.md §`GET /status`). Loading before binding makes a warming server
+indistinguishable from a dead one, and the consumer's affordance flickers off
+across every restart. Loading lazily hides a bad model path until someone's
+first query. This does both jobs: fails loudly at launch, and is legible while
+it warms.
 
 **4. Does the REPL adopt `Collection`?** Not in this plan. It is the obvious
 follow-up — `test_categories.py` and `cluster_models.py` open with the same

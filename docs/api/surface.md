@@ -79,6 +79,22 @@ loaded-at timestamp — and **`collection_root`**, which the Hono server needs
 to decide whether a path the user is browsing is even addressable here before
 it offers a semantic-search affordance over it.
 
+**`ready` (bool) is required, and the server must answer before it is true.**
+SigLIP takes real seconds to load. If the process binds the port only after
+the model is resident, a probe cannot tell warming from not-running, and the
+consumer's semantic affordance flickers off and on across every restart. So:
+bind first, warm in the background, answer `/status` throughout with
+`ready: false`, and reject `/query` and `/similar` with **503** until it flips.
+A caller that sees a reply at all knows the server exists.
+
+**`collection_root` comparison is the caller's, and prefix equality is a
+trap.** model-browser has no configured root — `/api/dir` takes any absolute
+path — so gating on this field is the only scoping that exists on that side.
+The library is on removable media, and mount points move
+(`/run/media/masa/STLLibrary` vs `…STLLibrary1`) for the same tree, so a string
+prefix silently stops matching after a remount. Compare resolved real paths at
+minimum; volume identity would be better.
+
 ### `POST /query`
 
 | field | type | default | note |
@@ -146,6 +162,17 @@ Reloads the embedding matrix and the pose cache — for after a
 }
 ```
 
+**`rel_path` is the join key, and a hit whose file has moved is normal.** The
+consumer joins hits to its own tree snapshot by `rel_path` and stats the
+misses, bounded by `top` — which is why `rel_path` matters more than `path`,
+and why `hit` carries no mtime or size (model-browser keys thumbnails on
+path+mtime and reads both itself). Two independent caches of one tree drift by
+design: `id` is stem plus 6 hex of the *relative path*, so a moved file is
+simply a different model to this index, and a deleted one lingers until the
+next classify run. **Callers should drop or grey such hits quietly.** It is not
+an error state and this side will not pre-validate it — that would mean a stat
+per hit, on the same spinning volume the scope block refuses to walk.
+
 No render field. model-browser makes its own thumbnails, so pointing at this
 cache's images would be dead weight — and leaving it out is what keeps this API
 from having to know where renders live. Cheap to add back (the render index is
@@ -156,9 +183,9 @@ embedding.
 
 ```jsonc
 {
-  "up": [0.0, 0.0, 1.0],        // the model's up axis in *model* space
+  "up": [0.0, 0.0, 1.0],        // ALWAYS one of six axis vectors — see below
   "source": "geometry",         // forced | geometry | siglip | vlm
-  "confidence": 0.83,
+  "confidence": 0.83,           // how sure we are WHICH of the six
   "front": {                    // null when no front view is cached for this view config
     "view": 2,
     "azimuth_deg": 180.0,
@@ -166,6 +193,20 @@ embedding.
   }
 }
 ```
+
+**`up` is discrete, and that is a guarantee, not an accident.** Pose resolution
+picks from `pose.UP_CANDIDATES` — `(0,0,±1)`, `(0,±1,0)`, `(±1,0,0)` — and
+returns the winner unchanged; `FORCED_UPS` (`--up-axis z|y`) is drawn from the
+same set. Verified against the live cache: `embed-cache4`'s 133 entries hold
+exactly six distinct values, all unit axis vectors. So the six map 1:1 onto
+model-browser's `OrbitAxis`, and **a consumer must not snap defensively** as
+if this were a continuous rotation — there is nothing to snap, and a snap
+would hide a bug rather than absorb one. If a non-axis vector ever appears
+here, that is a defect on this side, not rounding.
+
+`confidence` therefore means "how sure are we which of the six", which is the
+number a UI can gate on. It is the ensemble's margin, not a claim about a
+continuous orientation.
 
 Two transforms, applied in this order, and the viewer needs both:
 
@@ -176,12 +217,20 @@ Two transforms, applied in this order, and the viewer needs both:
    at the bounding-box centre. Elevation is above the horizon; azimuth is CCW
    about +Z from +X.
 
-Both are bounds-relative and carry no distance, which is what model-browser's
-camera model wants (D4: camera state is bounds-relative, never world coords;
-`stageModel` already pivots the model's bounds to the origin). The framing
-distance stays the viewer's business — this side is describing an orientation,
-not a shot. Note the world here is **Z-up**; three.js is Y-up by convention, so
-the viewer either rotates into its own frame or treats step 1's target as +Y.
+Both are bounds-relative and carry no distance (D4: camera state is
+bounds-relative, never world coords; `stageModel` already pivots the model's
+bounds to the origin). To be precise about the fit: model-browser's
+`CameraState` is `{az, el, distR, target}`, all four required, so a pose
+**constructs** a camera state rather than being one — it supplies two of the
+four and the viewer chooses framing distance and target. This side describes
+an orientation, not a shot. Note the world here is **Z-up**; three.js is Y-up
+by convention, so the viewer either rotates into its own frame or treats
+step 1's target as +Y.
+
+The azimuth conventions already agree, checked rather than assumed:
+model-browser's `camera.ts` under spindle `z` puts az=0 at +X increasing
+toward +Y — CCW about +Z from +X, which is this document's convention. Under
+that axis the mapping is degrees→radians and nothing else.
 
 `front.view` is the index into this run's view list, and the angles are that
 view's — `view_angles(views, elevations)[view]`, elevation-major. It is a
@@ -205,9 +254,9 @@ are different answers and the UI must be able to say which:
 {
   "path": "Kits/Baal",
   "status": "partial",     // indexed | partial | unindexed
-  "n_indexed": 41,         // models under this path with cached embeddings — what was searched
-  "n_on_disk": 55,         // STLs the walk sees under it
-  "n_unindexed": 14        // the difference: run classify_stls.py to cover them
+  "n_indexed": 41,         // models under this path with embeddings — what was searched
+  "n_scanned": 55,         // models the last classify run's walk saw under it
+  "covers": ["stl"]        // the extensions this index can hold at all
 }
 ```
 
@@ -219,6 +268,32 @@ are different answers and the UI must be able to say which:
   say instead of "nothing matched" — the same distinction deep name search
   draws between a completed search and a truncated one.
 - Unscoped calls still get the block, with `path: null` and collection totals.
+
+**No directory walk happens in a request.** `n_scanned` is a filter over the
+*cached* file list the last classify run wrote — a claim about the index, not
+about the folder right now. That is deliberate, and the reason is measured on
+this hardware: the library lives on spinning exfat over USB, where
+model-browser measured a full cold walk at ~32 s (10,614 entries at 2.4 ms
+each, plus ~6.7 s of zip central-directory seeks that persist after the FS
+metadata is warm). A walk in the request path would put that on every first
+search of a session, and two processes walking one spinning volume contend for
+the head — the pathology model-browser's `search-cancellation` change exists to
+avoid, and one a Python walk could neither join nor be cancelled by.
+
+The I/O each answer costs, stated precisely because it is the whole argument:
+the **404 is one `stat`** of the scope path; `indexed`/`partial`/`unindexed`
+costs **zero I/O**; only a live on-disk count would have needed the tree, and
+it is the one thing dropped. `n_on_disk`/`n_unindexed` were in an earlier draft
+of this document and are gone: they claimed something about the present that
+this server has no cheap way to know, and "41 of 55" can be contradicted by the
+grid printed beside it, where "41 models classified here" cannot.
+
+**`covers` exists because the two sides disagree about what a model is.**
+model-browser lists `.stl`, `.3mf` and `.obj`; `classify_stls.py` walks `.stl`
+only. Without this field a folder of `.3mf` reports `n_scanned == n_indexed ==
+0` and reads as "nothing here yet" when the truth is "nothing here is
+searchable at all" — the exact ambiguity this block exists to remove. The user
+sees `.3mf` tiles in the grid; the number beside them will not count them.
 
 ### Path space — real paths only
 
@@ -273,14 +348,25 @@ this section describes.
 ## Deliberately not decided here
 
 - **The GPU lock.** Starlette's threadpool means handlers really do run
-  concurrently, so text embedding needs a lock around the 4060 — the one thing
-  the framework choice makes *more* pressing, not less. (ollama and SigLIP
-  cannot share the card; an HTTP surface makes that easier to violate than the
-  REPL did.) Whether the lock wraps the forward or the whole handler is open.
+  concurrently, so text embedding needs a lock around the 4060. (ollama and
+  SigLIP cannot share the card; an HTTP surface makes that easier to violate
+  than the REPL did.) Whether the lock wraps the forward or the whole handler
+  is open. Less pressing than an earlier draft of this document assumed:
+  model-browser's search UI separates typing — a client-side filter issuing no
+  requests — from submit, so this gets one query per Enter, never one per
+  keystroke.
 - **Cancellation.** model-browser has a `search-cancellation` change in flight
   for name search. A semantic query is one text forward (~50 ms) plus a matmul,
   so an abandoned request costs little and latest-wins can stay client-side —
-  but if the GPU lock ever queues, that stops being true.
+  but if the GPU lock ever queues, that stops being true. Note this reasoning
+  holds *only* because no walk happens in a request (see `scope`): GPU work is
+  bounded and predictable, unbounded I/O is not, and an earlier draft that
+  counted a directory walk as part of a query had this argument backwards.
+- **Query state in the URL.** model-browser's in-flight `search-options` change
+  puts its two new search options in both localStorage and the URL, because
+  they change *which results exist*. A semantic query is state of the same
+  kind and will likely want the same treatment — a consumer-side decision, but
+  the reason it arises is here.
 - **Auth / binding.** Loopback, no auth, no CORS: the caller is the Hono
   server, not the page. If the client ever calls this directly, all three come
   back.
