@@ -15,7 +15,7 @@ Why the cached 24-tile grid can be subsetted rather than re-rendered:
 azimuths 2*pi*i/n_az at one fixed elevation, and nothing else in that method
 depends on n_az. So n_az=2 asks for {0, pi} and n_az=1 for {0}, both exact
 subsets of n_az=4's {0, pi/2, pi, 3pi/2} — columns (0, 2) and (0). This is
-*checked* against `src.renderer.view_angles` at run time rather than assumed
+*checked* against `src.pose.view_angles` at run time rather than assumed
 (`azimuth_columns`), and a non-subset request aborts instead of quietly scoring
 the wrong pixels.
 
@@ -84,13 +84,14 @@ GRID_AZ = 4                                      # azimuths in the cached grid
 def azimuth_columns(n_az, grid_az=GRID_AZ):
     """Columns of a `grid_az`-azimuth grid that reproduce an n_az render, or None.
 
-    Asks `src.renderer.view_angles` — the function `Renderer.pose_tiles` itself
+    Asks `src.pose.view_angles` — the function `Renderer.pose_tiles` itself
     calls — for both camera lists and matches them, so this stays correct if the
     angle scheme or the tile elevation ever changes. Returning None means the
     angles are not a subset and the caller must render that n_az itself rather
     than slicing.
     """
-    from src.renderer import UP_TILE_ELEVATION, view_angles
+    from src.pose import view_angles
+    from src.renderer import UP_TILE_ELEVATION
     have = view_angles(grid_az, [UP_TILE_ELEVATION])
     want = view_angles(n_az, [UP_TILE_ELEVATION])
     cols = []

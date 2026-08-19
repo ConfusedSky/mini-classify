@@ -265,6 +265,23 @@ BACK_PROMPTS = [
 ]
 
 
+def view_angles(n_views, elevations):
+    """(azimuth, elevation) radian pairs: a full turntable ring per elevation.
+
+    Elevation-major, so views 0..n_views-1 are the first ring — a run with one
+    elevation lays out exactly as it did before elevations existed, and
+    view0.png keeps meaning the same camera.
+
+    Lives here rather than in `renderer` (moved 2026-08-19) because it is pure
+    numpy and it is what turns a `front_view` index into an angle: the API
+    names a model's front camera without loading a rendering library
+    (docs/api/surface.md §pose). `renderer` imports it back — it is still the
+    function `Renderer.views` and `pose_tiles` take their cameras from, and
+    there is one copy."""
+    return [(2 * np.pi * i / n_views, np.deg2rad(e))
+            for e in elevations for i in range(n_views)]
+
+
 def front_view(entry, cfg):
     """The cached front ("hero") view index for one view configuration.
 

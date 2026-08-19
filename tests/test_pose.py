@@ -43,6 +43,27 @@ def test_cylinder_is_ambiguous():
     assert ratio > 0.6
 
 
+def test_view_angles_rings_are_nested_subsets():
+    """A ring of n azimuths is a subset of a ring of m when n divides m.
+
+    The property `eval/tile_count.py` relies on to slice a cached 24-tile grid
+    instead of re-rendering per n_az, and `tests/test_renderer.py` uses as its
+    oracle for `pose_tiles`' cameras. It belongs to the function, which lives
+    here since 2026-08-19."""
+    four = pose.view_angles(4, [20.0])
+    for n in (2, 1):
+        assert all(a in four for a in pose.view_angles(n, [20.0])), n
+
+
+def test_view_angles_is_elevation_major():
+    """views 0..n-1 are the first elevation's ring — `front_view` indices and
+    every saved `view<i>.png` name are positions in this list."""
+    angles = pose.view_angles(4, [20.0, -20.0])
+    assert len(angles) == 8
+    assert [round(np.rad2deg(e), 6) for _, e in angles] == [20.0] * 4 + [-20.0] * 4
+    assert [round(np.rad2deg(a), 6) for a, _ in angles[:4]] == [0.0, 90.0, 180.0, 270.0]
+
+
 def test_pose_cache_roundtrip(tmp_path):
     cache = {"some|identity": {"up": [0.0, 0.0, 1.0], "front_view": 2,
                                "confidence": 0.15, "source": "geometry",

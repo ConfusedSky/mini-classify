@@ -60,7 +60,8 @@ from common import OUT, REPO
 from src import loader
 from src import pose
 from src.messages import RenderConfig
-from src.renderer import Renderer, orbit_camera, rotation_to_z_up, view_angles
+from src.pose import view_angles
+from src.renderer import Renderer, orbit_camera, rotation_to_z_up
 
 
 def configure(r, arm):

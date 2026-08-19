@@ -10,6 +10,7 @@ import numpy as np
 import open3d as o3d
 import pytest
 
+from src import pose as pose_mod
 from src import renderer as renderer_mod
 from src.loader import LoadedMesh
 from src.messages import RenderConfig
@@ -104,9 +105,11 @@ def test_pose_tiles_n_az_defaults_to_production_and_is_a_camera_subset(rig):
                for row in r.pose_tiles(lm(), 0))          # default = production
     assert all(len(row) == 4 for row in r.pose_tiles(lm(), 1, n_az=4))
     assert all(len(row) == 1 for row in r.pose_tiles(lm(), 2, n_az=1))
-    four = renderer_mod.view_angles(4, [renderer_mod.UP_TILE_ELEVATION])
+    # the oracle is `pose.view_angles` (it moved there 2026-08-19); what this
+    # test claims is about `pose_tiles`' cameras, so it names the oracle's home
+    four = pose_mod.view_angles(4, [renderer_mod.UP_TILE_ELEVATION])
     for n in (2, 1):
-        want = renderer_mod.view_angles(n, [renderer_mod.UP_TILE_ELEVATION])
+        want = pose_mod.view_angles(n, [renderer_mod.UP_TILE_ELEVATION])
         assert all(a in four for a in want), n
 
 

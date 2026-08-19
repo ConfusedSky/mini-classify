@@ -39,7 +39,10 @@ Hard constraints this module is built around (CLAUDE.md):
 
 Rendering extraction source: `classify_stls.py` (make_renderer, orbit_camera,
 view_angles, render_up_candidate_grid's camera trick, save_renders,
-RENDER_FORMATS). This module is now the one home for all of it — the CLI's
+RENDER_FORMATS). This module is the one home for all of it except
+`view_angles`, which moved on to `src/pose.py` (2026-08-19) so a consumer can
+turn a `front_view` index into an angle without importing open3d; it is
+imported back here and `Renderer` still takes its cameras from it — the CLI's
 parallel single-process render path was deleted in the eval-debt cleanup
 (2026-08-18) and `eval/rig.py` drives the `Renderer` below instead — and
 `render_key` moved down to `identity` (the parent's cache checker needs it
@@ -58,6 +61,7 @@ import open3d.visualization.rendering as rendering
 from PIL import Image
 
 from src import pose
+from src.pose import view_angles          # moved there 2026-08-19; one copy
 from src.identity import render_key
 from src.loader import LoadedMesh
 from src.messages import RenderConfig
@@ -107,16 +111,6 @@ def rotation_to_z_up(up):
     axis = axis / np.linalg.norm(axis)
     angle = np.arccos(np.clip(up @ z, -1, 1))
     return o3d.geometry.get_rotation_matrix_from_axis_angle(axis * angle)
-
-
-def view_angles(n_views, elevations):
-    """(azimuth, elevation) radian pairs: a full turntable ring per elevation.
-
-    Elevation-major, so views 0..n_views-1 are the first ring — a run with one
-    elevation lays out exactly as it did before elevations existed, and
-    view0.png keeps meaning the same camera."""
-    return [(2 * np.pi * i / n_views, np.deg2rad(e))
-            for e in elevations for i in range(n_views)]
 
 
 def orbit_camera(center, radius, az, elev):

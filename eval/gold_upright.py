@@ -34,7 +34,7 @@ def render(labels):
     from PIL import Image
     import rig
     from src import pose as P
-    from src.renderer import view_angles
+    from src.pose import view_angles
 
     DIR.mkdir(parents=True, exist_ok=True)
     paths = {l["stem"]: [DIR / f"{l['stem']}_az{int(a)}.jpg" for a in AZIMUTHS]

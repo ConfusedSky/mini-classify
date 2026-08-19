@@ -15,7 +15,11 @@ something runnable, so a phase that turns out wrong is cheap to abandon.
 nothing was scored, deterministic ties. The formula half is done, and the
 REPL is already a thin client of it.
 
-## Phase 0 — prerequisites
+## Phase 0 — prerequisites — **done 2026-08-19**
+
+Installed: `fastapi 0.141.1`, `uvicorn 0.52.4`, `starlette 1.6.0`, alongside
+the `pydantic 2.13.4` already present. `view_angles` now lives in `src/pose.py`
+with all five callers repointed; 463 passed, 1 skipped.
 
 **0.1 Install FastAPI.** The venv is uv-managed and has no pip:
 
@@ -122,11 +126,23 @@ second pass. Measure the 2890 case in phase 3, not the 133 one.
 `rotation_to_z_up(up).T @ [1,0,0]`, the model-space direction azimuth 0 is
 measured from — so a consumer that cannot rotate meshes derives its own
 azimuth offset from data instead of reimplementing `rotation_to_z_up`
-(surface.md §pose). Note this makes `pose_of` the one place in `collection.py`
-that needs a rotation matrix; `rotation_to_z_up` lives in `renderer.py` with
-open3d, so either it moves to `pose.py` alongside `view_angles` in phase 0.2,
-or the six rotations are tabulated. The move is cleaner and the pin test
-already fixes what the six values are.
+(surface.md §pose).
+
+~~Either `rotation_to_z_up` moves to `pose.py` alongside `view_angles`, or the
+six rotations are tabulated; the move is cleaner.~~ **It must not move —
+settled while doing phase 0.2.** `rotation_to_z_up` computes with open3d, and
+`pose.py` may import open3d only inside `up_axis_scores`. It would not qualify
+for a deferred import either: the rule is that deferral only helps when the
+signature already implies the dependency, and this takes a *vector*, so the
+cost would land on every caller (interfaces.md's import-rule table — this is
+the `DEFAULT_MODEL` shape exactly). Rewriting it in numpy is worse: it is item
+one on the recipe list, and the rule there is that touching it is a bump
+however the pixels land.
+
+So **tabulate the six**. `up` is always one of `pose.UP_CANDIDATES`, and
+`test_rotation_to_z_up_is_pinned_for_all_six_candidates` fixes what each
+rotation is, so a six-entry table in `collection.py` is exact, needs no
+open3d, and has a test that fails if it ever drifts from the renderer.
 
 The pose cache stores an up vector
 and a per-view-config `front_view` index; the viewer needs an angle. So:
