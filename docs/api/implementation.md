@@ -166,6 +166,35 @@ the unindexed-but-real directory; `pose_of` with a front view, without one,
 and with a legacy integer entry; scoped row indices agreeing with a manual
 filter. No torch, no GPU, no HTTP in this file or its test.
 
+### Found while building phase 1: the server cannot start with the drive unplugged
+
+The library is on removable media, and it was unmounted while phase 1 was
+being written. `Collection.load` does not degrade — it fails, and it fails
+misleadingly: `load_file_list` drops every entry that no longer exists ("133
+vanished since scan"), `load_embedding_matrix` then finds nothing and exits
+with *"no cached embeddings found — run classify_stls.py first"*, which is
+exactly the wrong advice.
+
+Everything a query needs is on local disk — the `.npy` files, the pose cache,
+the walk cache. The only reason the volume is required is that identities are
+`rel|mtime|size`, so `file_identity` stats the file. **But the pose cache's
+own keys *are* those identities** (interfaces.md §P3.1: every embedding key is
+reconstructible from `pose-cache.json` plus `run-params.json` alone, with no
+filesystem access). So a volume-independent load is possible: take the files
+from the pose cache's keys instead of from a walk.
+
+This matters more than it looks, because it is the independence property
+model-browser asked for — each side works completely when the other is
+unavailable — applied to storage rather than to a peer service. A laptop
+whose library lives on USB will have it unplugged often, and the embeddings
+are just as valid then.
+
+Not built, because it changes where `files` comes from and therefore what
+`n_scanned` means. Decide before phase 2: fail loudly at startup, or serve the
+cache and report the volume's absence in `/status`. `hit.path` already
+tolerates it — stale paths are documented as normal and the consumer joins on
+`rel_path`.
+
 ## Phase 2 — `src/api.py`, the HTTP layer
 
 Mechanical if phase 1 is right. `create_app(state) -> FastAPI`, where `state`
