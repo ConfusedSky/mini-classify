@@ -49,7 +49,7 @@ through it, they import from the module that owns it:
 | `classify_stls.add_cache_args` / `apply_run_params` / `cache_root` / `cache_key` / `load_file_list` / `embeds_dir` / `renders_dir` / `render_index` / `load_run_params` | `src.cachedir` |
 | `classify_stls.render_key` / `DEFAULT_ELEVATIONS` / `cache_key_from_identity` | `src.identity` |
 | `classify_stls.as_tensor` / `embed_raw` / `embed_texts` | `src.embedder` |
-| `classify_stls.pool_sims` | `src.done` |
+| `classify_stls.pool_sims` | `src.query` (via `src.done` until 2026-08-19) |
 | `classify_stls.RENDER_FORMATS` and the camera/light constants | `src.renderer` |
 | `classify_stls.read_binary_stl` / `load_mesh` | `src.loader` |
 | `classify_stls.view_config` | `src.cachedir` |

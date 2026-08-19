@@ -31,8 +31,10 @@ proposal.
 - `docs/reviews/` — dated review notes, including the implementation reviews
   every finding ID resolves to.
 - `docs/api/surface.md` — **proposal, not built**: the REPL's querying as an
-  HTTP surface for `~/Documents/model-browser` to search against. Unlike
-  `docs/actor-refactor/`, nothing here describes existing code yet.
+  HTTP surface for `~/Documents/model-browser` to search against. No server,
+  no route, no handler exists. The one exception is its "where the code goes"
+  section: the shared query path it called for is `src/query.py` (2026-08-19),
+  and that section describes what shipped, marked in place.
 - `eval/README.md` — the measurement harnesses. They call the production code
   through `eval/rig.py`, which builds the real `Renderer`/`Embedder` — true
   again since 2026-08-18, when the CLI's parallel single-process render/embed

@@ -1,6 +1,9 @@
 # API surface sketch — search backend over the collection
 
-Status: **proposal**, calls and parameters only. Nothing here is implemented.
+Status: **proposal**, calls and parameters only — no server, no route, no
+handler. One part has since been built: the query path this document said the
+REPL and the server must share is `src/query.py` (2026-08-19), described under
+**where the code goes**. Everything above that section is still a sketch.
 
 The consumer is **`model-browser`** (`~/Documents/model-browser`) — and
 specifically its Bun/Hono server on 127.0.0.1:3177, not the browser tab. This
@@ -229,15 +232,36 @@ over a zip listing — but the server does not depend on it.
 not a client of the server (it must keep working with the server down), and
 not a second copy. Today it holds scoring logic in `show_query`'s body.
 
-Proposed: a new `src/query.py` owning the pure part — the scoped matrix slice,
-the pooled matmul, robust z, the weak rule, top-N/`min_score` — taking a
-matrix and a text-embedding callable. The REPL keeps its printing and its OSC-8
-links, the server keeps its JSON, and neither owns a formula.
+~~Proposed: a new `src/query.py` owning the pure part — the scoped matrix
+slice, the pooled matmul, robust z, the weak rule, top-N/`min_score` — taking
+a matrix and a text-embedding callable.~~ — **landed 2026-08-19**, and
+`show_query` is the printing alone now. Two departures from the paragraph
+above, both deliberate:
 
-Open: `done.pool_sims` is pure numpy but lives in a torch-owning module. Both
-callers here hold SigLIP already, so it costs nothing today; worth a look when
-`src/query.py` lands, since a query module that needs no torch is a nicer thing
-to have than one that inherits it.
+* **A text-embedding *matrix*, not a callable.** `score(matrix, text_T, pool)`
+  takes `(dim, n_texts)` of unit rows and never learns where they came from,
+  which is what keeps torch out of the module (interfaces.md, row `query`:
+  `import src.query` adds 135 modules, numpy and stdlib only). The templated
+  and verbatim passes are the same matmul, so the choice between them stays
+  the caller's — the REPL's `:raw` toggle needs it to.
+* **The scoped slice is the caller's too.** A scope is a row subset of
+  `matrix`: slice before calling and z narrows with it, which is the behaviour
+  a scoped search wants and the reason no path filtering lives in the module.
+  `rank` is total, so a scope matching nothing returns an empty ranking with
+  `best is None` rather than raising — that is the `unindexed`/empty-scope
+  answer above, served without a special case in the handler.
+
+The REPL keeps its printing and its OSC-8 links, the server keeps its JSON, and
+neither owns a formula. What the two do differently is the weak verdict:
+`rank` returns `weak` and the caller decides, because the REPL suppresses the
+listing entirely and this surface must not.
+
+~~Open: `done.pool_sims` is pure numpy but lives in a torch-owning module.~~ —
+**closed by the same change.** `pool_sims` moved into `src/query.py` and `done`
+imports it from there, so the dependency runs from the pipeline's terminal
+stage toward the leaf rather than the other way: nothing has to load torch, csv
+and the transport to pool an array. `tests/test_query.py` pins the contract
+this section describes.
 
 ## Deliberately not decided here
 

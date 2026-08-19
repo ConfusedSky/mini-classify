@@ -32,7 +32,8 @@ from src import pose
 from src.cache_checker import route
 from src.cachedir import cache_key, view_config
 from src.identity import cache_key_from_identity
-from src.done import CSV_FIELDS, Done, pool_sims
+from src.done import CSV_FIELDS, Done
+from src.query import pool_sims
 from src.messages import (
     CacheContext,
     CachedHit,
@@ -521,7 +522,7 @@ def test_flush_empty_rows_writes_header_only(tmp_path):
 
 # The two parity pins that lived here (`pool_sims` and `view_config` against
 # classify_stls' copies) are retired with the copies: each has exactly one home
-# now (`src/done.py` and `src/cachedir.py`), so both assertions had become a
+# now (`src/query.py` and `src/cachedir.py`), so both assertions had become a
 # function compared with itself. `pool_sims` is still exercised through
 # `today_row` on every success-row test, and `view_config` through the
 # front_view keying below.

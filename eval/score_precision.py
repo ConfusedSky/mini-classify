@@ -36,8 +36,8 @@ from common import OUT  # puts REPO on sys.path
 
 import torch
 from src.cachedir import add_cache_args, apply_run_params, embeds_dir
-from src.done import pool_sims
 from src.embedder import embed_texts
+from src.query import pool_sims
 
 DRIFT = 9.8e-4          # torch.compile's max embedding drift, LEARNINGS
 

@@ -28,11 +28,10 @@ from urllib.parse import quote
 import numpy as np
 import torch
 
-from src import pose
+from src import pose, query
 from src.cachedir import (add_cache_args, apply_run_params, cache_root,
                           load_file_list, render_index, renders_dir,
                           require_cache_version, total_views, view_config)
-from src.done import pool_sims
 from src.embed_store import load_embedding_matrix
 from src.embedder import embed_raw, embed_texts
 from src.identity import render_key
@@ -66,34 +65,22 @@ def show_classification(sims, categories, names, prev):
 
 
 def show_query(sims_1d, names, top=10, min_score=None):
-    # z-score: how far a model stands out from the whole collection for this
-    # query. Cosine scores are only comparable within a query; z is comparable
-    # across queries, so it detects "nothing here actually matches".
-    # robust z (median/MAD): unlike mean/std it isn't skewed when many models
-    # genuinely match, so broad queries don't get falsely flagged as weak
-    med = np.median(sims_1d)
-    mad = np.median(np.abs(sims_1d - med)) * 1.4826 + 1e-9
-    z = (sims_1d - med) / mad
-    order = np.argsort(-sims_1d)
-    # 2.0 catches only unambiguous noise: measured on real queries, correct
-    # matches ran z 2.4+ while semantic near-misses ran up to 3.7 — a higher
-    # cutoff would suppress good results without stopping near-misses. It
-    # stands alone by default; --min-score / :min opts into filtering the
-    # middle ground by raw score when a query wants an exhaustive listing.
-    if z[order[0]] < 2.0:
-        print(f"  WEAK QUERY (best z {z[order[0]]:.1f}) — nothing stands out; "
+    """Print one query's ranking. The judging is `src/query.py`'s; the terminal
+    is this function's — including the choice to say nothing at all about a
+    weak query, which the API deliberately does not make (docs/api/surface.md).
+    """
+    r = query.rank(sims_1d, top=top, min_score=min_score)
+    if r.weak:
+        print(f"  WEAK QUERY (best z {r.z[r.best]:.1f}) — nothing stands out; "
               f"probably not represented in the collection")
         return
     if min_score is not None:
-        order = order[sims_1d[order] >= min_score]
-        if len(order) == 0:
+        if len(r.order) == 0:
             print(f"  nothing scores >= {min_score}")
             return
-        print(f"  {len(order)} models >= {min_score}:")
-    else:
-        order = order[:top]
-    for i in order:
-        print(f"  {sims_1d[i]:.3f} (z {z[i]:4.1f})  {names[i]}")
+        print(f"  {len(r.order)} models >= {min_score}:")
+    for i in r.order:
+        print(f"  {sims_1d[i]:.3f} (z {r.z[i]:4.1f})  {names[i]}")
 
 
 def main():
@@ -164,8 +151,7 @@ def main():
     raw = args.raw_queries
 
     def score(texts, raw=False):  # (n_files, n_texts), pooled over views
-        view_sims = matrix @ text_matrix(texts, raw)  # (n_files, n_views, n_texts)
-        return pool_sims(view_sims, pool)
+        return query.score(matrix, text_matrix(texts, raw), pool)
 
     prev = None
     print(f"\nenter = classify with categories.txt | text = query | :find <text> = "

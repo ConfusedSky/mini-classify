@@ -37,9 +37,9 @@ import torch
 from src import pose
 from src.cachedir import (add_cache_args, apply_run_params, cache_key,
                           cache_root, embeds_dir, load_file_list, renders_dir)
-from src.done import pool_sims
 from src.embedder import as_tensor, embed_texts
 from src.identity import render_key
+from src.query import pool_sims
 
 DRIFT = 9.8e-4          # torch.compile's max embedding drift, LEARNINGS
 

@@ -58,6 +58,10 @@ from src.messages import (
     ResultRow,
     Retired,
 )
+# The view pooling this module's score block runs, which is a query decision
+# and not a writer's: it moved to `src/query.py` when the REPL and the API
+# needed it without importing the pipeline's terminal stage to get it.
+from src.query import pool_sims
 from src.pose import (
     FORCED_UPS,
     Pose,
@@ -75,25 +79,6 @@ if TYPE_CHECKING:
 # the flush; it is not a column.
 CSV_FIELDS = ["file", "top1", "score1", "top2", "score2", "top3", "score3",
               "up", "pose_conf", "pose_source", "front_view"]
-
-
-def pool_sims(view_sims, mode, axis=-2):
-    """Pool per-view similarity scores (..., n_views, n_categories) over views.
-
-    mean: robust whole-object consensus (a feature seen in 1 of 4 views keeps
-    ~25% weight). max: "clearly visible from some angle" — lets single-view
-    features decide. softmax: in between (sharpness set by BETA).
-
-    The one copy: scoring is this module's, so the REPL and the evals import it
-    from here directly. They all hold a SigLIP model already, so the torch this
-    module owns costs them nothing they were not paying."""
-    if mode == "mean":
-        return view_sims.mean(axis)
-    if mode == "max":
-        return view_sims.max(axis)
-    BETA = 50.0
-    w = np.exp(BETA * (view_sims - view_sims.max(axis, keepdims=True)))
-    return (w * view_sims).sum(axis) / w.sum(axis)
 
 
 class Done:
