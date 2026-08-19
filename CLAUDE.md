@@ -69,9 +69,10 @@ accordingly: cache-building throughput and REPL quality first.
   rendering; a child process can (measured 1.17–1.21×, thermally capped).
 - **Nothing imports `classify_stls.py`** (eval-debt cleanup, 2026-08-18). It is
   the CLI entry and exports nothing; `spawn` re-imports it as `__mp_main__` in
-  the render child, so its module scope is the child's startup cost — stdlib
-  plus `src.identity` and `src.cachedir`, with everything torch- or
-  open3d-owning imported inside the function that uses it. What tools share
+  the render child, so its module scope is the child's startup cost — stdlib,
+  `tqdm`, `src.instrument`, `src.identity` and `src.cachedir`, with everything
+  torch- or open3d-owning imported inside the function that uses it (measured:
+  `import classify_stls` adds 138). What tools share
   lives in `src/cachedir.py` (cache layout, keys, run-params, the shared
   argparse block), `src/embed_store.py` (reading `.npy` back) and
   `src/embedder.py` (text embeddings). `src/pose.py` holds no rendering or
@@ -85,7 +86,10 @@ accordingly: cache-building throughput and REPL quality first.
   dependency** — otherwise it moves the cost onto callers instead of removing
   it. `up_axis_scores(mesh)` qualifies (you cannot hold an Open3D mesh without
   open3d); a helper returning a *string* from a torch-owning module did not,
-  and charged 836 modules to every tool that built an argument parser.
+  and charged 836 modules to every tool that built an argument parser. The
+  numbers, the decomposition that redirected the fix, and the third failure
+  mode — a deferral whose comment names a beneficiary that pays anyway — are
+  in the dated learnings entry.
 - **Ctrl-C is the parent's alone; the render child ignores `SIGINT`.** A
   terminal signals the whole foreground process group, and the child's
   `except Exception` cannot catch a `KeyboardInterrupt` — so an unshielded

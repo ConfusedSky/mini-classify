@@ -100,6 +100,16 @@ notes at the bottom are amended in place. Open work is tracked separately in
   block-buffered, so its *absence* is a fingerprint of SIGKILL rather than of a
   stall before renderer startup.
 
+- [2026-08-18 — a deferred import charges the caller](docs/learnings/2026-08-18-deferred-imports-charge-the-caller.md)
+  — two modules whose docstrings asserted they were light were made heavy by
+  the same move: `add_cache_args` charged 836 modules and ~0.9 s of torch to
+  every tool that built a parser, and `embed_store` pulled a rendering library
+  (+2602) to read `.npy` files. Deferring an import relocates its cost onto
+  callers; it removes cost only when the signature already implies the
+  dependency, which is why `up_axis_scores(mesh)` may defer open3d and a
+  string-returning helper may not. The obvious fix was also the wrong one:
+  open3d was 2596 of the 2602 and served exactly one function.
+
 ## Evergreen notes
 
 - [Queries and filters](docs/learnings/queries-and-filters.md) — open-set
