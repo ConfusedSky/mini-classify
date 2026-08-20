@@ -131,6 +131,39 @@ def test_rotation_to_z_up_does_not_hand_out_its_table():
     assert pose.rotation_to_z_up(np.array([0.0, 1.0, 0.0]))[0, 0] == 1.0
 
 
+def test_a_rate_limited_vlm_waits_before_retrying(monkeypatch):
+    """429/503 mean "later", not "this request is wrong", and they return in
+    milliseconds — so an immediate retry is a second refusal and the freed
+    worker starts a third. A collection-scale run hit Vertex quota this way
+    (2026-08-19)."""
+    calls, slept = [], []
+
+    def refuse(*a, **k):
+        calls.append(1)
+        raise pose.RateLimited("HTTP 429: Resource exhausted")
+
+    monkeypatch.setattr(pose, "_ask_gemini", refuse)
+    out = pose.ask_vlm_up([Image.new("RGB", (8, 8))] * 6, "gemini", "/tmp",
+                          vlm_model="m", sleep=slept.append)
+    assert out is None                      # the geometry answer stands
+    assert len(calls) == 2                  # tried twice, as before
+    assert slept == [pose.VLM_BACKOFF[0]]   # and waited between them
+
+
+def test_an_ordinary_vlm_error_still_retries_at_once(monkeypatch):
+    """Only a rate limit waits. A malformed request should fail fast and let
+    the run carry on with the ensemble's answer."""
+    slept = []
+
+    def broken(*a, **k):
+        raise RuntimeError("HTTP 400: bad request")
+
+    monkeypatch.setattr(pose, "_ask_gemini", broken)
+    assert pose.ask_vlm_up([Image.new("RGB", (8, 8))] * 6, "gemini", "/tmp",
+                           vlm_model="m", sleep=slept.append) is None
+    assert slept == []
+
+
 def test_view_angles_rings_are_nested_subsets():
     """A ring of n azimuths is a subset of a ring of m when n divides m.
 

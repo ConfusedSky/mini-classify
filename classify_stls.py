@@ -208,11 +208,19 @@ def main():
                              "inline, and this becomes its loader_worker_count when the "
                              "child grows loader workers (actors_proposal.md migration "
                              "notes). Worth ~1-2%% of a run when it did apply")
-    parser.add_argument("--arbiter-workers", type=int, default=8,
+    parser.add_argument("--arbiter-workers", type=int, default=4,
                         help="concurrent pose-VLM calls for network backends — the "
                              "Arbiter's window. The call averages 24s against 3-28s of "
                              "local work per model, so waiting inline leaves the run "
-                             "mostly idle")
+                             "mostly idle. Was 8 until 2026-08-19, when a collection-"
+                             "scale run hit Vertex quota (HTTP 429)")
+    parser.add_argument("--arbiter-min-interval", type=float, default=1.0,
+                        help="minimum seconds between pose-VLM call *starts*. At 4 "
+                             "workers and a ~24s call the healthy rate is ~10/min, so "
+                             "this never binds on success — it exists because a 429 "
+                             "returns in milliseconds, which frees a worker to fail "
+                             "again immediately and turns a quota refusal into a "
+                             "self-sustaining storm. 0 disables pacing")
     parser.add_argument("--up-margin", type=float, default=pose.MARGIN_THRESHOLD,
                         help="escalate to the pose VLM when the ensemble's winning "
                              "candidate leads the runner-up by less than this (0-2). "
@@ -313,7 +321,8 @@ def main():
     done = Done(Admission(), embedder.text_embeds, ctx, tasks,
                 categories=categories, front_embeds=embedder.front_T,
                 back_embeds=embedder.back_T)
-    arbiter = Arbiter(workers=args.arbiter_workers, wrap=driver.instrumented)
+    arbiter = Arbiter(workers=args.arbiter_workers, wrap=driver.instrumented,
+                      min_interval=args.arbiter_min_interval)
     poser = Poser(embedder.up_T, embedder.down_T, arbiter, done.record_pose,
                   VlmConfig(backend=vlm_backend, model=args.pose_vlm_model,
                             scratch_dir=args.cache_dir or ".",

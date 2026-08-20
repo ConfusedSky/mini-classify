@@ -599,6 +599,22 @@ def gcloud_token(ttl=1800):
     return _token_cache["token"]
 
 
+class RateLimited(RuntimeError):
+    """The VLM said "later" (HTTP 429/503), not "no".
+
+    Its own type because the handling differs in kind: a malformed request
+    should fail fast and let the geometry answer stand, while a quota refusal
+    should wait, since the next call from the same pool will hit the same
+    limit."""
+
+
+# Waits before each retry after a rate-limit refusal. Two attempts, so one
+# wait; the list documents the shape for when a third is wanted. Small on
+# purpose — the Arbiter's `min_interval` is what paces the *pool*, and this
+# only stops a single call's retry from being instantaneous.
+VLM_BACKOFF = [5.0, 20.0]
+
+
 def _ask_gemini(png_bytes, n_tiles, model, project=None):
     """Vertex AI arbiter. Raw HTTPS rather than an SDK: one POST, no dependency,
     and the same call the eval harness measured at 43/44 standalone."""
@@ -621,7 +637,15 @@ def _ask_gemini(png_bytes, n_tiles, model, project=None):
     try:
         d = json.loads(urllib.request.urlopen(req, timeout=300).read())
     except urllib.error.HTTPError as e:
-        raise RuntimeError(f"HTTP {e.code}: {e.read()[:200].decode(errors='replace')}") from e
+        detail = f"HTTP {e.code}: {e.read()[:200].decode(errors='replace')}"
+        # 429/503 are "come back later", not "this request is wrong", and they
+        # return in milliseconds — so an immediate retry is a second failure
+        # and a freed worker starts a third. Distinguished so `ask_vlm_up` can
+        # back off instead (2026-08-19: a --rescan at collection scale hit
+        # Vertex quota and the un-paced pool turned it into a storm).
+        if e.code in (429, 503):
+            raise RateLimited(detail) from e
+        raise RuntimeError(detail) from e
     parts = d["candidates"][0]["content"]["parts"]
     return parse_tile_answer("".join(p.get("text", "") for p in parts), n_tiles)
 
@@ -630,10 +654,13 @@ DEFAULT_VLM_MODELS = {"ollama": "gemma4:26b", "gemini": GEMINI_MODEL, "claude": 
 
 
 def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None,
-               project=None):
+               project=None, sleep=time.sleep):
     """Ask the VLM which candidate orientation is upright. One retry on a
     bad/failed answer, then None — the caller keeps the geometry guess.
     The pipeline never hard-fails because of the VLM.
+
+    A rate-limit refusal waits before the retry (`VLM_BACKOFF`); anything else
+    retries at once, as before. `sleep` is an injection seam for tests.
 
     save_to keeps a per-model copy of the sheet next to the saved renders. It
     is the same image the VLM was shown, written whether or not the answer
@@ -650,7 +677,10 @@ def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None
             sheet.save(save_to)
         except OSError as e:  # a debug artifact must never fail the run
             print(f"  could not save pose sheet {save_to}: {e}")
-    for _attempt in range(2):
+    backoff = 0.0                      # local: this runs on 4+ arbiter threads
+    for attempt in range(2):
+        if attempt and backoff:
+            sleep(backoff)
         try:
             if backend == "ollama":
                 buf = io.BytesIO()
@@ -664,6 +694,10 @@ def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None
                 sheet_path = Path(scratch_dir) / "pose-sheet.png"
                 sheet.save(sheet_path)
                 idx = _ask_claude(sheet_path, len(tiles))
+        except RateLimited as e:
+            backoff = VLM_BACKOFF[min(attempt, len(VLM_BACKOFF) - 1)]
+            print(f"  pose VLM rate-limited ({backend}), waiting {backoff:g}s: {e}")
+            idx = None
         except Exception as e:
             print(f"  pose VLM error ({backend}): {e}")
             idx = None
