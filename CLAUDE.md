@@ -58,10 +58,12 @@ quality first.
 ## Running it
 
 `.venv` is uv-managed and has no pip — install with
-`uv pip install --python .venv/bin/python <pkg>`. The caches and the STL
-library are **not in the repo**; every entry point defaults its cache-identity
-flags to the last classify run's `run-params.json`, so after the first run the
-directory argument is usually optional.
+`uv pip install --python .venv/bin/python <pkg>`. Bare `python` is the
+*system* interpreter and has neither open3d nor torch, so it fails at test
+collection; every command below needs `.venv/bin/python`. The caches and the
+STL library are **not in the repo**; every entry point defaults its
+cache-identity flags to the last classify run's `run-params.json`, so after
+the first run the directory argument is usually optional.
 
 ```
 .venv/bin/python classify_stls.py <stl-dir> --cache-dir embed-cache2   # build the caches
@@ -69,6 +71,10 @@ directory argument is usually optional.
 .venv/bin/python serve_api.py --cache-dir embed-cache2 --port 8077     # the query API
 .venv/bin/python -m pytest tests/ -q                                   # the suite
 ```
+
+Stop a backgrounded server with `fuser -k <port>/tcp` — `pkill -f
+serve_api.py` also matches the shell running it, and kills the command it is
+part of.
 
 Three entry points, and **nothing imports any of them** — they are CLIs that
 export nothing (the rule matters for `classify_stls.py`, which `spawn`
@@ -89,6 +95,17 @@ against a scratch cache, not the project's entry point.
 - Ground-truth labels load through `common.load_labels()` — never re-derive
   them from a sample index; the collection grew mid-session once and the same
   seed stopped drawing the same models.
+- Name the cache and the volume beside every measured number, in docs, commits
+  and memory alike. Figures differ by cache (`embed-cache2` vs the small test
+  caches) and by disk, and an unlabelled one has been read across the wrong
+  column twice.
+- Check for a running `classify_stls.py` before timing anything — it saturates
+  the disk and the 4060. Syscall *counts* stay valid under load; wall-clock
+  does not.
+- Build cache fixtures through the production writers (`cache_key`,
+  `stamp_cache_version`, a real `run-params.json`) — production guards have
+  twice caught a fixture the tests could not. Assert I/O as a syscall
+  *budget*, not a blocklist of named walk functions.
 
 ## Hard-won constraints (measured; don't relitigate without new numbers)
 
