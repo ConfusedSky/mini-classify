@@ -137,6 +137,22 @@ This is exactly what the field was for. A UI can now say "1206 of 1275 models
 here are searchable" instead of quietly returning results from a fraction of
 the folder — and `partial` is actionable, since the fix is a classify run.
 
+**These particular numbers had a shelf life of hours.** A
+`classify_stls.py --cache-dir embed-cache2 --rescan` was already in flight
+while this was being written, and closing the 595 is exactly what it does — so
+a later reader will find the collection reporting `indexed`, with 3396 models
+loaded and `missing 0`. The numbers above are not rewritten, because a dated
+entry records a moment and this one really was measured. But the note matters:
+without it, someone seeing `indexed` everywhere cannot tell whether `partial`
+ever fired on real data or whether this write-up was describing a state the
+code could reach in principle. It fired, on the whole collection, for as long
+as it took to run the classifier once.
+
+Note also which branch that leaves untested at collection scale: the live run
+saw `partial` and `indexed` (on `DM Stash`) but never `indexed` for the whole
+collection, because there was no moment during it when the cache had caught up
+with the disk.
+
 Note the side effect: `--rescan` rewrites the walk cache, so every tool
 reading this cache now sees 3396 files and reports 595 uncached until the next
 classify run. That is more accurate, not less, but it is a change to shared

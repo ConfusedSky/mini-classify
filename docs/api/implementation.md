@@ -281,9 +281,11 @@ classify run coexist, and `/reload` keeps the shape it has. Write-up:
 One thing the run turned up that no test would have: `/reload {"rescan": true}`
 rewrites the walk cache, which is **shared state changed by an endpoint whose
 other calls only read**. The result was more accurate (it found 595 models
-added since the last classify run, and the scope block now reports
-`partial` where it should), but the write is worth knowing about — every tool
-reading that cache sees the new walk.
+added since the last classify run, and the scope block reported `partial`
+where it should), but the write is worth knowing about — every tool reading
+that cache sees the new walk. The 595 was transient: a classify run was
+already closing it as this was written, so the state a later reader finds is
+`indexed`.
 
 
 Root-level CLI entry, mirroring `classify_stls.py`: `add_cache_args` +
