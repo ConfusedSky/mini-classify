@@ -313,8 +313,9 @@ class Poser:
         if cfg.ask is not None:
             return lambda: cfg.ask(sheet_tiles)
         save_to = cfg.sheet_path(file) if cfg.sheet_path else None
-        # raise_on_rate_limit: the Future carries the exception so `_fold` can
-        # tell a transient refusal from a request that cannot succeed
+        # raise_failures: the Future carries the last attempt's exception,
+        # whatever its type, so `_fold` can tell a transient refusal (retry)
+        # from a request the API rejects on its merits (do not re-pay)
         return lambda: pose.ask_vlm_up(
             sheet_tiles, cfg.backend, cfg.scratch_dir,
             cfg.model or pose.DEFAULT_VLM_MODELS.get(cfg.backend),

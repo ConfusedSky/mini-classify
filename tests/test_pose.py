@@ -150,6 +150,38 @@ def test_a_rate_limited_vlm_waits_before_retrying(monkeypatch):
     assert slept == [pose.VLM_BACKOFF[0]]   # and waited between them
 
 
+def test_only_the_last_attempts_failure_decides_the_record(monkeypatch):
+    """The rule is the *last* attempt, and `last_error` used to survive one
+    that did not raise: an attempt returning an unparseable answer left the
+    previous exception standing, so "400 then unparseable" raised the stale
+    400 and cached the model once — where the last attempt raised nothing and
+    an unparseable answer is retryable (review, 2026-08-19)."""
+    def sequence(*outcomes):
+        it = iter(outcomes)
+
+        def fake(*a, **k):
+            v = next(it)
+            if isinstance(v, Exception):
+                raise v
+            return v
+
+        monkeypatch.setattr(pose, "_ask_gemini", fake)
+        return pose.ask_vlm_up([Image.new("RGB", (8, 8))] * 6, "gemini", "/tmp",
+                               vlm_model="m", sleep=lambda s: None,
+                               raise_failures=True)
+
+    # last attempt returned (unparseably) — no exception may escape
+    assert sequence(RuntimeError("HTTP 400"), None) is None
+    assert sequence(pose.RateLimited("HTTP 429"), None) is None
+    # last attempt raised — that one decides, not the first
+    with pytest.raises(RuntimeError):
+        sequence(None, RuntimeError("HTTP 400"))
+    with pytest.raises(pose.RateLimited):
+        sequence(RuntimeError("HTTP 400"), pose.RateLimited("HTTP 429"))
+    # and an answer on the retry beats anything before it
+    assert sequence(RuntimeError("HTTP 400"), 2) == 2
+
+
 def test_an_ordinary_vlm_error_still_retries_at_once(monkeypatch):
     """Only a rate limit waits. A malformed request should fail fast and let
     the run carry on with the ensemble's answer."""

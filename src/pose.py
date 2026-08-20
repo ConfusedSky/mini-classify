@@ -750,6 +750,12 @@ def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None
     for attempt in range(2):
         if attempt and backoff:
             sleep(backoff)
+        # cleared per attempt, or an attempt that *returns* an unparseable
+        # answer leaves the previous attempt's exception standing and that one
+        # decides the record: "400 then unparseable" raised the stale 400 and
+        # cached the model once, where the last attempt did not raise at all
+        # and an unparseable answer is retryable (review, 2026-08-19)
+        last_error = None
         try:
             if backend == "ollama":
                 buf = io.BytesIO()
