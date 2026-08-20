@@ -80,10 +80,46 @@ justified "no walk in a request" with a ~32 s cold walk — a figure borrowed
 from model-browser's measurement of a *spinning USB exfat* drive. This library
 is not that: `/dev/sda1`, **ext4**, `rotational=0`. A full `find_stls` over its
 19133 entries takes **0.07 s** (three consecutive runs, warm). A per-request
-walk would have been affordable, and the design argument had to be rebuilt on
-what actually holds — `n_scanned` being a stable claim about the index rather
-than about the tree right now, and request cost not scaling with the
-collection. The decision did not change; its justification was wrong.
+walk would have been affordable, and the design argument had to be rebuilt.
+
+The rebuilt version is the more durable one anyway: **request cost is
+independent of the storage**, so the interface does not get slower if the
+library moves to an HDD — a real possibility, and exactly the degraded case
+worth insuring against, at a cost of nothing. "A walk would be affordable" was
+a fact about today's disk rather than about the design. The two
+speed-independent reasons stand alongside it: `n_scanned` is a stable claim
+about the index rather than about the tree right now, and request cost never
+scales with the collection.
+
+The full picture for this volume, once model-browser re-checked its own rows
+against it:
+
+| | |
+|---|---|
+| device | `/dev/sda1`, ext4, `rotational=0`, 476.9 GB, label `STLLibrary` |
+| contents | 19,134 entries / 5,077 dirs / 453 zips |
+| `find_stls` warm (this repo) | **0.07 s** |
+| full walk warm, via model-browser's API | 0.54–0.86 s (it also reads zip central directories) |
+| full walk **cold** | **2.92 s** |
+
+So cold is ~3 s, not ~32 s. The 32 s belongs to a *second* volume — spinning
+USB exfat — which model-browser's proposal has always carried as its own
+labeled row. The measurement was never wrong and was never a claim about this
+disk; **the error was entirely in the transfer**, reading across the wrong
+column.
+
+The lesson is narrower than "measure your own hardware": the borrowed number
+made a *correct* decision look like it rested on a fact it did not, and nothing
+in the code would have revealed that. It also had a cost on the other side —
+that repo's `listing-tree-cache` is priced against the 32 s row, and if the
+spinning drive is retired the cache buys about three seconds for a
+revalidation protocol and an exfat timestamp-granularity risk. Pushing the
+correction back rather than quietly fixing my own files is what surfaced it.
+
+And the decision here is *more* justified than before, not less: the HDD row
+is a real drive that may return (`OPEN_QUESTIONS`, and Masa's own framing —
+the design works better in the degraded scenario, which is the one worth
+designing for).
 
 The 595 is the interesting part and not a defect: a fresh walk sees **3396**
 STLs where the last classify run cached 2801, so the library has grown by 595

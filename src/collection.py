@@ -16,12 +16,15 @@ and a full walk of its 19133 entries takes **0.07 s** warm (measured
 
 What survives the correction, and is why the design stands anyway:
 
+* **Request cost is independent of the storage, by construction.** That is the
+  durable reason: the library may yet live on an HDD, and this design does not
+  get slower when the disk does — the degraded case is the one it was worth
+  buying insurance for, and the insurance was nearly free. A per-request walk
+  would have been affordable *on today's hardware only*, which is a fact about
+  today's hardware rather than about the design.
 * `n_scanned` is a claim about **the index** — what the last classify run saw —
   and a stable one. Walking per request would make it jitter as the tree
   changes under a session, so two identical queries could disagree.
-* Request cost stays proportional to the *query*, never to the size of the
-  tree. The collection has lived on removable media and is mounted and
-  unmounted routinely; cheap insurance against a volume that is not this one.
 
 So the walk is the *classify run's*, read from its cached file list; every
 per-file identity, render key and display name is computed once at load; and

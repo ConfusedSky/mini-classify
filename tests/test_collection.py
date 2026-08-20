@@ -392,9 +392,10 @@ def test_a_scope_costs_a_bounded_handful_of_syscalls(tmp_path):
 
     Note what this is *not* justified by: an earlier version cited a ~32 s cold
     walk, borrowed from another repo's measurement of a spinning drive. This
-    library is ext4 on an SSD and walks in 0.07 s. The rule earns its keep on
-    stability — `n_scanned` is a claim about the index, not about the tree
-    right now — and on request cost never scaling with the collection."""
+    library is ext4 on an SSD and walks in 0.07 s. The rule earns its keep by
+    making request cost independent of the storage — the library may yet live
+    on an HDD, and this budget holds there unchanged — and on `n_scanned` being
+    a stable claim about the index rather than about the tree right now."""
     # both collections at the same directory depth: `resolve` lstats one
     # component per level, so depth is a legitimate cost and file count is not
     args, *_ = build(tmp_path / "small", ["a/one.stl", "a/two.stl", "b/four.stl"])

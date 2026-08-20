@@ -357,14 +357,17 @@ model-browser's measurement of a *different* drive. This library is ext4 on an
 SSD (`/dev/sda1`, `rotational=0`) and a full walk of its 19133 entries takes
 **0.07 s** warm. A per-request walk would have been affordable.
 
-The decision stands on two things that are not about speed. `n_scanned` is a
-claim about **the index** — what the last classify run saw — so it is stable
-across a session, where a fresh walk would let two identical queries disagree
-as the tree changes underneath. And request cost stays proportional to the
-query rather than to the tree, which matters because this collection is on
-removable media that comes and goes, and because two processes walking one
-volume is a pathology model-browser's `search-cancellation` change exists to
-avoid — one a Python walk could neither join nor be cancelled by.
+The decision stands, on better ground than the number it was argued from.
+**Request cost here is independent of the storage**, so the design does not
+get slower when the disk does — and the library may yet move to an HDD, which
+is precisely the case worth insuring against and the insurance cost nothing.
+"A walk would be affordable" is a fact about today's hardware, not about the
+interface. Two further reasons, unrelated to speed: `n_scanned` is a claim
+about **the index** — what the last classify run saw — so it is stable across
+a session, where a fresh walk would let two identical queries disagree as the
+tree changes underneath; and two processes walking one volume is a pathology
+model-browser's `search-cancellation` change exists to avoid, one a Python
+walk could neither join nor be cancelled by.
 
 The I/O each answer costs, stated precisely because it is the whole argument:
 the **404 is one `stat`** of the scope path; `indexed`/`partial`/`unindexed`
