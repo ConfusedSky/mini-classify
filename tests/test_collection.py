@@ -386,13 +386,15 @@ def test_pose_of_touches_the_filesystem_not_at_all(tmp_path):
 
 
 def test_a_scope_costs_a_bounded_handful_of_syscalls(tmp_path):
-    """The reason `n_scanned` reads a cached walk instead of walking: this
-    collection lives on removable media where a cold walk is ~32 s and two
-    processes walking one platter contend for the head.
-
-    The budget is small and constant — a `resolve()` of the scope path plus
+    """The budget is small and constant — a `resolve()` of the scope path plus
     one `exists()` — and explicitly *not* proportional to the collection, so
-    adding a per-file `stat` anywhere fails here rather than in production."""
+    adding a per-file `stat` anywhere fails here rather than in production.
+
+    Note what this is *not* justified by: an earlier version cited a ~32 s cold
+    walk, borrowed from another repo's measurement of a spinning drive. This
+    library is ext4 on an SSD and walks in 0.07 s. The rule earns its keep on
+    stability — `n_scanned` is a claim about the index, not about the tree
+    right now — and on request cost never scaling with the collection."""
     # both collections at the same directory depth: `resolve` lstats one
     # component per level, so depth is a legitimate cost and file count is not
     args, *_ = build(tmp_path / "small", ["a/one.stl", "a/two.stl", "b/four.stl"])

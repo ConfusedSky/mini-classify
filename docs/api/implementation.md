@@ -112,11 +112,13 @@ lists exist separately for exactly this.
 does is one `stat` for the 404.
 
 Load time is the exception, and it is smaller than an earlier draft of this
-plan said. `load_file_list` stats every cached entry to drop vanished files, so
-startup and `/reload` pay that on spinning media — but the figure is the *STL
-list*, not a tree walk: 2890 for `embed-cache2`, the primary cache, and 133 for
-the `embed-cache4` test cache. The "~10k" in an earlier draft was
-model-browser's whole-tree entry count and measured a different thing.
+plan said — twice over. `load_file_list` stats every cached entry to drop
+vanished files, so startup and `/reload` pay that; but the count is the *STL
+list*, not a tree walk (2890 for `embed-cache2`, 133 for `embed-cache4`, where
+"~10k" was model-browser's whole-tree entry count and measured a different
+thing), and the *volume* is not the one those drafts assumed either. It is ext4
+on an SSD, where a full walk of 19133 entries takes 0.07 s. Measured live:
+`/reload` is 1.2 s, and 1.6 s with `--rescan`.
 
 **A one-line fix halves it**, and belongs in this phase: `cachedir.py:139-140`
 calls `f.exists()` twice per entry — once to build `gone` for the log line,

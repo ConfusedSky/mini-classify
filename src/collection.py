@@ -7,13 +7,25 @@ This is the object an API handler asks questions of, and it is deliberately
 `load_file_list`, `load_embedding_matrix`, `load_pose_cache`, `view_config` —
 so the server does not become a third copy of it.
 
-**Nothing here touches the filesystem after `load`.** That is the load-bearing
-property, not an optimisation: the collection lives on spinning exfat over USB
-where model-browser measured a cold tree walk at ~32 s, and two processes
-walking one platter contend for the head (docs/api/surface.md §scope). So the
-walk is the *classify run's*, read from its cached file list; every per-file
-identity, render key and display name is computed once at load; and `resolve`
-answers from precomputed path tuples.
+**Nothing here touches the filesystem after `load`**, and the reason is
+semantic rather than a performance rescue. An earlier version of this docstring
+justified it with "~32 s for a cold tree walk", which was model-browser's
+measurement of a *different, spinning* drive; this library is ext4 on an SSD
+and a full walk of its 19133 entries takes **0.07 s** warm (measured
+2026-08-19). A per-request walk would have been perfectly affordable here.
+
+What survives the correction, and is why the design stands anyway:
+
+* `n_scanned` is a claim about **the index** — what the last classify run saw —
+  and a stable one. Walking per request would make it jitter as the tree
+  changes under a session, so two identical queries could disagree.
+* Request cost stays proportional to the *query*, never to the size of the
+  tree. The collection has lived on removable media and is mounted and
+  unmounted routinely; cheap insurance against a volume that is not this one.
+
+So the walk is the *classify run's*, read from its cached file list; every
+per-file identity, render key and display name is computed once at load; and
+`resolve` answers from precomputed path tuples.
 
 To be exact about the budget, since an earlier version of this docstring
 claimed "a single stat" and was wrong by an order of magnitude (review,

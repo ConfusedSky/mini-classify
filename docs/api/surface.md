@@ -194,7 +194,8 @@ design: `id` is stem plus 6 hex of the *relative path*, so a moved file is
 simply a different model to this index, and a deleted one lingers until the
 next classify run. **Callers should drop or grey such hits quietly.** It is not
 an error state and this side will not pre-validate it — that would mean a stat
-per hit, on the same spinning volume the scope block refuses to walk.
+per hit for an answer that can go stale between the check and the caller
+reading it, on a volume that may not be mounted at all.
 
 No render field. model-browser makes its own thumbnails, so pointing at this
 cache's images would be dead weight — and leaving it out is what keeps this API
@@ -350,13 +351,20 @@ vanished when the server loaded it (`load_file_list` drops missing entries at
 load). So it is "walked by the last classify run, and still present at
 startup" — closer to the folder-now than a pure index claim, and it can shift
 across a `/reload`. That is deliberate, and the reason is measured on
-this hardware: the library lives on spinning exfat over USB, where
-model-browser measured a full cold walk at ~32 s (10,614 entries at 2.4 ms
-each, plus ~6.7 s of zip central-directory seeks that persist after the FS
-metadata is warm). A walk in the request path would put that on every first
-search of a session, and two processes walking one spinning volume contend for
-the head — the pathology model-browser's `search-cancellation` change exists to
-avoid, and one a Python walk could neither join nor be cancelled by.
+semantics, not speed. **Correcting an earlier revision of this document:** it
+justified the choice with "~32 s for a cold walk on spinning exfat", which was
+model-browser's measurement of a *different* drive. This library is ext4 on an
+SSD (`/dev/sda1`, `rotational=0`) and a full walk of its 19133 entries takes
+**0.07 s** warm. A per-request walk would have been affordable.
+
+The decision stands on two things that are not about speed. `n_scanned` is a
+claim about **the index** — what the last classify run saw — so it is stable
+across a session, where a fresh walk would let two identical queries disagree
+as the tree changes underneath. And request cost stays proportional to the
+query rather than to the tree, which matters because this collection is on
+removable media that comes and goes, and because two processes walking one
+volume is a pathology model-browser's `search-cancellation` change exists to
+avoid — one a Python walk could neither join nor be cancelled by.
 
 The I/O each answer costs, stated precisely because it is the whole argument:
 the **404 is one `stat`** of the scope path; `indexed`/`partial`/`unindexed`

@@ -75,8 +75,15 @@ should present the result far more weakly than the raw score suggests.
 | `/reload` | 1.2 s | 2801 models, `missing 0` |
 | `/reload {"rescan": true}` | 1.6 s | 2801 models, **`missing 595`** |
 
-The rescan is fast only because the volume's metadata was warm from the
-session; cold it is the ~32 s walk that `scope` refuses to do in a request.
+**And a correction, because this run is where it surfaced.** Earlier notes
+justified "no walk in a request" with a ~32 s cold walk — a figure borrowed
+from model-browser's measurement of a *spinning USB exfat* drive. This library
+is not that: `/dev/sda1`, **ext4**, `rotational=0`. A full `find_stls` over its
+19133 entries takes **0.07 s** (three consecutive runs, warm). A per-request
+walk would have been affordable, and the design argument had to be rebuilt on
+what actually holds — `n_scanned` being a stable claim about the index rather
+than about the tree right now, and request cost not scaling with the
+collection. The decision did not change; its justification was wrong.
 
 The 595 is the interesting part and not a defect: a fresh walk sees **3396**
 STLs where the last classify run cached 2801, so the library has grown by 595
