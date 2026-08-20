@@ -40,6 +40,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from src import query
+from src.cachedir import cache_version
 from src.collection import (CacheUnusable, Collection, NoSuchPath,
                             OutsideCollection, ScopeError, VirtualPath,
                             VolumeUnavailable)
@@ -229,6 +230,12 @@ def create_app(state: ServerState) -> FastAPI:
             "compile": getattr(state.args, "compile", None),
             "up_axis": getattr(state.args, "up_axis", None),
             "pool": state.default_pool,
+            # Promised by surface.md §`GET /status` and missing until
+            # 2026-08-19. Largely redundant — a stale key scheme refuses to
+            # load at all (`CacheUnusable`), so a ready server's cache is
+            # current by construction — but a consumer diagnosing a server
+            # that will not start should not have to infer it.
+            "cache_version": cache_version(getattr(state.args, "cache_dir", "")),
         }
         if c is None:
             out.update(collection_root=out["volume"].get("root"),

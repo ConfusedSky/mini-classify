@@ -148,10 +148,12 @@ ever fired on real data or whether this write-up was describing a state the
 code could reach in principle. It fired, on the whole collection, for as long
 as it took to run the classifier once.
 
-Note also which branch that leaves untested at collection scale: the live run
+~~Note also which branch that leaves untested at collection scale: the live run
 saw `partial` and `indexed` (on `DM Stash`) but never `indexed` for the whole
-collection, because there was no moment during it when the cache had caught up
-with the disk.
+collection.~~ **Closed the same day, once that classify run finished:** 3396
+models loaded, `missing 0`, and the whole collection reports `indexed` —
+`Loot Studios` went 1206/1275 to 1275/1275. Both branches of `Scope.status`
+are now confirmed on real data at collection scale.
 
 Note the side effect: `--rescan` rewrites the walk cache, so every tool
 reading this cache now sees 3396 files and reports 595 uncached until the next

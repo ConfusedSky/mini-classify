@@ -44,7 +44,7 @@ other tool, and defaults come from the last run's `run-params.json`.
 | `--compile` / `--up-axis` | off / auto | cache identity |
 | `--rescan` | off | re-walk instead of the cached file list |
 | `--pool` | `softmax` | default only; every call may override |
-| `--host` / `--port` | `127.0.0.1` / TBD | |
+| `--host` / `--port` | `127.0.0.1` / `8077` | loopback: the caller is a local service, not a page |
 
 ## Stack
 
@@ -168,6 +168,14 @@ branch on something that cannot happen.
 
 Reloads the embedding matrix and the pose cache — for after a
 `classify_stls.py` run adds models. Does not reload SigLIP.
+
+Returns `{n_models, missing, volume, loaded_at}`. **It does not require the
+server to be ready**, deliberately: it is the retry a failed startup asks for,
+so a server that could not load its cache — an unmounted volume, a key-scheme
+mismatch — recovers through this route rather than through a restart. A reload
+that fails leaves the previous collection bound and answers **503** with the
+same `{ready, elapsed, failure}` body every other unready response uses, so a
+working server stays working.
 
 ## Shared shapes
 

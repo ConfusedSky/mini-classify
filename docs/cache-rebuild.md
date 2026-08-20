@@ -152,13 +152,21 @@ are orphans whose files the walk no longer sees):
 | `siglip` | 1072 |
 | `vlm` | **214** |
 
-**1243 of 3396 (37%) are non-`vlm` with a margin under the 0.45 gate** — the
-population that asked for arbitration and did not get it.
+**1243 of 3396 (37%) are non-`vlm` with a margin under the 0.45 gate.**
 
-The 214 are the useful half of that number: arbitration *does* land, so what
-the quota refusals cost is countable rather than categorical. Before that run
-the cache held zero `vlm` entries; the run got 214 through and was refused for
-the rest.
+**Read that number carefully — an earlier revision of this section read it
+wrong.** `source` becomes `"vlm"` only when the arbiter *moved* the answer
+(`poser.py:258-262`: "a confirmation keeps the label"). So 214 counts
+arbitrations that *changed* a pose, not calls that succeeded, and the 1243 is
+**refused ∪ confirmed**: models the arbiter declined to answer for, and models
+it answered for by agreeing. Those two are indistinguishable on disk.
+
+That cuts both ways. The damage is smaller than "1243 models never got their
+arbitration" — some of them did, and were confirmed. But nothing can tell
+which, so a rebuild cannot target the refused ones either, and neither can any
+report. **The inability to separate those populations is itself the strongest
+argument for recording a refusal on the entry**, which is the fix described
+below.
 
 This is a consequence of a deliberate rule rather than an oversight. Treating
 `margin is None` as a miss is what stops one `--no-up-ensemble` pass pinning
@@ -183,7 +191,19 @@ actually reaches the arbiter. Two things to set before starting, both from
 cheaper one: deleting just the pose entries where `source != "vlm" and margin
 < gate` makes exactly those models re-escalate on the next ordinary run, with
 no re-rendering and no re-embedding. Worth preferring if the arbiter's answers
-are the only thing wanted.
+are the only thing wanted — though note it re-escalates the confirmed models
+too, because nothing distinguishes them.
+
+**A smaller fix would stop this accruing, and is not a rebuild item.** Today a
+refusal is written as an ordinary ensemble answer, so the degradation is
+permanent and silent, and it happens on every ordinary run rather than only
+during a rebuild. Recording the refusal on the entry — a flag, or withholding
+the margin — and reading it as a miss in `pose_is_sufficient` would make the
+state retryable, which is what a 429 actually meant. It needs no
+`POSE_CACHE_VERSION` bump: `load_pose_cache` filters on `v` and ignores
+unknown keys, so older readers are unaffected. **Not done** — deferred to the
+rebuild by decision on 2026-08-19, and recorded here rather than in
+`OPEN_QUESTIONS.md` for that reason.
 
 ## Not on this list
 
