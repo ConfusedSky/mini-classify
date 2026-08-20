@@ -327,6 +327,21 @@ def test_status_stops_claiming_the_volume_after_a_reload_finds_it_gone(tmp_path)
     assert client.post("/query", json={"text": "x"}).status_code == 200  # still serves
 
 
+def test_a_corrupt_cache_reloads_as_503_not_500(tmp_path):
+    """Every way a reload can fail must produce the one 503 envelope. A torn
+    walk cache raised JSONDecodeError past `post_reload`'s catch and became a
+    bare 500 with a plain-text body (review, 2026-08-19)."""
+    from pathlib import Path as P
+    client, state, first = serve(tmp_path)
+    next(P(state.args.cache_dir).glob("walk-*.json")).write_text("")
+
+    r = client.post("/reload", json={})
+    assert r.status_code == 503
+    assert set(r.json()["detail"]) == {"ready", "elapsed", "failure"}
+    assert state.collection is first                  # still serving the old one
+    assert client.post("/query", json={"text": "x"}).status_code == 200
+
+
 def test_a_failed_reload_keeps_the_server_working(tmp_path):
     """A reload that cannot complete must not break a serving process: the old
     collection stays bound and the failure is reported."""

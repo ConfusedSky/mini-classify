@@ -136,18 +136,28 @@ def load_file_list(inp, cache_dir, rescan=False):
     if walk_cache and walk_cache.exists() and not rescan:
         saved = json.loads(walk_cache.read_text())
         files = [Path(p) for p in saved["files"]]
-        gone = [f for f in files if not f.exists()]
-        files = [f for f in files if f.exists()]
+        # one `exists()` per entry, not two: the second pass was only counting
+        # what the first had already found (review, 2026-08-19)
+        present = [f for f in files if f.exists()]
+        gone = len(files) - len(present)
+        files = present
         age_days = (time.time() - saved["scanned"]) / 86400
-        note = f", {len(gone)} vanished since scan" if gone else ""
+        note = f", {gone} vanished since scan" if gone else ""
         print(f"using cached file list: {len(files)} files, scanned "
               f"{age_days:.1f} days ago{note} (--rescan to refresh)")
         return files
     files = find_stls(inp)
     if walk_cache:
         walk_cache.parent.mkdir(parents=True, exist_ok=True)
-        walk_cache.write_text(json.dumps(
+        # temp + os.replace, the same treatment `Done.flush` gives the pose
+        # cache. It matters more since `POST /reload {"rescan": true}` writes
+        # this from a request handler while `classify_stls.py` may be writing
+        # it too: a torn file is not merely a stale list, it is a
+        # JSONDecodeError on every subsequent read (review, 2026-08-19).
+        tmp = walk_cache.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(
             {"scanned": time.time(), "files": [str(f) for f in files]}))
+        os.replace(tmp, walk_cache)
     return files
 
 

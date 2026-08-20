@@ -239,7 +239,8 @@ up rotation below.** The tempting shortcut — set the viewer's spindle to the
 model's up axis, pass `azimuth_deg` straight through, skip step 1 — is wrong
 for half the axes. Measured against `rotation_to_z_up` and model-browser's
 spindle frames over a 24×5 az/el grid; counts are from **`embed-cache2`, the
-primary cache** (2945 models), with the 133-model test cache `embed-cache4`
+primary cache** (2945 pose entries; 2801 of them load as matrix rows), with
+the 133-entry test cache `embed-cache4`
 beside it:
 
 | `up` | cache2 | cache4 | shortcut agrees | azimuth offset if used anyway |

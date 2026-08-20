@@ -112,7 +112,7 @@ The lesson is narrower than "measure your own hardware": the borrowed number
 made a *correct* decision look like it rested on a fact it did not, and nothing
 in the code would have revealed that. It also had a cost on the other side —
 that repo's `listing-tree-cache` is priced against the 32 s row, and if the
-spinning drive is retired the cache buys about three seconds for a
+spinning drive is retired the cache buys ~2.4 s for a
 revalidation protocol and an exfat timestamp-granularity risk. Pushing the
 correction back rather than quietly fixing my own files is what surfaced it.
 

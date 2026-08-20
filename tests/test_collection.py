@@ -506,6 +506,34 @@ def test_an_empty_cache_raises_instead_of_exiting_the_process(tmp_path):
         assert isinstance(e, CacheUnusable)
 
 
+@pytest.mark.parametrize("content", ["", "{not json", '{"files": '])
+def test_a_torn_walk_cache_is_unusable_not_a_crash(tmp_path, content):
+    """`POST /reload {"rescan": true}` writes this file from a request handler
+    while `classify_stls.py` may be writing it too. A torn file is not merely a
+    stale list — it is a JSONDecodeError on every later read, which reached the
+    handler as a bare 500 with none of the 503 envelope (review, 2026-08-19)."""
+    args, *_ = build(tmp_path, ["a/one.stl"])
+    Collection.load(args)
+    walk = next(Path(args.cache_dir).glob("walk-*.json"))
+    walk.write_text(content)
+    with pytest.raises(CacheUnusable) as e:
+        Collection.load(_replace(args, rescan=False))
+    assert "unreadable cache" in e.value.message
+
+
+def test_the_walk_cache_is_written_atomically(tmp_path):
+    """temp + os.replace, the treatment `Done.flush` gives the pose cache: a
+    reader never sees a partial file, so the case above cannot be *caused* by
+    this project writing it."""
+    args, *_ = build(tmp_path, ["a/one.stl", "b/two.stl"])
+    cache = Path(args.cache_dir)
+    for f in cache.glob("walk-*.json"):
+        f.unlink()
+    Collection.load(_replace(args, rescan=True))            # writes it fresh
+    assert list(cache.glob("walk-*.json"))
+    assert not list(cache.glob("*.tmp")), "temp file left behind"
+
+
 def test_an_old_key_scheme_is_named_with_the_right_fix(tmp_path):
     """The guard every other cache consumer calls (classify_stls.py:255,
     test_categories.py:104) and this module did not. Without it a cache from

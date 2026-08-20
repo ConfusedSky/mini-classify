@@ -120,10 +120,23 @@ thing), and the *volume* is not the one those drafts assumed either. It is ext4
 on an SSD, where a full walk of 19133 entries takes 0.07 s. Measured live:
 `/reload` is 1.2 s, and 1.6 s with `--rescan`.
 
-**A one-line fix halves it**, and belongs in this phase: `cachedir.py:139-140`
-calls `f.exists()` twice per entry — once to build `gone` for the log line,
-once to filter — so the real cost is 2× the list. Keep the count, drop the
-second pass. Measure the 2890 case in phase 3, not the 133 one.
+~~**A one-line fix halves it**: `cachedir.py:139-140` calls `f.exists()` twice
+per entry, so the real cost is 2× the list.~~ **Done 2026-08-19 — and
+"halves it" was wrong.** The second `exists()` pass is gone (one call per
+entry now, the count kept for the log line), but measuring what a load
+actually costs shows that pass was never the bulk: **148,547 `stat`/`lstat`
+calls for 3396 files — 43.7 per file.** Removing the duplicate saved one of
+those 43.7.
+
+The rest is `identity.rel_path`, which calls `Path.resolve()` — one `lstat`
+per path component, on paths ~10 deep — and is reached two or three times per
+file during a load, through `pose.file_identity` (twice: once in
+`load_embedding_matrix`, once in `Collection`) and `identity.render_key`.
+Caching the resolution per file, or per directory, is the fix that would
+matter. **Not done, and not needed for this feature** — load is a startup and
+`/reload` cost, not a request cost, and the syscalls are cheap on this
+hardware. Filed here rather than acted on because it is a real number and the
+claim it replaces was measured wrong.
 
 **`pose_of` is where phase 0.2 pays off.** It also emits `azimuth_zero` —
 `rotation_to_z_up(up).T @ [1,0,0]`, the model-space direction azimuth 0 is
@@ -273,24 +286,23 @@ added since the last classify run, and the scope block now reports
 reading that cache sees the new walk.
 
 
-
 Root-level CLI entry, mirroring `classify_stls.py`: `add_cache_args` +
 `apply_run_params` + `--host`/`--port`, builds the `Collection` and the real
 `Embedder`, calls `uvicorn.run`. **Nothing imports it** — same rule as the
 classifier, and for the same reason.
 
-*Proves:* a live run against **`embed-cache2`, the primary cache** (2945
-models) — `embed-cache4` is a 133-model test cache and is not representative,
-of scale or of axis distribution. Use cache4 only for a fast smoke pass. With
-the real cache: `/status`
-reports the right `collection_root` and counts; a query returns the same
-top-10 the REPL gives for the same text and pool; a scoped query narrows;
-`/similar` on a known model returns its obvious neighbours. Measure query
-latency and record it — the text forward is the only GPU work and everything
-downstream is a matmul over ~1000 rows, so if a query is slow, that is a
-finding.
+~~*Proves:* a live run against **`embed-cache2`, the primary cache** —
+`embed-cache4` is a 133-entry test cache and is not representative, of scale
+or of axis distribution. `/status` reports the right `collection_root` and
+counts; a query returns the same top-10 the REPL gives for the same text and
+pool; a scoped query narrows; `/similar` on a known model returns its obvious
+neighbours. Measure query latency and record it.~~ **All of it done and
+recorded above**; the matmul it worried about runs over 2801 rows and costs
+tens of milliseconds.
 
-**Also measure whether the server may run during a classify run**, because
+~~**Also measure whether the server may run during a classify run**~~ —
+**answered above: they coexist, 4740 of 8188 MiB.** The reasoning it was
+raised with, kept because it is what the measurement had to settle:
 that is the only way `/reload` is ever exercised — surface.md describes it as
 "for after a `classify_stls.py` run adds models", which implies someone
 running both. That puts two resident so400m models plus the render child on an

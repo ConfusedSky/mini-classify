@@ -239,6 +239,17 @@ class Collection:
             hint = next((ln.strip() for ln in text.splitlines()
                          if ln.strip().startswith("run:")), None)
             raise CacheUnusable(text.split("\n")[0], hint) from e
+        except (ValueError, OSError) as e:
+            # A corrupt or unreadable cache file — a truncated walk cache
+            # raises JSONDecodeError (a ValueError) — is "the cache cannot
+            # answer", not a programming error. Without this it reached a
+            # request handler as a bare 500 with no envelope, since
+            # `post_reload` catches only this module's own errors (review,
+            # 2026-08-19). A TypeError still escapes, which is right: that
+            # would be a bug here rather than a state of the cache.
+            raise CacheUnusable(f"unreadable cache in {args.cache_dir}: {e}",
+                                "run: classify_stls.py --rescan to rebuild "
+                                "the file list") from e
         poses = pose.load_pose_cache(args.cache_dir)
         return cls(args, root, files, scanned, matrix, poses, missing)
 

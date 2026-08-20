@@ -378,7 +378,7 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   and therefore the same cosine score to every query. What is unknown is how
   often the *live* cache produces them: the 2124 figure is fuzzed data rounded
   to force ties, not a measurement of any real cache. Run it against
-  `embed-cache2` (2945 models), the primary one — a duplicate-heavy library is
+  `embed-cache2` (2945 pose entries), the primary one — a duplicate-heavy library is
   exactly where duplicated kits accumulate, and the 133-model `embed-cache4` is
   too small and too unrepresentative to answer it. First thing to run, and
   it is cheap — score the real matrix against a few dozen queries and count
@@ -463,7 +463,7 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
 
   ~~So the cost is avoidable for the one item most likely to be touched.~~
   Measured on the primary cache rather than the test one, that is not true:
-  scoping turns a 2945-model re-render into a 1902-model re-render. Better than
+  scoping turns a 2945-entry re-render into a 1902-entry one. Better than
   nothing and not a reprieve. (The 20%-affected figure this entry first carried
   was `embed-cache4`, the 133-model test cache, whose axis distribution is
   nothing like the library's.)
