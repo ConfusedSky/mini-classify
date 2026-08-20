@@ -496,8 +496,19 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   and why, which is the difference between a deliberate re-pose being
   reviewable and merely being loud.
 
-- **Is the spinning volume retired, or is it somewhere this library might live
-  again?** Unsettled, and it is the premise two designs rest on. The library
+- ~~**Is the spinning volume retired, or is it somewhere this library might
+  live again?**~~ **Answered 2026-08-19: not retired.** Masa: "The spinning
+  drive is not retired, this eventually can be distributed to other people so
+  I'd like to keep it generalized."
+
+  So the no-walk-in-a-request rule stands on its stated ground — request cost
+  independent of the storage — and the HDD row stays live rather than
+  historical. **This is not a mandate to generalise everything now**, and he
+  said so directly when asked: finishing the feature comes first, and
+  optimising against this machine is fine meanwhile. Read it as: prefer the
+  general form when it is free, as it was here; do not go looking for
+  machine-specific assumptions to remove. The remaining text is the state the
+  question was asked in. The library
   is currently `/dev/sda1` — ext4, `rotational=0`, 476.9 GB, label
   `STLLibrary`, 19,134 entries — where a cold full walk is 2.92 s and a warm
   `find_stls` is 0.07 s. A second volume, spinning USB exfat, is the one
