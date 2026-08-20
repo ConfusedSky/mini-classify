@@ -66,9 +66,26 @@ class ServerState:
         self.started = time.monotonic()
         self.loaded_at: float | None = None
         self.load_error: Exception | None = None   # why the load did not complete
-        self.ready = collection is not None and embed is not None
         if self.ready:
             self.loaded_at = time.time()
+
+    def is_ready(self, c) -> bool:
+        """Readiness of an *already-bound* collection.
+
+        Takes the collection rather than reading it, so a handler that has
+        bound it once does not read it again through a property — the
+        bind-once rule applies to the accessors too, and `/status` was reading
+        three times before this: directly, through `ready`, and through
+        `volume` (review, 2026-08-19)."""
+        return c is not None and self.embed is not None
+
+    @property
+    def ready(self) -> bool:
+        """Derived, never assigned. A flag would drift from the two things it
+        summarises — and did: `/reload` could not run while it was false, so a
+        server whose first load failed had no way back except a restart, even
+        once the drive was mounted again (review, 2026-08-19)."""
+        return self.is_ready(self.collection)
 
     def warm(self, load_collection, load_embed) -> None:
         """Load in the background so `/status` can answer throughout.
@@ -80,7 +97,6 @@ class ServerState:
             self.collection = load_collection()
             self.embed, self.model, self.device = load_embed()
             self.loaded_at = time.time()
-            self.ready = True
             self.load_error = None
         except Exception as e:              # noqa: BLE001 - reported, not swallowed
             self.load_error = e
@@ -98,11 +114,22 @@ class ServerState:
 
         `present` has three states, not two: `true` loaded, `false` checked and
         missing, `null` not checked yet. A server still warming has not looked,
-        and saying `false` there would be a lie a consumer could act on."""
-        if self.collection is not None:
-            return self.collection.volume
+        and saying `false` there would be a lie a consumer could act on.
+
+        The most recent *finding* wins over the bound collection, which is the
+        same lie inverted: a reload that discovered the drive gone left this
+        reporting `present: true` off the last successful load, and that is the
+        one a consumer acts on when deciding whether to offer the affordance
+        (review, 2026-08-19). Serving 200s from the intact local matrix stays
+        right; claiming the volume is there does not."""
+        return self.volume_of(self.collection)
+
+    def volume_of(self, c) -> dict:
+        """`volume` for an already-bound collection — see `is_ready`."""
         if isinstance(self.load_error, VolumeUnavailable):
             return self.load_error.as_dict()
+        if c is not None:
+            return c.volume
         return {"present": None, "root": None, "missing": None}
 
     @property
@@ -152,15 +179,31 @@ def create_app(state: ServerState) -> FastAPI:
                   description="Semantic search over the cached embeddings. "
                               "Spec: docs/api/surface.md")
 
+    def _unready(c) -> dict:
+        """One 503 body for every reason a request cannot be served, so a
+        consumer parses one shape. Two routes used to return different
+        schemas under the same status code (review, 2026-08-19). Takes the
+        bound collection so it adds no second read."""
+        return {"ready": state.is_ready(c),
+                "elapsed": round(time.monotonic() - state.started, 1),
+                "failure": state.failure}
+
     def _live() -> Collection:
-        """Bind the collection once, and refuse the scoring routes until the
+        """Bind the collection **once** and refuse the scoring routes until the
         model is resident. 503 rather than 500: warming is a state, not a
-        fault, and the consumer folds it back into its retry policy."""
-        if not state.ready or state.collection is None:
-            raise HTTPException(status_code=503, detail={
-                "ready": False, "elapsed": round(time.monotonic() - state.started, 1),
-                "failure": state.failure})
-        return state.collection
+        fault, and the consumer folds it back into its retry policy.
+
+        The single read is the point. Reading `state.collection` twice — even
+        as a `is None` check and then a return — can straddle a `/reload` and
+        hand back a different instance than the one that was checked; a handler
+        that then mixed indices across both would use rows resolved against one
+        matrix to index another. `tests/test_api.py` counts the reads rather
+        than trying to construct the interleaving, which no test could observe
+        reliably."""
+        c = state.collection
+        if c is None or state.embed is None:
+            raise HTTPException(status_code=503, detail=_unready(c))
+        return c
 
     def _pool(given: str | None) -> str:
         return given or state.default_pool
@@ -170,12 +213,12 @@ def create_app(state: ServerState) -> FastAPI:
         """Answers from the moment the process starts, including while warming
         and after a failed load — that is what makes warming observable rather
         than inferred from a connection refusal."""
-        c = state.collection
-        out = {
-            "ready": state.ready,
+        c = state.collection                # bound once; everything below
+        out = {                             # is derived from this local
+            "ready": state.is_ready(c),
             "elapsed": round(time.monotonic() - state.started, 1),
             "loaded_at": state.loaded_at,
-            "volume": state.volume,
+            "volume": state.volume_of(c),
             "failure": state.failure,
             "model": state.model or getattr(state.args, "model", None),
             "device": state.device,
@@ -270,16 +313,22 @@ def create_app(state: ServerState) -> FastAPI:
 
         A failed reload must not break a working server, so the old collection
         stays bound and the failure is reported — the same shape `/status`
-        carries."""
-        c = _live()
+        carries.
+
+        **This route does not require `ready`**, and that is the point: it is
+        the retry a failed startup tells the operator to perform. A server that
+        printed "mount the volume and retry" and then refused every attempt
+        until it was restarted had the last step of that story missing
+        (review, 2026-08-19). It loads from `state.args` rather than from a
+        bound collection, because when the first load failed there is none."""
         try:
-            fresh = c.reload(rescan=req.rescan)
+            fresh = Collection.load_with(state.args, rescan=req.rescan)
         except (CacheUnusable, VolumeUnavailable) as e:
             # Recorded so `/status` explains the stale data, but the old
             # collection stays bound: a failed reload must not break a server
             # that is answering fine.
             state.load_error = e
-            raise HTTPException(status_code=503, detail=state.failure) from e
+            raise HTTPException(status_code=503, detail=_unready(state.collection)) from e
         state.collection = fresh
         state.load_error = None
         state.loaded_at = time.time()

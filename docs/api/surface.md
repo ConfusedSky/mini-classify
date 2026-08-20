@@ -119,11 +119,14 @@ minimum; volume identity would be better.
 | `pool` | `mean\|max\|softmax` | server default | `:pool` |
 | `top` | int | 10 | ignored when `min_score` is set |
 | `min_score` | float | — | every model at or above, instead of top-N (`:min`) |
-| `cap` | int | 500 | hard bound on returned hits when `min_score` is set |
+| `cap` | int | 500 | hard ceiling on returned hits, `min_score` or not |
 
 Returns `{scope, weak, best_z, truncated, results: [hit]}`. `truncated` is the
 `cap` biting — the same flag deep name search returns, so the UI's existing
-"there are more" affordance works unchanged. `weak` is the z < 2.0 rule;
+"there are more" affordance works unchanged. The cap applies to `top` as well
+as to a `min_score` floor: it is a ceiling on what the server will serialise,
+not a companion to one field, and a caller that sets `top` above it gets
+`truncated: true` rather than a quietly larger response. `weak` is the z < 2.0 rule;
 results are still returned — the REPL suppresses them, but the UI can show
 them greyed and let a person judge, which is what the z number is for. z is
 computed over the **scoped** subset, so a query inside one kit is judged

@@ -227,6 +227,15 @@ class Collection:
         poses = pose.load_pose_cache(args.cache_dir)
         return cls(args, root, files, scanned, matrix, poses, missing)
 
+    @classmethod
+    def load_with(cls, args, **over) -> "Collection":
+        """`load` with fields replaced, without needing an instance first.
+
+        The server's retry path: a load that failed leaves nothing to call
+        `reload` on, and a process that told the user to mount the drive and
+        try again has to have somewhere for them to try (review, 2026-08-19)."""
+        return cls.load(_with(args, **over))
+
     def reload(self, rescan: bool = False) -> "Collection":
         """A *new* Collection from the same args. The caller rebinds; readers
         holding this one keep a consistent view for the rest of their request

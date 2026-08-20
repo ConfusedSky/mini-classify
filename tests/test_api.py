@@ -170,6 +170,16 @@ def test_query_top_bounds_the_result_count(tmp_path):
     assert len(body["results"]) == 1 and body["truncated"] is False
 
 
+def test_the_cap_is_a_ceiling_on_top_too(tmp_path):
+    """It bounds what the server will serialise, not just a `min_score` floor
+    — so a caller asking for more than the cap is told, rather than quietly
+    given a smaller response (review, 2026-08-19: the spec said `min_score`
+    only while the code capped both)."""
+    client, _, _ = serve(tmp_path)
+    body = client.post("/query", json={"text": "x", "top": 3, "cap": 2}).json()
+    assert len(body["results"]) == 2 and body["truncated"] is True
+
+
 @pytest.mark.parametrize("path,code", [
     ("a/pack.zip!/inner.stl", 422),         # zip virtual path: unaddressable
     ("/etc", 400),                          # outside the collection
@@ -231,6 +241,21 @@ def test_similar_honours_a_scope(tmp_path):
     assert [h["rel_path"] for h in body["results"]] == ["b/three.stl"]
 
 
+def test_similar_scopes_the_neighbours_not_the_query_model(tmp_path):
+    """`scope` restricts what may be *returned*; the query model does not have
+    to be inside it (surface.md §`POST /similar`). Both readings are
+    defensible, so the one chosen is pinned."""
+    client, _, _ = serve(tmp_path)
+    body = client.post("/similar",
+                       json={"path": "a/one.stl", "scope": "b"}).json()
+    assert body["scope"]["path"] == "b"
+    assert [h["rel_path"] for h in body["results"]] == ["b/three.stl"]
+    # and the target is excluded only where it would otherwise appear
+    inside = client.post("/similar",
+                         json={"path": "a/one.stl", "scope": "a"}).json()
+    assert [h["rel_path"] for h in inside["results"]] == ["a/two.stl"]
+
+
 def test_similar_on_a_directory_is_unprocessable(tmp_path):
     """`path` names the query model; a directory names many."""
     client, _, _ = serve(tmp_path)
@@ -260,6 +285,48 @@ def test_reload_picks_up_a_new_model(tmp_path):
     assert len(first.files) == 1                      # the old one still valid
 
 
+def test_reload_is_the_way_back_from_a_failed_startup(tmp_path):
+    """The retry the startup message tells the operator to perform.
+
+    A server that printed "mount the volume and retry" and then refused every
+    attempt until it was restarted had the last step of its own story missing:
+    `/reload` required `ready`, and `ready` was only ever set by the one-shot
+    warmup thread (review, 2026-08-19)."""
+    import shutil
+    args, root, _ = build(tmp_path, ["a/one.stl"])
+    saved = tmp_path / "saved"
+    shutil.copytree(root, saved)
+    shutil.rmtree(root)                                  # drive unplugged
+
+    state = ServerState(args, embed=stub_embed(), model="stub", device="cpu")
+    client = TestClient(create_app(state), raise_server_exceptions=False)
+    state.warm(lambda: Collection.load(args), lambda: (state.embed, "stub", "cpu"))
+    assert client.get("/status").json()["ready"] is False
+    assert client.post("/query", json={"text": "x"}).status_code == 503
+
+    shutil.copytree(saved, root)                         # drive plugged back in
+    assert client.post("/reload", json={}).status_code == 200
+    assert client.get("/status").json()["ready"] is True
+    assert client.post("/query", json={"text": "x"}).status_code == 200
+
+
+def test_status_stops_claiming_the_volume_after_a_reload_finds_it_gone(tmp_path):
+    """Serving 200s off the intact local matrix is right — that is the whole
+    VolumeUnavailable argument. Claiming the volume is still there is not: the
+    field was derived from the bound collection, so it reported the last
+    *successful* load rather than what the server most recently learned, and
+    that is the one a consumer acts on (review, 2026-08-19)."""
+    import shutil
+    client, state, c = serve(tmp_path, layout=["a/one.stl"])
+    shutil.rmtree(c.root)
+
+    assert client.post("/reload", json={}).status_code == 503
+    s = client.get("/status").json()
+    assert s["volume"]["present"] is False               # not the stale true
+    assert s["failure"]["kind"] == "VolumeUnavailable"
+    assert client.post("/query", json={"text": "x"}).status_code == 200  # still serves
+
+
 def test_a_failed_reload_keeps_the_server_working(tmp_path):
     """A reload that cannot complete must not break a serving process: the old
     collection stays bound and the failure is reported."""
@@ -272,6 +339,54 @@ def test_a_failed_reload_keeps_the_server_working(tmp_path):
     assert r.status_code == 503
     assert state.collection is first                  # unchanged
     assert client.post("/query", json={"text": "x"}).status_code == 200
+
+
+# --- bind once --------------------------------------------------------------
+
+class CountingState(ServerState):
+    """Records every read of `.collection`, so a second one is visible."""
+
+    def __init__(self, *a, **k):
+        # before super().__init__, which assigns and then reads through `ready`
+        self.reads, self._collection = [], None
+        super().__init__(*a, **k)
+
+    @property
+    def collection(self):
+        self.reads.append(1)
+        return self._collection
+
+    @collection.setter
+    def collection(self, value):
+        self._collection = value
+
+
+@pytest.mark.parametrize("call", [
+    pytest.param(lambda cl: cl.get("/status"), id="status"),
+    pytest.param(lambda cl: cl.post("/query", json={"text": "x"}), id="query"),
+    pytest.param(lambda cl: cl.post("/similar", json={"path": "a/one.stl"}),
+                 id="similar"),
+    pytest.param(lambda cl: cl.post("/reload", json={}), id="reload"),
+])
+def test_every_handler_binds_the_collection_at_most_once(tmp_path, call):
+    """A second read can straddle a `/reload` and index a new matrix with rows
+    resolved against the old one: wrong rows, no exception, and no interleaving
+    a test could reliably construct. So the rule is enforced by *counting*
+    reads rather than by hoping the race never lands — an interleaving test
+    would pass on any implementation and prove nothing (review, 2026-08-19).
+
+    Before this, `/status` read three times and every other route twice, split
+    between `_live()`'s check-then-return and the `volume` property."""
+    args, root, files = build(tmp_path, ["a/one.stl", "a/two.stl"])
+    c = Collection.load(args)
+    state = CountingState(args, embed=stub_embed(), model="stub", device="cpu")
+    state.reads = []
+    state.collection = c
+    client = TestClient(create_app(state), raise_server_exceptions=False)
+
+    state.reads = []
+    assert call(client).status_code == 200
+    assert len(state.reads) <= 1, f"read {len(state.reads)} times"
 
 
 # --- the contract with the consumer ----------------------------------------
