@@ -142,10 +142,23 @@ later run re-escalates it**. The entry looks complete because it is: the
 ensemble really did answer. What is missing is the arbitration the margin
 asked for.
 
-Measured on `embed-cache2`, 2026-08-19: **1152 of 2945 entries are non-`vlm`
-with a margin under the 0.45 gate**, and there are **zero `vlm`-sourced
-entries at all** — sources are `geometry` 1951, `siglip` 994. No arbitration
-has ever landed in that cache.
+Measured on `embed-cache2` after the 2026-08-19 `--rescan` completed, against
+the **3396 loaded models** (the pose cache holds 3540 entries; the other 144
+are orphans whose files the walk no longer sees):
+
+| source | models |
+|---|---|
+| `geometry` | 2110 |
+| `siglip` | 1072 |
+| `vlm` | **214** |
+
+**1243 of 3396 (37%) are non-`vlm` with a margin under the 0.45 gate** — the
+population that asked for arbitration and did not get it.
+
+The 214 are the useful half of that number: arbitration *does* land, so what
+the quota refusals cost is countable rather than categorical. Before that run
+the cache held zero `vlm` entries; the run got 214 through and was refused for
+the rest.
 
 This is a consequence of a deliberate rule rather than an oversight. Treating
 `margin is None` as a miss is what stops one `--no-up-ensemble` pass pinning
@@ -163,7 +176,8 @@ actually reaches the arbiter. Two things to set before starting, both from
   worker to fail again.
 * Budget the calls honestly. `pose.py`'s own live-margin census says **~1227
   paid calls, not ~560** for a cold collection, at roughly $0.30 per
-  full-collection run.
+  full-collection run — and the 1243 measured above, on a collection that has
+  since grown, is that census landing almost exactly.
 
 **A rebuild is not the only route**, and this is the one item here that has a
 cheaper one: deleting just the pose entries where `source != "vlm" and margin
