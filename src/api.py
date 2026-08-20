@@ -65,6 +65,9 @@ class ServerState:
         self.model, self.device = model, device
         self.gpu = threading.Lock()
         self.started = time.monotonic()
+        # read once, not per request: it changes only when a migration runs,
+        # and `/status` can be polled by a consumer's warmup backoff
+        self.cache_version = cache_version(getattr(args, "cache_dir", ""))
         self.loaded_at: float | None = None
         self.load_error: Exception | None = None   # why the load did not complete
         if self.ready:
@@ -235,7 +238,7 @@ def create_app(state: ServerState) -> FastAPI:
             # load at all (`CacheUnusable`), so a ready server's cache is
             # current by construction — but a consumer diagnosing a server
             # that will not start should not have to infer it.
-            "cache_version": cache_version(getattr(state.args, "cache_dir", "")),
+            "cache_version": state.cache_version,
         }
         if c is None:
             out.update(collection_root=out["volume"].get("root"),
@@ -339,6 +342,7 @@ def create_app(state: ServerState) -> FastAPI:
         state.collection = fresh
         state.load_error = None
         state.loaded_at = time.time()
+        state.cache_version = cache_version(getattr(state.args, "cache_dir", ""))
         return {"n_models": len(fresh.files), "missing": fresh.missing,
                 "volume": fresh.volume, "loaded_at": state.loaded_at}
 

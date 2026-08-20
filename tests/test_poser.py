@@ -246,24 +246,36 @@ def test_arbitrated_separates_a_confirmation_from_a_refusal():
     assert fold(result=0) == ("geometry", True)     # confirmed — the new fact
     assert fold(exc=RuntimeError("HTTP 429")) == ("geometry", False)   # refused
 
+    # and a model that never escalated leaves it absent, which is what keeps
+    # "refused" separable from "never asked" and from every legacy entry
+    poser, done, _ = make_poser()               # no escalation configured
+    feed(poser)
+    assert done.poses[-1][2].arbitrated is None
 
-def test_arbitrated_survives_the_cache_round_trip():
-    """Written only when true: an absent key is how every entry from before
-    the flag says "unknown", and writing false everywhere would claim
-    knowledge about poses resolved before it existed."""
-    ran = pose.Pose(up=(0.0, 0.0, 1.0), confidence=0.5, source="geometry",
-                    v=pose.POSE_CACHE_VERSION, margin=0.2, arbitrated=True)
-    never = pose.Pose(up=(0.0, 0.0, 1.0), confidence=0.5, source="geometry",
-                      v=pose.POSE_CACHE_VERSION, margin=0.2)
 
-    assert ran.to_cache()["arbitrated"] is True
-    assert "arbitrated" not in never.to_cache()
-    assert pose.Pose.from_cache(ran.to_cache()).arbitrated is True
-    assert pose.Pose.from_cache(never.to_cache()).arbitrated is False
-    # and a legacy entry, which has no such key at all
+def test_arbitrated_round_trips_as_three_states_not_two():
+    """absent / false / true are three different facts, and the absent-vs-false
+    split is what makes the flag actionable: `false` says "retry this one",
+    where absent says nothing — so a retry rule can re-escalate genuine
+    refusals without re-billing every legacy entry that merely lacks the key
+    (2026-08-19)."""
+    def mk(**kw):
+        return pose.Pose(up=(0.0, 0.0, 1.0), confidence=0.5, source="geometry",
+                         v=pose.POSE_CACHE_VERSION, margin=0.2, **kw)
+
+    assert mk(arbitrated=True).to_cache()["arbitrated"] is True
+    assert mk(arbitrated=False).to_cache()["arbitrated"] is False
+    assert "arbitrated" not in mk().to_cache()          # never asked
+
+    for value in (True, False):
+        assert pose.Pose.from_cache(mk(arbitrated=value).to_cache()).arbitrated is value
+    assert pose.Pose.from_cache(mk().to_cache()).arbitrated is None
+
+    # a legacy entry has no such key, and must not be read as "refused" —
+    # that is the whole difference between a free change and a ~1243-call one
     legacy = {"up": [0, 0, 1], "confidence": 0.5, "source": "siglip",
               "margin": 0.2, "v": pose.POSE_CACHE_VERSION}
-    assert pose.Pose.from_cache(legacy).arbitrated is False
+    assert pose.Pose.from_cache(legacy).arbitrated is None
 
 
 def test_poll_failed_call_keeps_the_ensemble_pose(capsys):

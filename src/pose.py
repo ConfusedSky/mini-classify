@@ -65,7 +65,8 @@ class Pose:
                                    # fresh resolutions pass POSE_CACHE_VERSION
                                    # explicitly (D10)
     margin: float | None = None
-    arbitrated: bool = False        # the VLM was asked *and answered*
+    arbitrated: bool | None = None  # None = never asked (or legacy);
+                                    # False = asked, no answer; True = answered
     front_view: dict[str, int] = field(default_factory=dict)   # view_cfg -> index
 
     @classmethod
@@ -84,9 +85,9 @@ class Pose:
                    source=d["source"],
                    v=d.get("v", 0),
                    margin=d.get("margin"),
-                   # absent on every entry written before 2026-08-19, which
-                   # reads as "unknown, assume not" — see `to_cache`
-                   arbitrated=bool(d.get("arbitrated", False)),
+                   # absent on every entry written before 2026-08-19 and on
+                   # every model that never escalated — see `to_cache`
+                   arbitrated=d.get("arbitrated"),
                    front_view=dict(fv) if isinstance(fv, dict) else {})
 
     def to_cache(self):
@@ -94,20 +95,32 @@ class Pose:
         `front_view` is included only once something has been resolved,
         matching entries that predate front-view caching.
 
-        `arbitrated` is written only when true, for the same reason: an absent
-        key is how every earlier entry says "unknown", and writing `false`
-        everywhere would claim knowledge about poses resolved before the flag
-        existed. It is deliberately *not* the same fact as `source == "vlm"`,
-        which means the arbiter **moved** the answer — a call that ran and
-        confirmed the ensemble keeps the ensemble's label, so without this flag
-        a confirmation and a refusal are identical on disk (2026-08-19)."""
+        `arbitrated` is tri-state and written only when it is known, which is
+        what makes it actionable rather than merely informative:
+
+        * **absent** — never asked, or written before the flag existed
+          (2026-08-19). Not a claim.
+        * **false** — the arbiter was asked and did not answer. Refused,
+          errored, or cancelled.
+        * **true** — it answered, whether or not its answer was taken.
+
+        It is deliberately *not* the same fact as `source == "vlm"`, which
+        means the arbiter **moved** the answer: a call that ran and confirmed
+        the ensemble keeps the ensemble's label, so without this a
+        confirmation and a refusal are identical on disk.
+
+        The absent/false split is the load-bearing part. `false` says "this
+        one is worth retrying" about a specific model, where absent says
+        nothing — so a future `pose_is_sufficient` can re-escalate genuine
+        refusals without re-billing every legacy entry that merely lacks the
+        key."""
         d = {"up": [float(x) for x in self.up],
              "confidence": self.confidence,
              "source": self.source,
              "margin": self.margin,
              "v": self.v}
-        if self.arbitrated:
-            d["arbitrated"] = True
+        if self.arbitrated is not None:
+            d["arbitrated"] = bool(self.arbitrated)
         if self.front_view:
             d["front_view"] = dict(self.front_view)
         return d

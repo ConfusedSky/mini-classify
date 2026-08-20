@@ -262,8 +262,13 @@ class Poser:
                                              # a confirmation keeps the label
         # ...which is why the *ran* fact is recorded separately. `idx is not
         # None` is exactly "the call returned an answer", so a confirmation
-        # sets this and a refusal does not — the only thing that distinguishes
-        # them, since both leave source and margin untouched (2026-08-19).
+        # sets this true and a refusal sets it **false** — the only thing that
+        # distinguishes them, since both leave source and margin untouched.
+        # False rather than absent because this site knows a call was made:
+        # only the ensemble exit leaves it absent, so "asked and refused" is
+        # separable from "never asked" and from every legacy entry, which is
+        # what a retry rule needs to avoid re-billing the whole cache
+        # (2026-08-19).
         p = self._make_pose(up, ratio, source, margin,
                             arbitrated=idx is not None)
         self.record_pose(pf.file, index, p)
@@ -274,7 +279,7 @@ class Poser:
         # ensemble exit and the fold exits cannot drift apart
         return Resolved(file, index, pose_changed=source in MOVED_SOURCES)
 
-    def _make_pose(self, up, ratio, source, margin, arbitrated=False) -> Pose:
+    def _make_pose(self, up, ratio, source, margin, arbitrated=None) -> Pose:
         # main's fresh-entry shape (main:classify_stls.py:1138-1141): rounded
         # confidence/margin, explicit POSE_CACHE_VERSION (D10)
         return Pose(up=tuple(float(v) for v in up),

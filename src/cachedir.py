@@ -246,20 +246,37 @@ CACHE_VERSION = 1
 
 
 def cache_version(cache_dir):
-    """0 for any cache written before the stamp — i.e. every unstamped one."""
+    """0 for any cache written before the stamp — i.e. every unstamped one.
+
+    An unreadable or malformed stamp is also 0, deliberately. The function is
+    total because `/status` calls it to *diagnose* a server that will not
+    start, and an exception there made the one route built to explain a broken
+    cache the first route to fail on one (2026-08-19). Reading corrupt as
+    unstamped is the safe direction: `require_cache_version` then refuses a
+    populated cache rather than accepting keys it cannot vouch for, which is
+    the same call it makes for a genuinely unstamped one (S2)."""
     p = Path(cache_dir) / CACHE_META_FILE
-    return json.loads(p.read_text())["cache_version"] if p.exists() else 0
+    if not p.exists():
+        return 0
+    try:
+        return json.loads(p.read_text())["cache_version"]
+    except (ValueError, OSError, KeyError, TypeError):
+        return 0
 
 
 def stamp_cache_version(cache_dir):
+    # temp + os.replace, like the walk cache and the pose cache: a torn stamp
+    # reads as version 0, which refuses a cache that was in fact current
     d = Path(cache_dir)
     d.mkdir(parents=True, exist_ok=True)
-    (d / CACHE_META_FILE).write_text(json.dumps({
+    tmp = d / (CACHE_META_FILE + ".tmp")
+    tmp.write_text(json.dumps({
         "cache_version": CACHE_VERSION,
         # informational only, never compared — see the CACHE_VERSION note
         "cache_key_format": "sha1(rel|mtime|size|views|render_size|up_token"
                             "|model|pv[|e:...][|compiled][|evN])",
     }, indent=2))
+    os.replace(tmp, d / CACHE_META_FILE)
 
 
 def require_cache_version(cache_dir):

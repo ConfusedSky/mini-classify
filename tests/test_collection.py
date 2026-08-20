@@ -521,6 +521,21 @@ def test_a_torn_walk_cache_is_unusable_not_a_crash(tmp_path, content):
     assert "unreadable cache" in e.value.message
 
 
+@pytest.mark.parametrize("content", ["", "{trunc", '{"other": 1}', "not json"])
+def test_a_corrupt_stamp_reads_as_unstamped_rather_than_raising(tmp_path, content):
+    """`cache_version` is called by `/status`, the route that exists to explain
+    a server which cannot start — so an exception there made the diagnostic
+    route the first to fail on a broken cache (review, 2026-08-19). Reading
+    corrupt as 0 is the safe direction: `require_cache_version` then refuses a
+    populated cache rather than vouching for keys it cannot read."""
+    from src.cachedir import cache_version
+    args, *_ = build(tmp_path, ["a/one.stl"])
+    (Path(args.cache_dir) / "cache-meta.json").write_text(content)
+    assert cache_version(args.cache_dir) == 0
+    with pytest.raises(CacheUnusable):              # and the guard still bites
+        Collection.load(args)
+
+
 def test_the_walk_cache_is_written_atomically(tmp_path):
     """temp + os.replace, the treatment `Done.flush` gives the pose cache: a
     reader never sees a partial file, so the case above cannot be *caused* by

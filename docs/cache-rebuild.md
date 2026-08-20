@@ -201,20 +201,24 @@ answered* — which is a different fact from `source == "vlm"`, the arbiter
 
 | `source` | `arbitrated` | meaning |
 |---|---|---|
-| `vlm` | true | the arbiter moved the pose |
-| ensemble | true | it ran and confirmed the ensemble |
-| ensemble | false | it was asked for and never answered |
+| `vlm` | `true` | the arbiter moved the pose |
+| ensemble | `true` | it ran and confirmed the ensemble |
+| ensemble | `false` | it was asked and never answered |
+| any | **absent** | never asked — or written before the flag existed |
 
-Written only when true, so no `POSE_CACHE_VERSION` bump and no effect on
-older readers — an absent key is how every earlier entry says "unknown".
+The flag is **tri-state**, and the absent/`false` split is the load-bearing
+part: `false` is written at the fold, which only runs for a model that was
+actually submitted to the arbiter, so it means "retry this one" about a
+specific model where absent means nothing. Written only when known, so no
+`POSE_CACHE_VERSION` bump and no effect on older readers.
 
 **What is still not done: `pose_is_sufficient` does not read it.** An entry
-under the gate with `arbitrated` false is still a cache hit, so nothing
-re-escalates on its own. Making it a miss is a one-line change and a real
-bill — every pre-2026-08-19 entry lacks the flag, so the first run after would
-escalate the whole ~1243 population at once. That is the version to make
-deliberately, at a rebuild or with the cost accepted, rather than as a side
-effect of recording the flag.
+with `arbitrated: false` is still a cache hit, so nothing re-escalates on its
+own. Making *only `false`* a miss is a one-line change and — because of the
+tri-state — **no longer carries a bill**: legacy entries have no key, so they
+are untouched, and only genuine refusals recorded from 2026-08-19 onward
+re-escalate. It was left out of that commit to keep recording a fact separate
+from changing retry behaviour, not because it is expensive any more.
 
 ## Not on this list
 
