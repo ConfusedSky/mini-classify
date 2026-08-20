@@ -89,9 +89,6 @@ against a scratch cache, not the project's entry point.
   line in `LEARNINGS.md`. Spike scripts live in `eval/` with a row in
   `eval/README.md`; raw output goes to `eval/out/` (gitignored) — the
   write-up is the record.
-- Make file changes with the Edit/Write tools, not sed/heredoc scripts: the
-  diff is the review surface. Bulk mechanical rewrites of generated data are
-  the exception, and show a diff summary after.
 - Ground-truth labels load through `common.load_labels()` — never re-derive
   them from a sample index; the collection grew mid-session once and the same
   seed stopped drawing the same models.
