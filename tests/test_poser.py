@@ -256,6 +256,44 @@ def test_arbitrated_separates_a_confirmation_from_a_refusal():
     assert done.poses[-1][2].arbitrated is None
 
 
+def test_the_real_call_path_maps_each_failure_to_its_own_record(monkeypatch):
+    """End to end through `pose.ask_vlm_up`, not by setting an exception on the
+    Future by hand.
+
+    That distinction is the finding: `ask_vlm_up` swallowed every non-rate-limit
+    exception and returned None, so `_fold` took its *success* branch and wrote
+    `arbitrated=False` for a request the API rejects on its merits — which then
+    re-escalated forever, the exact thing the change was meant to stop. A test
+    that drove the Future directly reached the right branch and showed the fix
+    working while production never could (review, 2026-08-19)."""
+    from PIL import Image as PILImage
+
+    def outcome(exc=None, ret=None):
+        def fake(*a, **k):
+            if exc is not None:
+                raise exc
+            return ret
+        monkeypatch.setattr(pose, "_ask_gemini", fake)
+        monkeypatch.setattr(pose, "make_contact_sheet",
+                            lambda tiles: PILImage.new("RGB", (8, 8)))
+        # cfg.ask=None, so `_vlm_call` builds the real ask_vlm_up closure
+        poser, done, arb = make_poser(backend="gemini", margin_threshold=5.0)
+        feed(poser)
+        # run the call the way a ThreadPoolExecutor does: result or exception
+        try:
+            arb.futures[0].set_result(arb.calls[0]())
+        except Exception as e:                      # noqa: BLE001
+            arb.futures[0].set_exception(e)
+        poser.poll()
+        return done.poses[-1][2].arbitrated
+
+    assert outcome(ret=2) is True                          # answered
+    assert outcome(exc=pose.RateLimited("HTTP 429")) is False   # retry later
+    assert outcome(exc=RuntimeError("HTTP 400")) is None    # cannot succeed
+    # an unparseable answer stays retryable — a judgement, not a leftover
+    assert outcome(ret=None) is False
+
+
 def test_arbitrated_round_trips_as_three_states_not_two():
     """absent / false / true are three different facts, and the absent-vs-false
     split is what makes the flag actionable: `false` says "retry this one",

@@ -318,4 +318,4 @@ class Poser:
         return lambda: pose.ask_vlm_up(
             sheet_tiles, cfg.backend, cfg.scratch_dir,
             cfg.model or pose.DEFAULT_VLM_MODELS.get(cfg.backend),
-            save_to=save_to, project=cfg.project, raise_on_rate_limit=True)
+            save_to=save_to, project=cfg.project, raise_failures=True)

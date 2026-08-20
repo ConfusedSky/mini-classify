@@ -699,7 +699,7 @@ DEFAULT_VLM_MODELS = {"ollama": "gemma4:26b", "gemini": GEMINI_MODEL, "claude": 
 
 
 def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None,
-               project=None, sleep=time.sleep, raise_on_rate_limit=False):
+               project=None, sleep=time.sleep, raise_failures=False):
     """Ask the VLM which candidate orientation is upright. One retry on a
     bad/failed answer, then None — the caller keeps the geometry guess.
     The pipeline never hard-fails because of the VLM.
@@ -707,14 +707,28 @@ def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None
     A rate-limit refusal waits before the retry (`VLM_BACKOFF`); anything else
     retries at once, as before. `sleep` is an injection seam for tests.
 
-    `raise_on_rate_limit` re-raises `RateLimited` when *every* attempt was
-    refused, instead of flattening it to None. The pipeline passes it because
-    the two failures deserve opposite records: a quota refusal is worth
-    retrying on a later run, while a request the API rejects on its merits is
-    not, and re-escalating that one forever pays a call each time for an
-    answer that cannot come (2026-08-19). Default False so
-    `eval/gemini_sheet_fill.py` — which maps this over a thread pool, where a
-    raise loses every result in the sweep — keeps today's behaviour.
+    `raise_failures` re-raises **the last attempt's exception**, whatever its
+    type, instead of flattening every failure to None. The pipeline passes it
+    because the failures deserve different records, and the *type* is the only
+    thing that distinguishes them by the time the answer is folded:
+
+    * `RateLimited` — worth asking again on a later run;
+    * anything else — a request the API rejects on its merits, which cannot
+      succeed on a retry and would pay a call per run forever.
+
+    An earlier version raised only `RateLimited`, which left every hard
+    failure returning None and therefore indistinguishable from an answer of
+    None — so the branch meant to catch it was unreachable from production and
+    a 400 re-escalated forever anyway (review, 2026-08-19).
+
+    Note what still returns None with no exception: **an answer that would not
+    parse, twice**. That is deliberate rather than left over — a VLM that
+    garbled its output may well answer next run — but it does mean the parse
+    failure is recorded as retryable.
+
+    Default False so `eval/gemini_sheet_fill.py` — which maps this over a
+    thread pool, where a raise loses every result in the sweep — keeps
+    today's behaviour.
 
     save_to keeps a per-model copy of the sheet next to the saved renders. It
     is the same image the VLM was shown, written whether or not the answer
@@ -732,7 +746,7 @@ def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None
         except OSError as e:  # a debug artifact must never fail the run
             print(f"  could not save pose sheet {save_to}: {e}")
     backoff = 0.0                      # local: this runs on 4+ arbiter threads
-    last_rate_limit = None
+    last_error = None                  # the LAST attempt's, not any attempt's
     for attempt in range(2):
         if attempt and backoff:
             sleep(backoff)
@@ -752,12 +766,12 @@ def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None
         except RateLimited as e:
             backoff = VLM_BACKOFF[min(attempt, len(VLM_BACKOFF) - 1)]
             print(f"  pose VLM rate-limited ({backend}), waiting {backoff:g}s: {e}")
-            last_rate_limit, idx = e, None
+            last_error, idx = e, None
         except Exception as e:
             print(f"  pose VLM error ({backend}): {e}")
-            last_rate_limit, idx = None, None
+            last_error, idx = e, None
         if idx is not None:
             return idx
-    if last_rate_limit is not None and raise_on_rate_limit:
-        raise last_rate_limit
+    if last_error is not None and raise_failures:
+        raise last_error
     return None
