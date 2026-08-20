@@ -110,6 +110,13 @@ notes at the bottom are amended in place. Open work is tracked separately in
   string-returning helper may not. The obvious fix was also the wrong one:
   open3d was 2596 of the 2602 and served exactly one function.
 
+- [The query API, live](docs/learnings/2026-08-19-the-query-api-live.md) —
+  2801 models, ready in 16 s, `/query` median **49 ms**. Two SigLIP instances
+  fit the 4060 (**4740 of 8188 MiB**), so the server and a classify run
+  coexist — unlike ollama, which is a reload thrash rather than a capacity
+  problem. The API's top-10 is identical to `test_categories.py`'s, which is
+  what `src/query.py` was extracted to guarantee.
+
 ## Evergreen notes
 
 - [Queries and filters](docs/learnings/queries-and-filters.md) — open-set

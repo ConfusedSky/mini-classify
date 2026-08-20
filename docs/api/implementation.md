@@ -254,7 +254,23 @@ weak query returning results with `weak: true` (the REPL suppresses, the API
 must not), a scoped query whose z differs from the unscoped one, and
 `/reload` picking up a file added mid-test.
 
-## Phase 3 — `serve_api.py`, the entry point, and a live run
+## Phase 3 — `serve_api.py`, the entry point, and a live run — **done 2026-08-19**
+
+Measured against `embed-cache2`: 2801 models, ready in 16.0 s, `/query` median
+**49 ms**, `/similar` 50 ms, and a top-10 **identical** to
+`test_categories.py`'s for the same text and pool. The concurrency question is
+answered — two SigLIP instances occupy 4740 of 8188 MiB, so the server and a
+classify run coexist, and `/reload` keeps the shape it has. Write-up:
+`docs/learnings/2026-08-19-the-query-api-live.md`.
+
+One thing the run turned up that no test would have: `/reload {"rescan": true}`
+rewrites the walk cache, which is **shared state changed by an endpoint whose
+other calls only read**. The result was more accurate (it found 595 models
+added since the last classify run, and the scope block now reports
+`partial` where it should), but the write is worth knowing about — every tool
+reading that cache sees the new walk.
+
+
 
 Root-level CLI entry, mirroring `classify_stls.py`: `add_cache_args` +
 `apply_run_params` + `--host`/`--port`, builds the `Collection` and the real
