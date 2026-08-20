@@ -16,6 +16,11 @@ Scope note: "the cache" means the whole set — `pose-cache.json`, the per-view
 rebuild is hours of GPU time; the point of this document is that the hours buy
 more than fresh numbers if the debt goes with them.
 
+Most items here are shims to delete. **§8 is the exception and the one with a
+deadline of its own** — it is quality the collection does not currently have
+rather than code it no longer needs, and it is the only item with a cheaper
+route than a full rebuild.
+
 ---
 
 ## 1. The rotation table keeps floating-point noise on purpose
@@ -126,6 +131,45 @@ JPEGs. A rebuild writes one format.
 format change is free — so this is the smallest item here.
 
 ---
+
+## 8. Poses that escalated to the arbiter and never got an answer
+
+`pose_is_sufficient` counts any entry with a non-`None` `margin` as a hit. So
+a model whose ensemble margin fell below the gate, escalated, and then got no
+VLM answer — because the arbiter was off, or because Vertex refused with a 429
+— is cached as `source: siglip` (or `geometry`) with its low margin, and **no
+later run re-escalates it**. The entry looks complete because it is: the
+ensemble really did answer. What is missing is the arbitration the margin
+asked for.
+
+Measured on `embed-cache2`, 2026-08-19: **1152 of 2945 entries are non-`vlm`
+with a margin under the 0.45 gate**, and there are **zero `vlm`-sourced
+entries at all** — sources are `geometry` 1951, `siglip` 994. No arbitration
+has ever landed in that cache.
+
+This is a consequence of a deliberate rule rather than an oversight. Treating
+`margin is None` as a miss is what stops one `--no-up-ensemble` pass pinning
+every model to its geometry answer forever; treating a *low* margin as a miss
+would instead re-escalate — and re-bill — the same ~39% of the collection on
+every run, whether or not anything had changed.
+
+**At a rebuild:** poses resolve from scratch, so every model under the gate
+actually reaches the arbiter. Two things to set before starting, both from
+2026-08-19:
+
+* Run with the paced arbiter — `--arbiter-workers 4`, `--arbiter-min-interval
+  1.0`, now the defaults. The un-paced 8-worker pool is what turned a quota
+  refusal into a storm, because a 429 returns in milliseconds and frees a
+  worker to fail again.
+* Budget the calls honestly. `pose.py`'s own live-margin census says **~1227
+  paid calls, not ~560** for a cold collection, at roughly $0.30 per
+  full-collection run.
+
+**A rebuild is not the only route**, and this is the one item here that has a
+cheaper one: deleting just the pose entries where `source != "vlm" and margin
+< gate` makes exactly those models re-escalate on the next ordinary run, with
+no re-rendering and no re-embedding. Worth preferring if the arbiter's answers
+are the only thing wanted.
 
 ## Not on this list
 
