@@ -260,7 +260,12 @@ class Poser:
             up = tuple(float(v) for v in pose.UP_CANDIDATES[idx])
             source = "vlm"                   # the arbiter MOVED the answer;
                                              # a confirmation keeps the label
-        p = self._make_pose(up, ratio, source, margin)
+        # ...which is why the *ran* fact is recorded separately. `idx is not
+        # None` is exactly "the call returned an answer", so a confirmation
+        # sets this and a refusal does not — the only thing that distinguishes
+        # them, since both leave source and margin untouched (2026-08-19).
+        p = self._make_pose(up, ratio, source, margin,
+                            arbitrated=idx is not None)
         self.record_pose(pf.file, index, p)
         return p
 
@@ -269,12 +274,13 @@ class Poser:
         # ensemble exit and the fold exits cannot drift apart
         return Resolved(file, index, pose_changed=source in MOVED_SOURCES)
 
-    def _make_pose(self, up, ratio, source, margin) -> Pose:
+    def _make_pose(self, up, ratio, source, margin, arbitrated=False) -> Pose:
         # main's fresh-entry shape (main:classify_stls.py:1138-1141): rounded
         # confidence/margin, explicit POSE_CACHE_VERSION (D10)
         return Pose(up=tuple(float(v) for v in up),
                     confidence=round(float(ratio), 4), source=source,
                     margin=None if margin is None else round(float(margin), 4),
+                    arbitrated=arbitrated,
                     v=pose.POSE_CACHE_VERSION)
 
     def _vlm_call(self, file: Path, sheet_tiles: list) -> Callable[[], int | None]:

@@ -65,6 +65,7 @@ class Pose:
                                    # fresh resolutions pass POSE_CACHE_VERSION
                                    # explicitly (D10)
     margin: float | None = None
+    arbitrated: bool = False        # the VLM was asked *and answered*
     front_view: dict[str, int] = field(default_factory=dict)   # view_cfg -> index
 
     @classmethod
@@ -83,17 +84,30 @@ class Pose:
                    source=d["source"],
                    v=d.get("v", 0),
                    margin=d.get("margin"),
+                   # absent on every entry written before 2026-08-19, which
+                   # reads as "unknown, assume not" — see `to_cache`
+                   arbitrated=bool(d.get("arbitrated", False)),
                    front_view=dict(fv) if isinstance(fv, dict) else {})
 
     def to_cache(self):
         """Main's JSON entry shape (main:classify_stls.py:1138-1141);
         `front_view` is included only once something has been resolved,
-        matching entries that predate front-view caching."""
+        matching entries that predate front-view caching.
+
+        `arbitrated` is written only when true, for the same reason: an absent
+        key is how every earlier entry says "unknown", and writing `false`
+        everywhere would claim knowledge about poses resolved before the flag
+        existed. It is deliberately *not* the same fact as `source == "vlm"`,
+        which means the arbiter **moved** the answer — a call that ran and
+        confirmed the ensemble keeps the ensemble's label, so without this flag
+        a confirmation and a refusal are identical on disk (2026-08-19)."""
         d = {"up": [float(x) for x in self.up],
              "confidence": self.confidence,
              "source": self.source,
              "margin": self.margin,
              "v": self.v}
+        if self.arbitrated:
+            d["arbitrated"] = True
         if self.front_view:
             d["front_view"] = dict(self.front_view)
         return d

@@ -338,6 +338,13 @@ class Pose:
                                    # fresh resolutions pass POSE_CACHE_VERSION
                                    # explicitly (D10)
     margin: float | None = None
+    arbitrated: bool = False       # the VLM ran AND answered — a different
+                                   # fact from source == "vlm", which means it
+                                   # MOVED the answer. Without it a call that
+                                   # confirmed the ensemble and one that was
+                                   # refused are identical on disk (2026-08-19).
+                                   # Serialised only when true, so entries
+                                   # written before it read as "unknown"
     front_view: dict[str, int] = field(default_factory=dict)   # view_cfg -> index
 
     @classmethod

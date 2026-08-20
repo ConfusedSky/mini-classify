@@ -194,16 +194,27 @@ no re-rendering and no re-embedding. Worth preferring if the arbiter's answers
 are the only thing wanted — though note it re-escalates the confirmed models
 too, because nothing distinguishes them.
 
-**A smaller fix would stop this accruing, and is not a rebuild item.** Today a
-refusal is written as an ordinary ensemble answer, so the degradation is
-permanent and silent, and it happens on every ordinary run rather than only
-during a rebuild. Recording the refusal on the entry — a flag, or withholding
-the margin — and reading it as a miss in `pose_is_sufficient` would make the
-state retryable, which is what a 429 actually meant. It needs no
-`POSE_CACHE_VERSION` bump: `load_pose_cache` filters on `v` and ignores
-unknown keys, so older readers are unaffected. **Not done** — deferred to the
-rebuild by decision on 2026-08-19, and recorded here rather than in
-`OPEN_QUESTIONS.md` for that reason.
+**Half of this is now fixed, and the half that remains is the expensive
+half.** As of 2026-08-19 a pose records `arbitrated` — the arbiter *ran and
+answered* — which is a different fact from `source == "vlm"`, the arbiter
+*moved the answer*. Three populations are distinguishable from here on:
+
+| `source` | `arbitrated` | meaning |
+|---|---|---|
+| `vlm` | true | the arbiter moved the pose |
+| ensemble | true | it ran and confirmed the ensemble |
+| ensemble | false | it was asked for and never answered |
+
+Written only when true, so no `POSE_CACHE_VERSION` bump and no effect on
+older readers — an absent key is how every earlier entry says "unknown".
+
+**What is still not done: `pose_is_sufficient` does not read it.** An entry
+under the gate with `arbitrated` false is still a cache hit, so nothing
+re-escalates on its own. Making it a miss is a one-line change and a real
+bill — every pre-2026-08-19 entry lacks the flag, so the first run after would
+escalate the whole ~1243 population at once. That is the version to make
+deliberately, at a rebuild or with the cost accepted, rather than as a side
+effect of recording the flag.
 
 ## Not on this list
 

@@ -222,6 +222,50 @@ def test_poll_confirmation_keeps_the_ensemble_label():
     assert done.poses[-1][2].source == "geometry"
 
 
+def test_arbitrated_separates_a_confirmation_from_a_refusal():
+    """`source` records which tier MOVED the answer, so a call that ran and
+    agreed is written exactly like one that never happened — the two were
+    indistinguishable on disk, and 1243 entries in embed-cache2 are that
+    ambiguity (2026-08-19). `arbitrated` is the fact that the call *ran*.
+
+    Three populations, and the pair (source, arbitrated) names each:
+    moved = ('vlm', True), confirmed = (ensemble, True), refused = (ensemble,
+    False)."""
+    def fold(result=None, exc=None):
+        poser, done, arb = make_poser(**ESCALATE)
+        feed(poser)
+        if exc is not None:
+            arb.futures[0].set_exception(exc)
+        else:
+            arb.futures[0].set_result(result)
+        poser.poll()
+        p = done.poses[-1][2]
+        return p.source, p.arbitrated
+
+    assert fold(result=3) == ("vlm", True)          # moved
+    assert fold(result=0) == ("geometry", True)     # confirmed — the new fact
+    assert fold(exc=RuntimeError("HTTP 429")) == ("geometry", False)   # refused
+
+
+def test_arbitrated_survives_the_cache_round_trip():
+    """Written only when true: an absent key is how every entry from before
+    the flag says "unknown", and writing false everywhere would claim
+    knowledge about poses resolved before it existed."""
+    ran = pose.Pose(up=(0.0, 0.0, 1.0), confidence=0.5, source="geometry",
+                    v=pose.POSE_CACHE_VERSION, margin=0.2, arbitrated=True)
+    never = pose.Pose(up=(0.0, 0.0, 1.0), confidence=0.5, source="geometry",
+                      v=pose.POSE_CACHE_VERSION, margin=0.2)
+
+    assert ran.to_cache()["arbitrated"] is True
+    assert "arbitrated" not in never.to_cache()
+    assert pose.Pose.from_cache(ran.to_cache()).arbitrated is True
+    assert pose.Pose.from_cache(never.to_cache()).arbitrated is False
+    # and a legacy entry, which has no such key at all
+    legacy = {"up": [0, 0, 1], "confidence": 0.5, "source": "siglip",
+              "margin": 0.2, "v": pose.POSE_CACHE_VERSION}
+    assert pose.Pose.from_cache(legacy).arbitrated is False
+
+
 def test_poll_failed_call_keeps_the_ensemble_pose(capsys):
     poser, done, arb = make_poser(**ESCALATE)
     feed(poser)
