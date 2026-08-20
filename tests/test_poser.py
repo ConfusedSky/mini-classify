@@ -244,7 +244,10 @@ def test_arbitrated_separates_a_confirmation_from_a_refusal():
 
     assert fold(result=3) == ("vlm", True)          # moved
     assert fold(result=0) == ("geometry", True)     # confirmed — the new fact
-    assert fold(exc=RuntimeError("HTTP 429")) == ("geometry", False)   # refused
+    assert fold(exc=pose.RateLimited("HTTP 429")) == ("geometry", False)  # refused
+    # a request the API rejects on its merits cannot succeed on a retry, so it
+    # leaves the key absent rather than re-escalating forever (2026-08-19)
+    assert fold(exc=RuntimeError("HTTP 400")) == ("geometry", None)
 
     # and a model that never escalated leaves it absent, which is what keeps
     # "refused" separable from "never asked" and from every legacy entry
@@ -291,14 +294,21 @@ def test_poll_failed_call_keeps_the_ensemble_pose(capsys):
 
 def test_poll_resumes_a_cancelled_future_on_the_park_time_pose():
     """arbiter.shutdown cancels queued calls; if the driver polls after that,
-    the file still resolves — nothing was billed, so there is nothing to fold
-    and the pose recorded at park time stands. No second record_pose."""
+    the file still resolves on the pose recorded at park time — nothing was
+    billed and the answer never arrived.
+
+    It *is* re-recorded, with `arbitrated=False`: a cancellation is "asked and
+    not answered yet", so a later run must ask again. Leaving the park-time row
+    untouched made it a permanent hit indistinguishable from "never asked", and
+    every Ctrl-C cancels a whole queue of them (review, 2026-08-19)."""
     poser, done, arb = make_poser(**ESCALATE)
     feed(poser)
     assert arb.futures[0].cancel()
     assert poser.poll() == [Resolved(F, 7, pose_changed=False)]
-    assert len(done.poses) == 1            # park-time entry, not re-recorded
-    assert done.poses[0][2].source == "geometry"
+    assert len(done.poses) == 2                     # re-recorded, not skipped
+    assert done.poses[-1][2].source == "geometry"   # the park-time answer stands
+    assert done.poses[-1][2].arbitrated is False    # ...and will be asked again
+    assert not pose.pose_is_sufficient(done.poses[-1][2].to_cache())
     assert not poser.parked
 
 
@@ -312,7 +322,11 @@ def test_a_cancelled_fold_reads_pose_changed_off_the_park_time_source():
     assert done.poses[0][2].source == "siglip"
     assert arb.futures[0].cancel()
     assert poser.poll() == [Resolved(F, 7, pose_changed=True)]
-    assert len(done.poses) == 1            # nothing folded, nothing re-recorded
+    # re-recorded as un-arbitrated (2026-08-19), and the park-time source is
+    # what rides out — the cancelled arm must not hardcode either of them
+    assert len(done.poses) == 2
+    assert done.poses[-1][2].source == "siglip"
+    assert done.poses[-1][2].arbitrated is False
 
 
 def test_poll_fold_error_becomes_failure_for_that_file():
@@ -406,16 +420,20 @@ def test_settle_skips_cancelled_futures():
     arb.futures[0].cancel()
     assert poser.settle(0.05) == 1         # only the unanswered one abandons
     assert not poser.parked
-    assert [i for _, i, _ in done.poses] == [7, 8]   # no re-record for either
+    # 7 is re-recorded as un-arbitrated; the count stays 1 because a cancelled
+    # fold records and still returns None, which is what settle counts on
+    assert [i for _, i, _ in done.poses] == [7, 8, 7]
+    assert done.poses[-1][2].arbitrated is False
 
 
 def test_fold_done_drops_cancelled_futures_uncounted():
     poser, done, arb = make_poser(**ESCALATE)
     feed(poser)
     arb.futures[0].cancel()
-    assert poser.fold_done() == 0
+    assert poser.fold_done() == 0          # uncounted: the fold returns None
     assert not poser.parked                # dropped, keeps the park-time pose
-    assert len(done.poses) == 1
+    assert len(done.poses) == 2            # but re-recorded as un-arbitrated
+    assert done.poses[-1][2].arbitrated is False
 
 
 def test_settle_folds_a_call_that_failed_before_the_wait(capsys):

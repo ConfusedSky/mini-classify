@@ -100,8 +100,11 @@ class Pose:
 
         * **absent** — never asked, or written before the flag existed
           (2026-08-19). Not a claim.
-        * **false** — the arbiter was asked and did not answer. Refused,
-          errored, or cancelled.
+        * **false** — the arbiter was asked and the answer never arrived
+          *yet*: a rate limit, or a cancellation from `arbiter.shutdown()` on
+          an abort. Worth asking again. A request the API rejects on its
+          merits is **not** this — it leaves the key absent, because a retry
+          cannot succeed and would pay a call per run forever.
         * **true** — it answered, whether or not its answer was taken.
 
         It is deliberately *not* the same fact as `source == "vlm"`, which
@@ -254,10 +257,13 @@ def pose_is_sufficient(entry):
         return False
     if entry["source"] == "vlm":
         return True
-    # `arbitrated: false` means the arbiter was asked for this model and did
-    # not answer — refused, errored or cancelled. That is a miss, because the
-    # entry is the ensemble's answer standing in for one that was wanted and
-    # never arrived, and nothing else would ever ask again (2026-08-19).
+    # `arbitrated: false` means the arbiter was asked and the answer never
+    # arrived *yet* — a rate limit, or a cancellation on an abort. That is a
+    # miss, because the entry is the ensemble's answer standing in for one
+    # that was wanted, and nothing else would ever ask again (2026-08-19).
+    # A hard failure is deliberately not false: it leaves the key absent, so a
+    # request the API rejects on its merits is cached once rather than re-paid
+    # on every future run.
     #
     # Only an explicit `false`. An *absent* key is every entry written before
     # the flag existed and every model that never escalated, and treating
@@ -693,13 +699,22 @@ DEFAULT_VLM_MODELS = {"ollama": "gemma4:26b", "gemini": GEMINI_MODEL, "claude": 
 
 
 def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None,
-               project=None, sleep=time.sleep):
+               project=None, sleep=time.sleep, raise_on_rate_limit=False):
     """Ask the VLM which candidate orientation is upright. One retry on a
     bad/failed answer, then None — the caller keeps the geometry guess.
     The pipeline never hard-fails because of the VLM.
 
     A rate-limit refusal waits before the retry (`VLM_BACKOFF`); anything else
     retries at once, as before. `sleep` is an injection seam for tests.
+
+    `raise_on_rate_limit` re-raises `RateLimited` when *every* attempt was
+    refused, instead of flattening it to None. The pipeline passes it because
+    the two failures deserve opposite records: a quota refusal is worth
+    retrying on a later run, while a request the API rejects on its merits is
+    not, and re-escalating that one forever pays a call each time for an
+    answer that cannot come (2026-08-19). Default False so
+    `eval/gemini_sheet_fill.py` — which maps this over a thread pool, where a
+    raise loses every result in the sweep — keeps today's behaviour.
 
     save_to keeps a per-model copy of the sheet next to the saved renders. It
     is the same image the VLM was shown, written whether or not the answer
@@ -717,6 +732,7 @@ def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None
         except OSError as e:  # a debug artifact must never fail the run
             print(f"  could not save pose sheet {save_to}: {e}")
     backoff = 0.0                      # local: this runs on 4+ arbiter threads
+    last_rate_limit = None
     for attempt in range(2):
         if attempt and backoff:
             sleep(backoff)
@@ -736,10 +752,12 @@ def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None
         except RateLimited as e:
             backoff = VLM_BACKOFF[min(attempt, len(VLM_BACKOFF) - 1)]
             print(f"  pose VLM rate-limited ({backend}), waiting {backoff:g}s: {e}")
-            idx = None
+            last_rate_limit, idx = e, None
         except Exception as e:
             print(f"  pose VLM error ({backend}): {e}")
-            idx = None
+            last_rate_limit, idx = None, None
         if idx is not None:
             return idx
+    if last_rate_limit is not None and raise_on_rate_limit:
+        raise last_rate_limit
     return None

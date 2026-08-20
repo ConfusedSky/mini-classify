@@ -243,34 +243,54 @@ class Poser:
     def _fold(self, index: int, pf: ParkedFile) -> Pose | None:
         """Fold one done future: apply the arbiter's answer to the pose
         resolved without it (apply_arbiter, main:classify_stls.py:508-512 —
-        retired with the deferral it closed) and record the result. Returns
-        None for a cancelled future — skipped, no re-record. A failed call
-        keeps the ensemble's answer (main:classify_stls.py:1233-1235). May
-        raise; the caller is the boundary."""
+        retired with the deferral it closed) and record the result. A failed
+        call keeps the ensemble's answer (main:classify_stls.py:1233-1235).
+        May raise; the caller is the boundary.
+
+        Four outcomes, three records, and the split is the retry rule
+        (`pose.pose_is_sufficient`):
+
+        * an answer — `arbitrated=True`, settled either way;
+        * a **rate limit** or a **cancellation** — `arbitrated=False`, because
+          both mean "asked and not answered *yet*" and a later run should ask
+          again;
+        * any other failure — the key is left **absent**, because a request the
+          API rejects on its merits cannot succeed on a retry, and re-escalating
+          it forever would pay a call per run for an answer that cannot come.
+
+        Cancellation records and still returns None: `settle` counts folds with
+        `is not None`, so returning a Pose here would inflate that count
+        (review, 2026-08-19). Before this, a cancelled call re-recorded nothing
+        at all — leaving the ensemble row with the key absent, a permanent hit
+        indistinguishable from "never asked". `arbiter.shutdown()` cancels the
+        queued futures on every Ctrl-C, so one interrupt pinned a whole queue
+        of models to their ensemble answers forever."""
+        arbitrated = None
         try:
             idx = pf.future.result(timeout=0)
+            arbitrated = idx is not None
         except CancelledError:
+            up, ratio, source, margin = pf.resolved
+            self.record_pose(pf.file, index,
+                             self._make_pose(up, ratio, source, margin,
+                                             arbitrated=False))
             return None
+        except pose.RateLimited as e:        # transient: ask again next run
+            print(f"  arbiter rate-limited for {pf.file.stem}: {e}")
+            idx, arbitrated = None, False
         except Exception as e:               # one bad call must not sink the rest
             print(f"  arbiter failed for {pf.file.stem}: {e}")
-            idx = None
+            idx, arbitrated = None, None     # not retryable; leave the key off
         up, ratio, source, margin = pf.resolved
         if idx is not None and not np.allclose(pose.UP_CANDIDATES[idx],
                                                np.asarray(up)):
             up = tuple(float(v) for v in pose.UP_CANDIDATES[idx])
             source = "vlm"                   # the arbiter MOVED the answer;
                                              # a confirmation keeps the label
-        # ...which is why the *ran* fact is recorded separately. `idx is not
-        # None` is exactly "the call returned an answer", so a confirmation
-        # sets this true and a refusal sets it **false** — the only thing that
-        # distinguishes them, since both leave source and margin untouched.
-        # False rather than absent because this site knows a call was made:
-        # only the ensemble exit leaves it absent, so "asked and refused" is
-        # separable from "never asked" and from every legacy entry, which is
-        # what a retry rule needs to avoid re-billing the whole cache
-        # (2026-08-19).
-        p = self._make_pose(up, ratio, source, margin,
-                            arbitrated=idx is not None)
+        # `arbitrated` was decided above with the outcome; a confirmation and
+        # a refusal are otherwise identical here, since both leave source and
+        # margin untouched.
+        p = self._make_pose(up, ratio, source, margin, arbitrated=arbitrated)
         self.record_pose(pf.file, index, p)
         return p
 
@@ -293,7 +313,9 @@ class Poser:
         if cfg.ask is not None:
             return lambda: cfg.ask(sheet_tiles)
         save_to = cfg.sheet_path(file) if cfg.sheet_path else None
+        # raise_on_rate_limit: the Future carries the exception so `_fold` can
+        # tell a transient refusal from a request that cannot succeed
         return lambda: pose.ask_vlm_up(
             sheet_tiles, cfg.backend, cfg.scratch_dir,
             cfg.model or pose.DEFAULT_VLM_MODELS.get(cfg.backend),
-            save_to=save_to, project=cfg.project)
+            save_to=save_to, project=cfg.project, raise_on_rate_limit=True)
