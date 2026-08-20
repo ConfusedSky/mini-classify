@@ -30,11 +30,13 @@ proposal.
   `I3`/`K6`/`C-R1-4`/`F-7` resolve through `docs/reviews/`.
 - `docs/reviews/` — dated review notes, including the implementation reviews
   every finding ID resolves to.
-- `docs/api/surface.md` — **proposal, not built**: the REPL's querying as an
-  HTTP surface for `~/Documents/model-browser` to search against. No server,
-  no route, no handler exists. The one exception is its "where the code goes"
-  section: the shared query path it called for is `src/query.py` (2026-08-19),
-  and that section describes what shipped, marked in place.
+- `docs/api/surface.md` — the query API's **spec**: the REPL's querying as an
+  HTTP surface for `~/Documents/model-browser` to search against, reviewed by
+  both sides against their own code. Built 2026-08-19 as `src/query.py`,
+  `src/collection.py`, `src/api.py` and the `serve_api.py` entry point;
+  `docs/api/implementation.md` is the phased plan, with each phase's decisions
+  recorded where they were made. Phases 0–2 are done, phase 3 (a live run at
+  scale) and phase 4 are not.
 - `docs/cache-rebuild.md` — the debt that is only payable when the whole cache
   is regenerated: shims that exist so an old cache keeps working, and which a
   rebuild is the one chance to delete. Read it **before** planning a rebuild,

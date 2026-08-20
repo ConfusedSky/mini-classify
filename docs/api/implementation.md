@@ -195,7 +195,19 @@ cache and report the volume's absence in `/status`. `hit.path` already
 tolerates it — stale paths are documented as normal and the consumer joins on
 `rel_path`.
 
-## Phase 2 — `src/api.py`, the HTTP layer
+## Phase 2 — `src/api.py`, the HTTP layer — **done 2026-08-19**
+
+Shipped as `src/api.py` (`ServerState` + `create_app`) and `serve_api.py`, the
+entry point, with `tests/test_api.py` running the whole surface against a stub
+embedder — no GPU, no SigLIP. 539 passed, 1 skipped.
+
+One thing the plan did not anticipate, found by running the real server rather
+than the tests: `/status` reported `volume: {"present": false, "root": null}`
+while the actual root sat in `failure`. The field existed to tell a UI *which*
+volume was missing and it was telling it nothing. `ServerState.volume` is a
+property now, and `present` has three states — `true` loaded, `false` checked
+and missing, `null` not checked yet — because a server still warming has not
+looked, and `false` there is a lie a consumer could act on.
 
 Mechanical if phase 1 is right. `create_app(state) -> FastAPI`, where `state`
 carries the `Collection`, an embed callable, and a lock.
