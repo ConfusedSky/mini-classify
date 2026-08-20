@@ -56,6 +56,18 @@ are clickable links to the model's render.
 
 ### The API
 
+**Start it before anything that consumes it** — nothing launches it for you,
+and a consumer polling `http://127.0.0.1:8077/status` sees a connection
+refusal until you do:
+
+```bash
+.venv/bin/python serve_api.py --cache-dir embed-cache --port 8077
+```
+
+It answers `/status` immediately with `ready: false` and serves queries once
+SigLIP is resident (~16 s on the development machine); `/query` and `/similar`
+return 503 in between, so a consumer can tell warming from not-running.
+
 Four routes over the same code the REPL uses — `GET /status`, `POST /query`,
 `POST /similar`, `POST /reload`. It is loopback-only and unauthenticated by
 design: the intended caller is another local service, not a browser.

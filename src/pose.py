@@ -254,6 +254,18 @@ def pose_is_sufficient(entry):
         return False
     if entry["source"] == "vlm":
         return True
+    # `arbitrated: false` means the arbiter was asked for this model and did
+    # not answer — refused, errored or cancelled. That is a miss, because the
+    # entry is the ensemble's answer standing in for one that was wanted and
+    # never arrived, and nothing else would ever ask again (2026-08-19).
+    #
+    # Only an explicit `false`. An *absent* key is every entry written before
+    # the flag existed and every model that never escalated, and treating
+    # those as misses would re-escalate ~1243 models of `embed-cache2` on the
+    # first run after the change — the bill that made this wait for a rebuild
+    # until the flag became tri-state.
+    if entry.get("arbitrated") is False:
+        return False
     return entry.get("margin") is not None
 
 

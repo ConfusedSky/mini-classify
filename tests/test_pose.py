@@ -295,6 +295,29 @@ def test_full_run_poses_stay_cached():
     assert pose.pose_is_sufficient({"source": "vlm", "margin": None})
 
 
+def test_a_refused_arbiter_call_is_a_miss():
+    """`arbitrated: false` is the ensemble's answer standing in for one that
+    was asked for and never arrived — a 429, an error, a cancellation. Without
+    this it was a permanent cache hit that nothing would ever re-ask
+    (2026-08-19)."""
+    refused = {"source": "siglip", "margin": 0.2, "arbitrated": False}
+    assert not pose.pose_is_sufficient(refused)
+
+
+def test_only_an_explicit_false_re_escalates():
+    """The distinction that made this affordable. An *absent* key is every
+    entry written before the flag and every model that never escalated —
+    treating those as misses would re-escalate ~1243 models of embed-cache2 on
+    the first run, which is why this waited for the flag to be tri-state."""
+    legacy = {"source": "siglip", "margin": 0.2}            # no key at all
+    answered = {"source": "geometry", "margin": 0.2, "arbitrated": True}
+    assert pose.pose_is_sufficient(legacy)
+    assert pose.pose_is_sufficient(answered)
+    # and a vlm answer is sufficient however the flag reads — it moved the pose
+    assert pose.pose_is_sufficient({"source": "vlm", "margin": 0.2,
+                                    "arbitrated": False})
+
+
 def test_no_entry_is_never_sufficient():
     assert not pose.pose_is_sufficient(None)
 

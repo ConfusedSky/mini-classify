@@ -34,9 +34,13 @@ def main():
                         default="softmax",
                         help="default view pooling; every request may override")
     parser.add_argument("--host", default="127.0.0.1",
-                        help="loopback by default: the caller is model-browser's "
-                             "server, not a browser (surface.md)")
-    parser.add_argument("--port", type=int, default=8077)
+                        help="bind address (default 127.0.0.1) — loopback because "
+                             "the caller is model-browser's server, not a browser "
+                             "(surface.md)")
+    parser.add_argument("--port", type=int, default=8077,
+                        help="port to serve on (default 8077). model-browser and "
+                             "the README both name this number; changing it means "
+                             "changing them")
     args = apply_run_params(parser)
     if not args.input:
         sys.exit("no input given, and no directory recorded by classify_stls.py — "
@@ -71,7 +75,14 @@ def main():
                      args=(lambda: Collection.load(args), load_embed),
                      daemon=True, name="warmup").start()
 
+    import logging
     import uvicorn
+    # uvicorn configures only its own loggers, so `mini_classify.api`'s records
+    # reach no handler and the per-request lines vanish — verified against a
+    # live server, where the access lines appeared and ours did not. A root
+    # handler fixes it: uvicorn's dictConfig sets disable_existing_loggers
+    # False and adds no root handler of its own, so this survives its setup.
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(message)s")
     print(f"serving on http://{args.host}:{args.port} — /status answers now, "
           f"queries once ready")
     # One worker, no reload: the matrix and SigLIP load once (surface.md §Stack).

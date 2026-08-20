@@ -31,6 +31,7 @@ directly would make every API test a GPU test.
 """
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from typing import Literal
@@ -46,6 +47,13 @@ from src.collection import (CacheUnusable, Collection, NoSuchPath,
                             VolumeUnavailable)
 
 POOL = Literal["mean", "max", "softmax"]
+
+# `logging`, not the `print` the rest of this project uses: a server's output
+# is uvicorn's to configure, and a print bypasses whatever level, format or
+# sink the operator chose. One line per scoring request — enough to answer
+# "why was that slow" and "what did it actually search" without turning the
+# query text into a permanent record of what someone looked for.
+log = logging.getLogger("mini_classify.api")
 
 
 class ServerState:
@@ -254,6 +262,7 @@ def create_app(state: ServerState) -> FastAPI:
 
     @app.post("/query")
     def post_query(req: QueryRequest) -> dict:
+        t0 = time.monotonic()
         c = _live()
         try:
             scope = c.resolve(req.path)
@@ -262,6 +271,8 @@ def create_app(state: ServerState) -> FastAPI:
 
         pool = _pool(req.pool)
         if scope.rows.size == 0:            # a real directory with nothing in
+            log.info("query %r scope=%s %s — nothing indexed here",
+                     req.text[:60], scope.path or "-", scope.status)
             return {"scope": scope.as_dict(), "weak": False, "best_z": None,
                     "truncated": False, "results": []}
 
@@ -274,6 +285,10 @@ def create_app(state: ServerState) -> FastAPI:
         truncated = bool(len(order) > req.cap)
         if truncated:
             order = order[:req.cap]
+        log.info("query %r scope=%s %s %d/%d hits%s in %.0f ms",
+                 req.text[:60], scope.path or "-", scope.status,
+                 len(order), scope.n_indexed, " weak" if ranked.weak else "",
+                 (time.monotonic() - t0) * 1000)
         return {
             "scope": scope.as_dict(),
             "weak": ranked.weak,
@@ -285,6 +300,7 @@ def create_app(state: ServerState) -> FastAPI:
 
     @app.post("/similar")
     def post_similar(req: SimilarRequest) -> dict:
+        t0 = time.monotonic()
         c = _live()
         try:
             target = c.resolve(req.path)
@@ -313,6 +329,9 @@ def create_app(state: ServerState) -> FastAPI:
         sims = query.score(c.matrix[rows], c.matrix[i].T, pool)
         sims = query.pool_sims(sims, pool, axis=-1)
         ranked = query.rank(sims, top=req.k)
+        log.info("similar %s scope=%s %d neighbours in %.0f ms",
+                 req.path, scope.path or "-", len(ranked.order),
+                 (time.monotonic() - t0) * 1000)
         return {"scope": scope.as_dict(),
                 "results": [c.hit(int(rows[j]), sims[j], ranked.z[j])
                             for j in ranked.order]}
@@ -343,6 +362,8 @@ def create_app(state: ServerState) -> FastAPI:
         state.load_error = None
         state.loaded_at = time.time()
         state.cache_version = cache_version(getattr(state.args, "cache_dir", ""))
+        log.info("reload rescan=%s -> %d models, %d missing",
+                 req.rescan, len(fresh.files), fresh.missing)
         return {"n_models": len(fresh.files), "missing": fresh.missing,
                 "volume": fresh.volume, "loaded_at": state.loaded_at}
 
