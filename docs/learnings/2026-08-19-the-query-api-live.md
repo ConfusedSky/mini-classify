@@ -116,10 +116,12 @@ spinning drive is retired the cache buys about three seconds for a
 revalidation protocol and an exfat timestamp-granularity risk. Pushing the
 correction back rather than quietly fixing my own files is what surfaced it.
 
-And the decision here is *more* justified than before, not less: the HDD row
-is a real drive that may return (`OPEN_QUESTIONS`, and Masa's own framing —
-the design works better in the degraded scenario, which is the one worth
-designing for).
+And the decision here is *more* justified than before, not less. Masa, in this
+session: "there is still the possibility of using the hdd later and this design
+works better in that degraded scenario." Whether that drive actually returns is
+unsettled and tracked in `OPEN_QUESTIONS.md` — this line originally cited that
+file before the entry existed, which is the same class of mistake as the one
+this write-up is about, made while writing it up.
 
 The 595 is the interesting part and not a defect: a fresh walk sees **3396**
 STLs where the last classify run cached 2801, so the library has grown by 595

@@ -496,6 +496,29 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   and why, which is the difference between a deliberate re-pose being
   reviewable and merely being loud.
 
+- **Is the spinning volume retired, or is it somewhere this library might live
+  again?** Unsettled, and it is the premise two designs rest on. The library
+  is currently `/dev/sda1` — ext4, `rotational=0`, 476.9 GB, label
+  `STLLibrary`, 19,134 entries — where a cold full walk is 2.92 s and a warm
+  `find_stls` is 0.07 s. A second volume, spinning USB exfat, is the one
+  model-browser measured at ~32 s cold; it is not attached and cannot be
+  re-measured from here.
+
+  Masa's framing, said in this session on 2026-08-19: "there is still the
+  possibility of using the hdd later and this design works better in that
+  degraded scenario." That is why `src/collection.py` keeps request cost
+  independent of the storage — the rule holds unchanged on a slow disk, and it
+  cost nothing to buy. **Recorded as his stated position on this repo's
+  design, not as a decision about the hardware**, which nobody has made.
+
+  What turns on the answer: model-browser's `listing-tree-cache` is priced
+  against the ~32 s row, so if the HDD is retired that change buys ~2.4 s for a
+  revalidation protocol plus an exfat timestamp-granularity risk, and if it is
+  a future home the same change is cheap insurance. On this side the answer
+  changes nothing already built — the no-walk-in-a-request rule is right either
+  way — but it would decide whether the eventual HDD case is worth *measuring*
+  rather than reasoning about.
+
 ## Performance work not done
 
 - **Raise the thermal ceiling — hardware, not code.** The 4060 is an 80 W
