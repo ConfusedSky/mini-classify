@@ -50,9 +50,32 @@ proposal.
 
 The pipeline's product is the **caches** (`embed-cache*/`: pose-cache.json,
 per-view `.npy` embeddings, renders). Real querying happens interactively in
-`test_categories.py`; the `results.csv` top-3 scoring in `classify_stls.py`
-is a thin consumer, whatever the code's framing suggests. Weigh work
-accordingly: cache-building throughput and REPL quality first.
+`test_categories.py` or over HTTP through `serve_api.py`; the `results.csv`
+top-3 scoring in `classify_stls.py` is a thin consumer, whatever the code's
+framing suggests. Weigh work accordingly: cache-building throughput and query
+quality first.
+
+## Running it
+
+`.venv` is uv-managed and has no pip — install with
+`uv pip install --python .venv/bin/python <pkg>`. The caches and the STL
+library are **not in the repo**; every entry point defaults its cache-identity
+flags to the last classify run's `run-params.json`, so after the first run the
+directory argument is usually optional.
+
+```
+.venv/bin/python classify_stls.py <stl-dir> --cache-dir embed-cache2   # build the caches
+.venv/bin/python test_categories.py --cache-dir embed-cache2           # the REPL
+.venv/bin/python serve_api.py --cache-dir embed-cache2 --port 8077     # the query API
+.venv/bin/python -m pytest tests/ -q                                   # the suite
+```
+
+Three entry points, and **nothing imports any of them** — they are CLIs that
+export nothing (the rule matters for `classify_stls.py`, which `spawn`
+re-executes in the render child). `serve_api.py` binds its port before SigLIP
+is resident, so `/status` answers immediately with `ready: false`; queries
+return 503 until it flips. `run_classify.sh` is Masa's personal test invocation
+against a scratch cache, not the project's entry point.
 
 ## Conventions
 

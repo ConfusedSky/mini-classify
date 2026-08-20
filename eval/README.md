@@ -96,6 +96,23 @@ something production no longer has:
 | `rig.py` | The adapter. `rig(size, views, elevations)` → a cached, never-destroyed `Renderer`; `load`/`as_loaded` → `LoadedMesh`; `pose_tiles`/`pose_sheet_tiles`/`views` → the production render calls; `embedder`/`embed`/`embed_probe_texts` → the production `Embedder`; `exit_without_teardown` → the mandatory exit. Every function is a handful of lines of plumbing over a production call — if a harness wants behaviour production lacks, that is a finding, not a branch in here. Note the type change from the old CLI helpers: renders come back as `np.ndarray`, so anything that saves one needs `Image.fromarray`. |
 | `common.py` | Labels (`load_labels`, `collection_root`), scoring helpers, the VLM callers (`ask_claude`, `ask_gemma`), and the three cached render sets every scorer reads: `build_tiles` (6 up-candidate tiles + geometry per label), `build_sheets` (contact sheets at a given thumb size), `build_orbit_tiles` (24 tiles, 6 ups × 4 azimuths — the rotate-the-mesh pixels every published azimuth number was measured on; **not** the pose tiles, see `tile_count.py --compare`). |
 
+A harness that wants **cached** embeddings rather than fresh renders should
+not open the load preamble by hand — `src/collection.py` is that preamble,
+and `src/query.py` is the scoring:
+
+| want | reach for |
+|---|---|
+| render or embed something now | `rig.py` (builds the production `Renderer`/`Embedder`) |
+| the whole collection's cached vectors, its files, poses and scope filtering | `src.collection.Collection.load(args)` |
+| pooling, robust z, ranking | `src.query` — `score`, `pool_sims`, `robust_z`, `rank` |
+| just the `.npy` matrix | `src.embed_store.load_embedding_matrix` |
+
+`Collection` costs no torch and no open3d, so a harness that only reads
+cached vectors stays as cheap as `cluster_models.py` is. Both it and
+`src/query.py` exist because the REPL and the query API needed the same
+formulas; a third copy in a harness is the thing they were extracted to
+prevent.
+
 ## The scripts
 
 | script | what it answers |
