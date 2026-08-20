@@ -14,14 +14,17 @@ numpy only; no torch, no GPU, no HTTP.
 """
 import argparse
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
 
 from src import pose
-from src.cachedir import cache_key, embeds_dir, view_config
-from src.collection import (COVERS, Collection, NoSuchPath, OutsideCollection,
-                            Scope, ScopeError, VirtualPath, VolumeUnavailable)
+from src.cachedir import (CACHE_VERSION, cache_key, embeds_dir, find_stls,
+                          stamp_cache_version, view_config)
+from src.collection import (COVERS, CacheUnusable, Collection, NoSuchPath,
+                            OutsideCollection, Scope, ScopeError, VirtualPath,
+                            VolumeUnavailable)
 
 DIM = 8
 
@@ -79,6 +82,11 @@ def build(tmp_path, layout, *, embed=None, ups=None, front=None, **over):
          "views": args.views, "elevations": args.elevations,
          "render_size": args.render_size, "model": args.model,
          "compile": args.compile, "up_axis": args.up_axis}))
+
+    # a real run stamps the key scheme; without it `require_cache_version`
+    # correctly reads this fixture as an unmigrated cache (found when that
+    # guard was added, 2026-08-19)
+    stamp_cache_version(args.cache_dir)
 
     ed = embeds_dir(args.cache_dir)
     ed.mkdir(parents=True, exist_ok=True)
@@ -411,6 +419,119 @@ def test_reload_returns_a_new_instance_and_leaves_the_old_one_usable(tmp_path):
     assert second is not first
     assert len(second.files) == 2
     assert len(first.files) == 1 and first.matrix.shape[0] == 1   # untouched
+
+
+def _mangle(tmp_path, files, root, ident_of, change):
+    cache = tmp_path / "cache" / "pose-cache.json"
+    entries = json.loads(cache.read_text())
+    ident = pose.file_identity(files[ident_of], root)
+    if change == "drop-up":
+        entries[ident].pop("up")
+    else:
+        entries[ident].update(change)
+    cache.write_text(json.dumps(entries))
+    return ident
+
+
+@pytest.mark.parametrize("change", [
+    {"up": None},                       # not iterable
+    {"up": [0.0, 0.0]},                 # wrong length
+    {"up": ["x", "y", "z"]},            # not numbers
+    "drop-up",                          # missing key -> KeyError
+])
+def test_an_unusable_up_does_not_break_the_load(tmp_path, change):
+    """pose-cache.json is hand-editable and `load_pose_cache` validates only
+    `v`. One bad entry used to kill the whole *load*, not just a hit:
+    `embed_store` asks `pose.embed_cache_token` for every file's token and
+    that read `entry["up"]` unguarded, so a single null crashed the process
+    (review, 2026-08-19).
+
+    An entry with no usable up carries no pose, so its embedding keys under
+    the "unresolved" token and simply is not in the index — the model is
+    dropped, counted in `missing`, and everything else loads."""
+    args, root, files = build(tmp_path, ["a/one.stl", "a/two.stl"])
+    _mangle(tmp_path, files, root, "a/one.stl", change)
+
+    c = Collection.load(args)                            # must not raise
+    assert len(c.files) == 1 and c.missing == 1
+    assert c.files[0].name == "two.stl"
+    assert c.pose_of(0) is not None                      # the survivor is fine
+
+
+@pytest.mark.parametrize("change", [{"up": None}, {"up": [0.0, 0.0]}, "drop-up"])
+def test_pose_of_returns_null_for_a_malformed_entry(tmp_path, change):
+    """The other half: an entry that is malformed *after* the row was indexed
+    — the cache edited under a running server — must yield a null pose rather
+    than failing the query response that contains it."""
+    args, root, files = build(tmp_path, ["a/one.stl"])
+    c = Collection.load(args)
+    entry = c.poses[c._ident[0]]
+    if change == "drop-up":
+        entry.pop("up")
+    else:
+        entry.update(change)
+    assert c.pose_of(0) is None
+    assert c.hit(0, 0.1, 1.0)["pose"] is None            # the hit still forms
+
+
+def test_a_null_confidence_keeps_the_pose_and_defaults_the_number(tmp_path):
+    """A missing confidence is not a missing pose: the up vector is what the
+    viewer needs, and discarding the orientation over an absent score would
+    lose more than it protects."""
+    args, root, files = build(tmp_path, ["a/one.stl"])
+    _mangle(tmp_path, files, root, "a/one.stl", {"confidence": None})
+    p = Collection.load(args).pose_of(0)
+    assert p is not None and p["confidence"] == 0.0
+    assert p["up"] == [0.0, 0.0, 1.0]
+
+
+# --- the cache itself -------------------------------------------------------
+
+def test_an_empty_cache_raises_instead_of_exiting_the_process(tmp_path):
+    """`embed_store` raises SystemExit, which is a BaseException and walks
+    straight through the `except Exception` a web framework wraps handlers in
+    — and `POST /reload` runs this inside one (review, 2026-08-19)."""
+    import shutil
+    args, *_ = build(tmp_path, ["a/one.stl"])
+    c = Collection.load(args)
+    shutil.rmtree(embeds_dir(args.cache_dir))
+    with pytest.raises(CacheUnusable):
+        c.reload()
+    try:                                    # and it is an ordinary Exception
+        c.reload()
+    except Exception as e:
+        assert isinstance(e, CacheUnusable)
+
+
+def test_an_old_key_scheme_is_named_with_the_right_fix(tmp_path):
+    """The guard every other cache consumer calls (classify_stls.py:255,
+    test_categories.py:104) and this module did not. Without it a cache from
+    an older key scheme misses on every lookup and reports "run
+    classify_stls.py first", when the actionable line is migrate_cache_keys —
+    the exact wrong-advice shape VolumeUnavailable exists to prevent."""
+    args, *_ = build(tmp_path, ["a/one.stl"])
+    Collection.load(args)                                # stamps it current
+    (Path(args.cache_dir) / "cache-meta.json").write_text(
+        json.dumps({"cache_version": CACHE_VERSION - 1}))
+    with pytest.raises(CacheUnusable) as e:
+        Collection.load(args)
+    assert "cache_version" in e.value.message
+    assert e.value.hint and "migrate_cache_keys" in e.value.hint
+    assert "classify_stls" not in (e.value.hint or "")
+
+
+def test_covers_agrees_with_what_the_classifier_actually_walks(tmp_path):
+    """COVERS names `find_stls`'s rule as its source of truth with no
+    mechanical link (review, 2026-08-19). It matches case-insensitively, so
+    the published extension is the family, not the literal spelling."""
+    root = tmp_path / "walk"
+    (root / "d").mkdir(parents=True)
+    for name in ("a.stl", "b.STL", "c.Stl", "d.3mf", "e.obj", "f.txt"):
+        (root / "d" / name).write_bytes(b"x")
+    found = {f.name for f in find_stls(root)}
+    assert found == {"a.stl", "b.STL", "c.Stl"}          # case-insensitive
+    assert COVERS == ["stl"]
+    assert all(n.lower().endswith("." + COVERS[0]) for n in found)
 
 
 # --- the volume ------------------------------------------------------------

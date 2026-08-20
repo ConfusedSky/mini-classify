@@ -36,7 +36,8 @@ from pathlib import Path
 import numpy as np
 
 from src import identity, pose
-from src.cachedir import (cache_root, load_file_list, total_views, view_config)
+from src.cachedir import (cache_root, load_file_list, require_cache_version,
+                          total_views, view_config)
 from src.embed_store import load_embedding_matrix
 
 # What `classify_stls.py` walks (`cachedir.find_stls`), and therefore the only
@@ -65,6 +66,30 @@ class OutsideCollection(ScopeError):
 class NoSuchPath(ScopeError):
     """Nothing on disk at that path. 404 — and distinct from a real directory
     with nothing classified in it, which is a 200."""
+
+
+class CacheUnusable(Exception):
+    """The cache is present but cannot answer queries.
+
+    Exists to keep `SystemExit` out of a request handler. `embed_store` and
+    `cachedir.require_cache_version` both raise it — correct for a CLI, where
+    it prints and exits — but `SystemExit` is a `BaseException`, so it walks
+    straight through Starlette's `except Exception` and never becomes a 500.
+    `POST /reload` runs this code inside a handler (implementation.md phase 2).
+
+    It is also the same inconsistency `VolumeUnavailable` was created to fix:
+    an empty *scope* is a 200 with `status: "unindexed"`, so an empty
+    *collection* should not be a process exit.
+
+    `hint` carries the actionable line where there is one — a version mismatch
+    wants `migrate_cache_keys.py`, not `classify_stls.py`."""
+
+    def __init__(self, message, hint=None):
+        self.message, self.hint = str(message), hint
+        super().__init__(f"{message}" + (f"\n  {hint}" if hint else ""))
+
+    def as_dict(self) -> dict:
+        return {"usable": False, "reason": self.message, "hint": self.hint}
 
 
 class VolumeUnavailable(Exception):
@@ -184,8 +209,21 @@ class Collection:
         inp = Path(args.input)
         root = cache_root(inp, args.cache_dir, confirm=False)
         cls._require_volume(root, inp, args.cache_dir)
-        scanned = load_file_list(inp, args.cache_dir, args.rescan)
-        matrix, files, missing = load_embedding_matrix(scanned, args, root)
+        # Both of these exit the process on failure, which is right for a CLI
+        # and wrong inside a request handler — see `CacheUnusable`. The version
+        # guard is the one every other cache consumer calls
+        # (classify_stls.py, test_categories.py): without it a cache written
+        # under an older key scheme misses on every lookup and reports
+        # "run classify_stls.py first", when the fix is migrate_cache_keys.
+        try:
+            require_cache_version(args.cache_dir)
+            scanned = load_file_list(inp, args.cache_dir, args.rescan)
+            matrix, files, missing = load_embedding_matrix(scanned, args, root)
+        except SystemExit as e:
+            text = str(e)
+            hint = next((ln.strip() for ln in text.splitlines()
+                         if ln.strip().startswith("run:")), None)
+            raise CacheUnusable(text.split("\n")[0], hint) from e
         poses = pose.load_pose_cache(args.cache_dir)
         return cls(args, root, files, scanned, matrix, poses, missing)
 
@@ -288,13 +326,26 @@ class Collection:
         entry = self.poses.get(self._ident[i])
         if not entry:
             return None
-        up = [float(x) for x in entry["up"]]
+        # A malformed entry degrades to "no pose", never to a raised
+        # exception: `load_pose_cache` filters on `v` and validates no shape,
+        # pose-cache.json is hand-editable, and one bad entry must not fail a
+        # whole query response when this module already treats a null pose as
+        # a real state (review, 2026-08-19). `confidence: null` and a missing
+        # `up` are the two that occur.
+        up = pose.entry_up(entry)
+        if up is None:
+            return None
+        up = list(up)
         R = pose.rotation_to_z_up(np.array(up))
+        try:
+            confidence = float(entry.get("confidence") or 0.0)
+        except (TypeError, ValueError):
+            confidence = 0.0
         block = {
             "up": up,
             "azimuth_zero": [float(x) for x in R.T @ np.array([1.0, 0.0, 0.0])],
             "source": entry.get("source"),
-            "confidence": float(entry.get("confidence", 0.0)),
+            "confidence": confidence,
             "front": None,
         }
         view = pose.front_view(entry, self.view_cfg)

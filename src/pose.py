@@ -234,6 +234,24 @@ def up_str(up):
     return ",".join(f"{float(v):g}" for v in up)
 
 
+def entry_up(entry):
+    """The up vector of a cache entry as a 3-tuple, or None if it has none.
+
+    The one validator, because two callers need the same answer and both used
+    to assume the entry was well-formed: `embed_cache_token` below (so a
+    malformed entry cannot crash a load) and `collection.pose_of` (so it
+    cannot fail a whole query response). `load_pose_cache` filters on `v` and
+    checks no shape at all, and pose-cache.json is hand-editable — the two
+    that turn up are a missing `up` and a null one."""
+    if not entry:
+        return None
+    try:
+        up = tuple(float(x) for x in entry["up"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return up if len(up) == 3 else None
+
+
 FORCED_UPS = {"z": (0.0, 0.0, 1.0), "y": (0.0, 1.0, 0.0)}
 
 
@@ -248,8 +266,9 @@ def embed_cache_token(entry, up_axis_arg="auto"):
     --up-axis needs no pose entry; its up is the flag. Caches keyed under
     the old tokens are re-keyed by migrate_cache_keys.py — cache-meta.json
     records which scheme a cache uses."""
-    if entry:
-        return up_str(entry["up"])
+    up = entry_up(entry)        # None for a malformed entry, which carries no
+    if up:                      # pose — the same thing as having none at all
+        return up_str(up)
     if up_axis_arg in FORCED_UPS:
         return up_str(FORCED_UPS[up_axis_arg])
     return "unresolved"     # no pose yet — nothing is cached under any key
