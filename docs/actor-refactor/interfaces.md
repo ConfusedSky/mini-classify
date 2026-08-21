@@ -228,7 +228,8 @@ class Transport(Protocol):            # src/transport.py
 ### Cache Checker — a pure decision
 
 ```python
-def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False) \
+def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False,
+          settled: bool = False) \
         -> PoseRenderTask | EmbedRenderTask | CachedHit | Redraw | Retired
 ```
 
@@ -241,6 +242,14 @@ on `Resolved` — the Poser knows the source it just recorded, so the driver
 never re-derives it from the store (true when the fresh source is
 `vlm`/`siglip`) — and the renders-wanted arm treats it like missing
 renders: the redraw is forced even when the render set is complete.
+
+`settled=True` marks that second call, and only the driver's `Resolved` arm
+passes it: this run's pose decision is made, so `route` skips the
+sufficiency re-check and takes the entry as it stands. Without it,
+`pose_is_sufficient`'s `arbitrated: false` miss — written by a fold whose
+arbiter call failed transiently — re-escalated the same file inside the
+same run, an unbounded re-render/re-bill loop (review, 2026-08-20). The
+cold call never passes it; that check is what admits a file to posing.
 
 `CacheContext` (shape in data_structures.md) bundles what today is closure
 state: the pose store, embeds dir, render index, parsed args. `route`

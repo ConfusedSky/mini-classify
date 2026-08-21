@@ -338,13 +338,18 @@ class Pose:
                                    # fresh resolutions pass POSE_CACHE_VERSION
                                    # explicitly (D10)
     margin: float | None = None
-    arbitrated: bool = False       # the VLM ran AND answered — a different
-                                   # fact from source == "vlm", which means it
-                                   # MOVED the answer. Without it a call that
-                                   # confirmed the ensemble and one that was
-                                   # refused are identical on disk (2026-08-19).
-                                   # Serialised only when true, so entries
-                                   # written before it read as "unknown"
+    arbitrated: bool | None = None # TRI-state, not a bool (shipped shape;
+                                   # this doc said `bool = False` while the
+                                   # code shipped the tri-state — review,
+                                   # 2026-08-20). True: the VLM ran AND
+                                   # answered — a different fact from
+                                   # source == "vlm", which means it MOVED
+                                   # the answer. False: asked, no answer yet
+                                   # (transient failure / cancellation /
+                                   # abandoned at abort) — a miss for a later
+                                   # run (`pose_is_sufficient`). None: never
+                                   # asked; serialised only when not None, so
+                                   # entries written before it read as None
     front_view: dict[str, int] = field(default_factory=dict)   # view_cfg -> index
 
     @classmethod

@@ -261,6 +261,7 @@ class Rig:
         self.embedder = FakeEmbedder(self.log, fail_tiles, fail_views)
         self.arbiter = FakeArbiter(self.log)
         self.route_calls = []
+        self.settled_calls = []
         self.routes = routes or {}
         self.tasks.probe = lambda: (self.done.admission.in_flight(),
                                     len(self.poser.parked))
@@ -275,8 +276,9 @@ class Rig:
             poser=self.poser, embedder=self.embedder, done=self.done,
             arbiter=self.arbiter, skip_embed=skip_embed, window=window)
 
-    def _route(self, file, index, ctx, pose_changed=False):
+    def _route(self, file, index, ctx, pose_changed=False, settled=False):
         self.route_calls.append((index, pose_changed))
+        self.settled_calls.append((index, settled))
         out = self.routes.get((index, pose_changed),
                               self.routes.get(index, PoseRenderTask(file, index)))
         if isinstance(out, Exception):
@@ -320,6 +322,22 @@ def test_resolved_reroutes_with_pose_changed_verbatim(monkeypatch):
     rig.run()
     assert rig.route_calls == [(0, False), (0, True)]
     assert ("done.on", "Retired", 0) in rig.log
+
+
+def test_resolved_reroutes_as_settled_and_the_cold_call_does_not(monkeypatch):
+    """The re-route of a Resolved carries `settled=True`: this run's pose
+    decision is made, so `route` must not re-check sufficiency. Without the
+    flag, an `arbitrated: false` written by a rate-limited fold read as a
+    miss on the re-route and the run re-rendered and re-billed the same file
+    in an unbounded loop (review, 2026-08-20). The cold admission call stays
+    unsettled — that check is what admits the file to posing at all."""
+    rig = Rig(monkeypatch, files=1,
+              routes={(0, False): PoseRenderTask(f(0), 0),
+                      (0, True): Retired(f(0), 0)},
+              script=[PoseTiles(f(0), 0, np.zeros(6), [[np.zeros((2, 2, 3))]])],
+              answers={0: Resolved(f(0), 0, pose_changed=True)})
+    rig.run()
+    assert rig.settled_calls == [(0, False), (0, True)]
 
 
 def test_a_parked_file_produces_no_task_until_poll_resolves_it(monkeypatch):

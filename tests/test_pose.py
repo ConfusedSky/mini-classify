@@ -196,6 +196,104 @@ def test_an_ordinary_vlm_error_still_retries_at_once(monkeypatch):
     assert slept == []
 
 
+def test_a_transient_failure_retries_at_once_and_raises_its_own_type(monkeypatch):
+    """`VLMUnavailable` sits between the two arms above: no backoff (it is not
+    a quota signal), but the type must survive to the caller so `_fold`
+    records it retryable rather than permanent (review, 2026-08-20)."""
+    calls, slept = [], []
+
+    def unreachable(*a, **k):
+        calls.append(1)
+        raise pose.VLMUnavailable("network failure: connection reset")
+
+    monkeypatch.setattr(pose, "_ask_gemini", unreachable)
+    with pytest.raises(pose.VLMUnavailable):
+        pose.ask_vlm_up([Image.new("RGB", (8, 8))] * 6, "gemini", "/tmp",
+                        vlm_model="m", sleep=slept.append, raise_failures=True)
+    assert len(calls) == 2 and slept == []
+
+
+def test_gemini_maps_each_transport_failure_to_the_retry_split(monkeypatch):
+    """The record `_fold` writes hangs off the exception type alone, so the
+    mapping IS the retry policy: 429/503 back off, any other 5xx and every
+    network-layer failure are transient, and only a request judged on its
+    merits (4xx) is permanent. Before this, a socket timeout or a 502 landed
+    on the permanent side and the model was never re-asked (review,
+    2026-08-20)."""
+    import io as io_mod
+    import socket
+    import urllib.error
+    import urllib.request
+
+    monkeypatch.setattr(pose, "gcloud_token", lambda: "tok")
+
+    def with_urlopen(exc):
+        def fake_urlopen(req, timeout=None):
+            raise exc
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+        try:
+            pose._ask_gemini(b"png", 6, "m", project="p")
+        except Exception as e:              # noqa: BLE001 - the type is the assertion
+            return type(e)
+        return None
+
+    def http_error(code):
+        return urllib.error.HTTPError("http://x", code, "boom", None,
+                                      io_mod.BytesIO(b"detail"))
+
+    assert with_urlopen(http_error(429)) is pose.RateLimited
+    assert with_urlopen(http_error(503)) is pose.RateLimited
+    assert with_urlopen(http_error(500)) is pose.VLMUnavailable
+    assert with_urlopen(http_error(502)) is pose.VLMUnavailable
+    assert with_urlopen(http_error(400)) is RuntimeError      # judged: permanent
+    assert with_urlopen(urllib.error.URLError("dns down")) is pose.VLMUnavailable
+    assert with_urlopen(socket.timeout("timed out")) is pose.VLMUnavailable
+
+
+def test_claude_cli_failures_are_transient(monkeypatch):
+    """The claude backend could never say `RateLimited` at all: a timed-out
+    CLI raised TimeoutExpired into the permanent branch, and a non-zero exit
+    flattened to None — indistinguishable from an unparseable answer
+    (review, 2026-08-20)."""
+    import subprocess as sp
+
+    def run_fails(*a, **k):
+        raise sp.TimeoutExpired(cmd="claude", timeout=180)
+
+    monkeypatch.setattr(pose.subprocess, "run", run_fails)
+    with pytest.raises(pose.VLMUnavailable):
+        pose._ask_claude("/nowhere/sheet.png", 6)
+
+    class Exited:
+        returncode, stdout, stderr = 1, "", "quota exceeded"
+
+    monkeypatch.setattr(pose.subprocess, "run", lambda *a, **k: Exited())
+    with pytest.raises(pose.VLMUnavailable, match="quota exceeded"):
+        pose._ask_claude("/nowhere/sheet.png", 6)
+
+
+def test_claude_sheet_files_are_unique_per_call_and_cleaned_up(monkeypatch, tmp_path):
+    """All arbiter workers share one scratch_dir; a fixed `pose-sheet.png` let
+    worker B's save land between A's save and A's subprocess read, so A's
+    model was judged on B's renders and stamped `source: vlm` (review,
+    2026-08-20). Unique per call, existing while the CLI reads it, gone
+    after."""
+    seen = []
+
+    def fake_ask(sheet_path, n_tiles):
+        assert Path(sheet_path).exists()     # the CLI reads a real file
+        seen.append(Path(sheet_path))
+        return 1
+
+    monkeypatch.setattr(pose, "_ask_claude", fake_ask)
+    tiles = [Image.new("RGB", (8, 8))] * 6
+    assert pose.ask_vlm_up(tiles, "claude", tmp_path) == 1
+    assert pose.ask_vlm_up(tiles, "claude", tmp_path) == 1
+    assert len(seen) == 2 and seen[0] != seen[1]
+    assert all(p.parent == tmp_path for p in seen)
+    assert not any(p.exists() for p in seen)             # unlinked either way
+
+
 def test_view_angles_rings_are_nested_subsets():
     """A ring of n azimuths is a subset of a ring of m when n divides m.
 

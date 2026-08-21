@@ -257,6 +257,28 @@ def test_pose_changed_defaults_to_false(tmp_path):
     assert type(route(f, 0, ctx, True)) is Redraw
 
 
+def test_settled_reroute_accepts_the_pose_a_cold_call_would_re_escalate(tmp_path):
+    """The unbounded-loop regression (review, 2026-08-20): a rate-limited or
+    cancelled arbiter call folds to `arbitrated: false` — "ask again on a
+    later run" — and the driver then re-routes the Resolved through here.
+    Cold, that entry is a miss (the later run's re-ask); on the re-route,
+    `settled=True` says this run's decision is made, so the same entry must
+    flow on to the embedding decision instead of a fresh PoseRenderTask,
+    which would re-render, re-park, re-bill and never converge."""
+    case = Case("s", PoseRenderTask)
+    f, ctx, _, cache_file = build(tmp_path, case)
+    ident = pose.file_identity(f, ctx.root)
+    ctx.poses[ident] = dict(ctx.poses[ident], arbitrated=False)
+
+    assert type(route(f, 0, ctx)) is PoseRenderTask          # the later run
+    out = route(f, 0, ctx, settled=True)                     # the re-route
+    assert type(out) is EmbedRenderTask and out.needs_embed
+    # settled does not conjure a pose that was never resolved: no entry is
+    # still a render, whatever the flag says
+    ctx.poses.clear()
+    assert type(route(f, 0, ctx, settled=True)) is PoseRenderTask
+
+
 def test_route_raises_on_vanished_file(tmp_path):
     """J3: the error boundary is the driver's — route raises, never guards."""
     case = Case("gone", PoseRenderTask, pose_state="absent")

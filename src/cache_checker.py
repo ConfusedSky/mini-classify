@@ -39,7 +39,8 @@ from src.messages import (
 
 # --- The decision ------------------------------------------------------------
 
-def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False) \
+def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False,
+          settled: bool = False) \
         -> PoseRenderTask | EmbedRenderTask | CachedHit | Redraw | Retired:
     """One file's cache decision. Raises on I/O errors (a vanished file, an
     unreadable directory) — the driver converts to `Failure` (J3).
@@ -48,7 +49,16 @@ def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False) \
     `PoseRenderTask`), then again on the Poser's `Resolved` with the pose
     store warm. `pose_changed` is the driver's one extra input on that second
     call — true when the fresh source is `vlm`/`siglip` — and only the
-    renders-wanted arm reads it (interfaces.md §Cache Checker)."""
+    renders-wanted arm reads it (interfaces.md §Cache Checker).
+
+    `settled` marks that second call: the pose this run could decide is
+    decided, so the sufficiency re-check is skipped. Without it the check
+    turned the tri-state's `arbitrated: false` — written by `_fold` for a
+    rate-limited, transiently failed or cancelled call moments before the
+    re-route — back into a `PoseRenderTask`, and the run re-rendered,
+    re-escalated and re-billed the same file in an unbounded loop, each lap
+    bumping the stall clock (review, 2026-08-20). `false` means "ask again
+    on a later run"; this flag is what confines it to one."""
     args = ctx.args
 
     # Pose: forced axis skips the pose-cache lookup entirely (migration-notes
@@ -65,7 +75,7 @@ def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False) \
         # `pose_is_sufficient` no longer takes the availability flag: a
         # geometry-only entry — margin None, written by some older pass —
         # always reads insufficient and is upgraded in place.
-        if not pose.pose_is_sufficient(entry):
+        if entry is None or not (settled or pose.pose_is_sufficient(entry)):
             return PoseRenderTask(file=f, index=index)
         resolved = pose.Pose.from_cache(entry)
 

@@ -329,8 +329,9 @@ def main():
                             project=args.gemini_project,
                             margin_threshold=args.up_margin,
                             # keeps each escalation's contact sheet beside that
-                            # model's renders; the scratch copy is one fixed
-                            # name every model overwrites
+                            # model's renders; the claude backend's scratch
+                            # copy is a unique temp name per call, unlinked
+                            # after the CLI reads it (review, 2026-08-20)
                             sheet_path=(lambda f: rdir / f"{render_key(f, root)}_pose.png")
                                        if rdir else None))
     child = driver.spawn_render_child(tasks, results, RenderConfig(

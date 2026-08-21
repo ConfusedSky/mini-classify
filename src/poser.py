@@ -168,9 +168,10 @@ class Poser:
         Its own error boundary (J3): a fold that raises yields Failure for
         that file rather than ending the run, because a raise inside poll
         cannot be attributed by the driver. Failed *calls* keep the ensemble's
-        pose and resume normally, as does a cancelled one — `_fold` records
-        nothing for it and the park-time pose stands, so its `pose_changed`
-        comes from the source recorded at park."""
+        pose and resume normally, as does a cancelled one — the park-time
+        answer stands (re-recorded with `arbitrated=False` when the failure
+        was transient or the call cancelled), so its `pose_changed` comes
+        from the source recorded at park."""
         out = []
         for index in [i for i, pf in self.parked.items() if pf.future.done()]:
             pf = self.parked.pop(index)
@@ -218,7 +219,16 @@ class Poser:
         free in wall-clock, since the pool's atexit join blocks on the same
         threads regardless. Returns how many were abandoned to their
         ensemble pose: the abort's closing line, when non-zero. Cancelled
-        futures are skipped, not abandoned — they were queued, never billed."""
+        futures are skipped, not abandoned — they were queued, never billed.
+
+        An abandoned call is re-recorded `arbitrated=False` before it is left
+        behind: it was asked and the answer never arrived, exactly the state
+        the tri-state's `false` names. Without the record the park-time pose
+        stood with the key absent — on disk indistinguishable from "never
+        asked", so a Ctrl-C landing on up to --arbiter-workers in-flight
+        calls silently pinned each one forever, the same hole the
+        CancelledError branch in `_fold` closes for the queued ones
+        (review, 2026-08-20)."""
         deadline = monotonic() + timeout
         abandoned = 0
         for index in list(self.parked):
@@ -231,6 +241,11 @@ class Poser:
                 except Exception:
                     if not pf.future.done():  # the wait ran out, not the call
                         abandoned += 1        # keeps the park-time pose (I15)
+                        up, ratio, source, margin = pf.resolved
+                        self.record_pose(pf.file, index,
+                                         self._make_pose(up, ratio, source,
+                                                         margin,
+                                                         arbitrated=False))
                         continue
             try:
                 self._fold(index, pf)
@@ -251,12 +266,17 @@ class Poser:
         (`pose.pose_is_sufficient`):
 
         * an answer — `arbitrated=True`, settled either way;
-        * a **rate limit** or a **cancellation** — `arbitrated=False`, because
+        * a **transient failure** (`pose.VLMUnavailable`: rate limit, network,
+          5xx, CLI timeout) or a **cancellation** — `arbitrated=False`, because
           both mean "asked and not answered *yet*" and a later run should ask
           again;
         * any other failure — the key is left **absent**, because a request the
           API rejects on its merits cannot succeed on a retry, and re-escalating
           it forever would pay a call per run for an answer that cannot come.
+
+        "A later run", not this one: the driver re-routes the Resolved with
+        `settled=True`, so an `arbitrated=False` record cannot re-escalate
+        inside the run that just wrote it (review, 2026-08-20).
 
         Cancellation records and still returns None: `settle` counts folds with
         `is not None`, so returning a Pose here would inflate that count
@@ -275,8 +295,8 @@ class Poser:
                              self._make_pose(up, ratio, source, margin,
                                              arbitrated=False))
             return None
-        except pose.RateLimited as e:        # transient: ask again next run
-            print(f"  arbiter rate-limited for {pf.file.stem}: {e}")
+        except pose.VLMUnavailable as e:     # transient: ask again next run
+            print(f"  arbiter unavailable for {pf.file.stem}: {e}")
             idx, arbitrated = None, False
         except Exception as e:               # one bad call must not sink the rest
             print(f"  arbiter failed for {pf.file.stem}: {e}")

@@ -281,8 +281,14 @@ def run(cfg: DriverConfig) -> None:
         is the one that knows which tier moved the answer."""
         match out:
             case Resolved():
+                # settled=True: this run's pose decision is made, whatever it
+                # was. Re-checking sufficiency here turned an `arbitrated:
+                # false` record — a transient arbiter failure folded moments
+                # ago — into a fresh PoseRenderTask, an unbounded same-run
+                # re-render/re-bill loop the stall clock never saw because
+                # each lap was progress (review, 2026-08-20).
                 dispatch(route(out.file, out.index, cfg.ctx,
-                               pose_changed=out.pose_changed))
+                               pose_changed=out.pose_changed, settled=True))
             case Redraw():
                 done.on(out.hit)             # the row (retires=False) ...
                 tasks.send(out.task)         # ... retirement is the child's ack

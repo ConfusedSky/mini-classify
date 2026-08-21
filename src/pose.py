@@ -8,6 +8,7 @@ import base64
 import io
 import json
 import os
+import tempfile
 import time
 import subprocess
 from dataclasses import dataclass, field
@@ -101,10 +102,13 @@ class Pose:
         * **absent** — never asked, or written before the flag existed
           (2026-08-19). Not a claim.
         * **false** — the arbiter was asked and the answer never arrived
-          *yet*: a rate limit, or a cancellation from `arbiter.shutdown()` on
-          an abort. Worth asking again. A request the API rejects on its
-          merits is **not** this — it leaves the key absent, because a retry
-          cannot succeed and would pay a call per run forever.
+          *yet*: a rate limit or any other transient failure
+          (`VLMUnavailable` — network, 5xx, CLI timeout), a cancellation
+          from `arbiter.shutdown()` on an abort, or a call still in flight
+          when `settle`'s wait ran out. Worth asking again. A request the
+          API rejects on its merits is **not** this — it leaves the key
+          absent, because a retry cannot succeed and would pay a call per
+          run forever.
         * **true** — it answered, whether or not its answer was taken.
 
         It is deliberately *not* the same fact as `source == "vlm"`, which
@@ -212,7 +216,17 @@ def load_pose_cache(cache_dir):
     if not p.exists():
         return {}
     raw = json.loads(p.read_text())
-    fresh = {k: v for k, v in raw.items() if v.get("v") == POSE_CACHE_VERSION}
+    # Shape before content: the file is hand-editable, and a list-shaped or
+    # null top level raised AttributeError from `raw.items()` — which no
+    # caller's except clause named, so it escaped `POST /reload` as a bare
+    # 500 (review, 2026-08-20). ValueError is what Collection.load already
+    # converts to CacheUnusable. Non-dict *entries* are dropped like stale
+    # versions: `v.get` is the next line to crash on them.
+    if not isinstance(raw, dict):
+        raise ValueError(f"{p}: pose cache must be a JSON object, "
+                         f"got {type(raw).__name__}")
+    fresh = {k: v for k, v in raw.items()
+             if isinstance(v, dict) and v.get("v") == POSE_CACHE_VERSION}
     if len(fresh) < len(raw):
         print(f"pose cache: {len(raw) - len(fresh)} of {len(raw)} entries predate "
               f"v{POSE_CACHE_VERSION} and will be re-resolved")
@@ -258,9 +272,14 @@ def pose_is_sufficient(entry):
     if entry["source"] == "vlm":
         return True
     # `arbitrated: false` means the arbiter was asked and the answer never
-    # arrived *yet* — a rate limit, or a cancellation on an abort. That is a
-    # miss, because the entry is the ensemble's answer standing in for one
-    # that was wanted, and nothing else would ever ask again (2026-08-19).
+    # arrived *yet* — a transient failure (rate limit, network, 5xx), or a
+    # cancellation/abandonment on an abort. That is a miss, because the entry
+    # is the ensemble's answer standing in for one that was wanted, and
+    # nothing else would ever ask again (2026-08-19). It is a miss for a
+    # *later* run only: the driver's re-route of a just-folded answer passes
+    # `settled=True` to `route`, or a rate-limited call would re-render and
+    # re-bill in a loop within the run that just failed to arbitrate it
+    # (review, 2026-08-20).
     # A hard failure is deliberately not false: it leaves the key absent, so a
     # request the API rejects on its merits is cached once rather than re-paid
     # on every future run.
@@ -287,14 +306,21 @@ def entry_up(entry):
     malformed entry cannot crash a load) and `collection.pose_of` (so it
     cannot fail a whole query response). `load_pose_cache` filters on `v` and
     checks no shape at all, and pose-cache.json is hand-editable — the two
-    that turn up are a missing `up` and a null one."""
+    that turn up are a missing `up` and a null one.
+
+    Finite and non-zero as well as three floats: `rotation_to_z_up` raises on
+    a zero or NaN vector (json.loads accepts a bare `NaN` literal), and both
+    callers exist so that a malformed entry degrades to "no pose" instead of
+    failing a load or a whole query response (review, 2026-08-20)."""
     if not entry:
         return None
     try:
         up = tuple(float(x) for x in entry["up"])
     except (KeyError, TypeError, ValueError):
         return None
-    return up if len(up) == 3 else None
+    if len(up) != 3 or not all(np.isfinite(v) for v in up) or not any(up):
+        return None
+    return up
 
 
 FORCED_UPS = {"z": (0.0, 0.0, 1.0), "y": (0.0, 1.0, 0.0)}
@@ -596,12 +622,21 @@ def _ask_ollama(png_bytes, n_tiles, model):
 
 
 def _ask_claude(sheet_path, n_tiles):
-    out = subprocess.run(
-        ["claude", "-p", f"Read the image at {sheet_path}. {UP_PROMPT}",
-         "--output-format", "json", "--max-turns", "3"],
-        capture_output=True, text=True, timeout=180)
+    # Failures raise VLMUnavailable rather than flattening to None: the CLI
+    # never judged the request, so its timeouts, non-zero exits and a missing
+    # binary are all the retry split's transient side — flattened, they were
+    # indistinguishable from an unparseable answer, and a raised TimeoutExpired
+    # took `_fold`'s permanent branch (review, 2026-08-20).
+    try:
+        out = subprocess.run(
+            ["claude", "-p", f"Read the image at {sheet_path}. {UP_PROMPT}",
+             "--output-format", "json", "--max-turns", "3"],
+            capture_output=True, text=True, timeout=180)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        raise VLMUnavailable(f"claude CLI: {e}") from e
     if out.returncode != 0:
-        return None
+        raise VLMUnavailable(
+            f"claude CLI exited {out.returncode}: {out.stderr.strip()[:200]}")
     return parse_tile_answer(json.loads(out.stdout).get("result", ""), n_tiles)
 
 
@@ -644,13 +679,27 @@ def gcloud_token(ttl=1800):
     return _token_cache["token"]
 
 
-class RateLimited(RuntimeError):
+class VLMUnavailable(RuntimeError):
+    """The call failed without the API ever judging the request: a network
+    drop, a socket timeout, an HTTP 5xx, a CLI that timed out or would not
+    start.
+
+    Its own type because it is the retry rule's transient side: `_fold`
+    records these `arbitrated=False` (ask again on a later run), where a
+    request the API rejects on its merits leaves the key absent (a retry
+    cannot succeed and would pay a call per run forever). The split used to
+    be RateLimited-vs-everything, which put the most common transient
+    failures — a mid-run network blip, a 502 — on the permanent side
+    (review, 2026-08-20)."""
+
+
+class RateLimited(VLMUnavailable):
     """The VLM said "later" (HTTP 429/503), not "no".
 
-    Its own type because the handling differs in kind: a malformed request
-    should fail fast and let the geometry answer stand, while a quota refusal
-    should wait, since the next call from the same pool will hit the same
-    limit."""
+    Its own subtype because the handling differs again: any `VLMUnavailable`
+    is worth re-asking next run, but a quota refusal should also *wait*
+    before this call's own retry, since the next call from the same pool
+    will hit the same limit."""
 
 
 # Waits before each retry after a rate-limit refusal. Two attempts, so one
@@ -663,6 +712,7 @@ VLM_BACKOFF = [5.0, 20.0]
 def _ask_gemini(png_bytes, n_tiles, model, project=None):
     """Vertex AI arbiter. Raw HTTPS rather than an SDK: one POST, no dependency,
     and the same call the eval harness measured at 43/44 standalone."""
+    import http.client
     import urllib.error
     import urllib.request
 
@@ -690,7 +740,16 @@ def _ask_gemini(png_bytes, n_tiles, model, project=None):
         # Vertex quota and the un-paced pool turned it into a storm).
         if e.code in (429, 503):
             raise RateLimited(detail) from e
+        # any other 5xx is the server failing, not the request being judged —
+        # transient like a network drop, without 429/503's backoff
+        if e.code >= 500:
+            raise VLMUnavailable(detail) from e
         raise RuntimeError(detail) from e
+    except (OSError, http.client.HTTPException) as e:
+        # URLError and socket timeouts are OSErrors; a mid-read protocol error
+        # is HTTPException. None of them is the API saying "no", so none may
+        # land on the permanent side of the retry split (review, 2026-08-20).
+        raise VLMUnavailable(f"network failure: {e}") from e
     parts = d["candidates"][0]["content"]["parts"]
     return parse_tile_answer("".join(p.get("text", "") for p in parts), n_tiles)
 
@@ -712,7 +771,9 @@ def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None
     because the failures deserve different records, and the *type* is the only
     thing that distinguishes them by the time the answer is folded:
 
-    * `RateLimited` — worth asking again on a later run;
+    * `VLMUnavailable` (including `RateLimited`, which additionally backs off
+      here) — the API never judged the request: worth asking again on a
+      later run;
     * anything else — a request the API rejects on its merits, which cannot
       succeed on a retry and would pay a call per run forever.
 
@@ -766,12 +827,30 @@ def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None
                 sheet.save(buf, format="PNG")
                 idx = _ask_gemini(buf.getvalue(), len(tiles), vlm_model, project)
             else:  # claude
-                sheet_path = Path(scratch_dir) / "pose-sheet.png"
-                sheet.save(sheet_path)
-                idx = _ask_claude(sheet_path, len(tiles))
+                # A unique name per call: the arbiter pool runs 4+ of these
+                # concurrently against one scratch_dir, and a shared filename
+                # let worker B's save land between A's save and A's subprocess
+                # read — A's model silently judged on B's renders, stamped
+                # `source: vlm` and never revisited (review, 2026-08-20).
+                # gemini/ollama hand bytes over in memory and never had the
+                # window.
+                fd, name = tempfile.mkstemp(prefix="pose-sheet-", suffix=".png",
+                                            dir=scratch_dir)
+                os.close(fd)
+                sheet_path = Path(name)
+                try:
+                    sheet.save(sheet_path)
+                    idx = _ask_claude(sheet_path, len(tiles))
+                finally:
+                    sheet_path.unlink(missing_ok=True)
         except RateLimited as e:
             backoff = VLM_BACKOFF[min(attempt, len(VLM_BACKOFF) - 1)]
             print(f"  pose VLM rate-limited ({backend}), waiting {backoff:g}s: {e}")
+            last_error, idx = e, None
+        except VLMUnavailable as e:
+            # transient but not a quota signal: retry at once, and carry the
+            # type so a last-attempt failure is recorded as retryable
+            print(f"  pose VLM unavailable ({backend}): {e}")
             last_error, idx = e, None
         except Exception as e:
             print(f"  pose VLM error ({backend}): {e}")

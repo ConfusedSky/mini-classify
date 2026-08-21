@@ -212,13 +212,21 @@ actually submitted to the arbiter, so it means "retry this one" about a
 specific model where absent means nothing. Written only when known, so no
 `POSE_CACHE_VERSION` bump and no effect on older readers.
 
-**What is still not done: `pose_is_sufficient` does not read it.** An entry
-with `arbitrated: false` is still a cache hit, so nothing re-escalates on its
-own. Making *only `false`* a miss is a one-line change and — because of the
-tri-state — **no longer carries a bill**: legacy entries have no key, so they
-are untouched, and only genuine refusals recorded from 2026-08-19 onward
-re-escalate. It was left out of that commit to keep recording a fact separate
-from changing retry behaviour, not because it is expensive any more.
+**Done since 2026-08-19: `pose_is_sufficient` reads it.** *Only* an explicit
+`false` is a miss, so legacy entries (no key) are untouched and re-escalation
+carries no bill — genuine refusals recorded from 2026-08-19 onward re-ask on
+their next run. Two things a later review (2026-08-20) had to add before the
+flip was safe to ship, both worth knowing at rebuild time:
+
+* the miss applies to a **later run only** — the driver's re-route of a
+  just-folded answer passes `settled=True` to `route`, because re-checking
+  sufficiency in the same run turned every rate-limited call into an
+  unbounded re-render/re-bill loop;
+* the transient side of the split is `pose.VLMUnavailable`, not just
+  `RateLimited`: network drops, HTTP 5xx and CLI timeouts also record
+  `false`, and `settle` records `false` for the in-flight calls it abandons
+  at Ctrl-C. Only a request the API judged on its merits (a 4xx) leaves the
+  key absent.
 
 ## Not on this list
 

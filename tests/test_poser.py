@@ -245,6 +245,12 @@ def test_arbitrated_separates_a_confirmation_from_a_refusal():
     assert fold(result=3) == ("vlm", True)          # moved
     assert fold(result=0) == ("geometry", True)     # confirmed — the new fact
     assert fold(exc=pose.RateLimited("HTTP 429")) == ("geometry", False)  # refused
+    # any transient failure is the same fact as a rate limit here: the API
+    # never judged the request, so the answer is still worth asking for. The
+    # split used to be RateLimited-vs-everything, which recorded a mid-run
+    # network blip as permanent (review, 2026-08-20)
+    assert fold(exc=pose.VLMUnavailable("network failure: timed out")) == \
+        ("geometry", False)
     # a request the API rejects on its merits cannot succeed on a retry, so it
     # leaves the key absent rather than re-escalating forever (2026-08-19)
     assert fold(exc=RuntimeError("HTTP 400")) == ("geometry", None)
@@ -289,6 +295,7 @@ def test_the_real_call_path_maps_each_failure_to_its_own_record(monkeypatch):
 
     assert outcome(ret=2) is True                          # answered
     assert outcome(exc=pose.RateLimited("HTTP 429")) is False   # retry later
+    assert outcome(exc=pose.VLMUnavailable("HTTP 502")) is False  # retry later
     assert outcome(exc=RuntimeError("HTTP 400")) is None    # cannot succeed
     # an unparseable answer stays retryable — a judgement, not a leftover
     assert outcome(ret=None) is False
@@ -433,11 +440,20 @@ def test_fold_done_folds_only_already_resolved_futures():
 
 
 def test_settle_timeout_abandons_to_the_ensemble_pose():
+    """Abandonment keeps the park-time pose — and re-records it
+    `arbitrated=False`, because "asked, answer never arrived" is exactly the
+    tri-state's retry case. Without the record the abandoned call was on disk
+    indistinguishable from "never asked", so a Ctrl-C landing on in-flight
+    calls silently pinned each one to its ensemble answer forever (review,
+    2026-08-20)."""
     poser, done, arb = make_poser(**ESCALATE)
     feed(poser)                            # future never answers
     assert poser.settle(0.05) == 1         # the abort's closing count
     assert not poser.parked
-    assert len(done.poses) == 1            # park-time record is the floor
+    assert len(done.poses) == 2            # park-time floor + the retry record
+    assert done.poses[-1][2].source == "geometry"   # the park-time answer stands
+    assert done.poses[-1][2].arbitrated is False    # ...and will be asked again
+    assert not pose.pose_is_sufficient(done.poses[-1][2].to_cache())
 
 
 def test_settle_waits_out_and_folds_an_in_flight_answer():
@@ -458,10 +474,11 @@ def test_settle_skips_cancelled_futures():
     arb.futures[0].cancel()
     assert poser.settle(0.05) == 1         # only the unanswered one abandons
     assert not poser.parked
-    # 7 is re-recorded as un-arbitrated; the count stays 1 because a cancelled
-    # fold records and still returns None, which is what settle counts on
-    assert [i for _, i, _ in done.poses] == [7, 8, 7]
-    assert done.poses[-1][2].arbitrated is False
+    # both are re-recorded as un-arbitrated — 7 by the cancelled fold (which
+    # records and still returns None, what settle counts on), 8 by the
+    # abandonment record (review, 2026-08-20); only 8 is *counted*
+    assert [i for _, i, _ in done.poses] == [7, 8, 7, 8]
+    assert all(p.arbitrated is False for _, i, p in done.poses[2:])
 
 
 def test_fold_done_drops_cancelled_futures_uncounted():
