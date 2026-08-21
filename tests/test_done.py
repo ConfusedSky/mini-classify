@@ -424,7 +424,9 @@ def test_flush_idempotent_one_replace_each(tmp_path, monkeypatch):
     rig.done.flush()
     assert len(calls) == 2                         # idempotent: replayed, not skipped
     assert flush_bytes(rig) == first               # identical bytes both times
-    assert not (Path(rig.ctx.args.cache_dir) / "pose-cache.json.tmp").exists()
+    # write_atomic's temp names are unique per write, so strand-checking is a
+    # glob rather than one fixed name (review, 2026-08-20)
+    assert not list(Path(rig.ctx.args.cache_dir).glob("pose-cache.json*.tmp"))
 
 
 def test_flush_pose_cache_byte_parity_with_save_pose_cache(tmp_path):
@@ -487,7 +489,7 @@ def test_flush_writes_csv_even_when_pose_cache_fails(tmp_path, monkeypatch):
     assert ei.value.errno == 28                    # the pose failure propagates
     cache = Path(rig.ctx.args.cache_dir)
     assert not (cache / "pose-cache.json").exists()
-    assert not (cache / "pose-cache.json.tmp").exists()          # E-R1-3
+    assert not list(cache.glob("pose-cache.json*.tmp"))          # E-R1-3
     # every finished row is on disk regardless
     with open(rig.ctx.args.out, newline="") as fh:
         written = list(csv.DictReader(fh))
@@ -509,7 +511,7 @@ def test_flush_last_failure_reraises_after_both_writes_tried(tmp_path, monkeypat
         rig.done.flush()
     assert isinstance(ei.value.__context__, OSError)
     assert ei.value.__context__.errno == 28
-    assert not (Path(rig.ctx.args.cache_dir) / "pose-cache.json.tmp").exists()
+    assert not list(Path(rig.ctx.args.cache_dir).glob("pose-cache.json*.tmp"))
 
 
 def test_flush_empty_rows_writes_header_only(tmp_path):

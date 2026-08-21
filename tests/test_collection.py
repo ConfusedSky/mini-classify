@@ -440,6 +440,8 @@ def _mangle(tmp_path, files, root, ident_of, change):
     {"up": None},                       # not iterable
     {"up": [0.0, 0.0]},                 # wrong length
     {"up": ["x", "y", "z"]},            # not numbers
+    {"up": [0.0, 0.0, 0.0]},            # no rotation takes nothing to +Z
+    {"up": [float("nan"), 0.0, 1.0]},   # json.loads accepts a bare NaN
     "drop-up",                          # missing key -> KeyError
 ])
 def test_an_unusable_up_does_not_break_the_load(tmp_path, change):
@@ -461,7 +463,14 @@ def test_an_unusable_up_does_not_break_the_load(tmp_path, change):
     assert c.pose_of(0) is not None                      # the survivor is fine
 
 
-@pytest.mark.parametrize("change", [{"up": None}, {"up": [0.0, 0.0]}, "drop-up"])
+@pytest.mark.parametrize("change", [
+    {"up": None}, {"up": [0.0, 0.0]}, "drop-up",
+    # zero and NaN pass a float/length check but blow up in rotation_to_z_up,
+    # which raised out of `pose_of` and 500ed the whole /query response — one
+    # hand-edited entry against the very promise this test names (review,
+    # 2026-08-20)
+    {"up": [0.0, 0.0, 0.0]}, {"up": [float("nan"), 0.0, 1.0]},
+])
 def test_pose_of_returns_null_for_a_malformed_entry(tmp_path, change):
     """The other half: an entry that is malformed *after* the row was indexed
     — the cache edited under a running server — must yield a null pose rather
@@ -489,6 +498,42 @@ def test_a_null_confidence_keeps_the_pose_and_defaults_the_number(tmp_path):
 
 
 # --- the cache itself -------------------------------------------------------
+
+def test_a_corrupt_run_params_is_cache_unusable_not_a_crash(tmp_path):
+    """`cache_root` json.loads run-params.json, and it ran *before* the
+    CacheUnusable boundary — so a torn manifest escaped `POST /reload` as a
+    bare JSONDecodeError 500 while `/status` kept reporting the stale success
+    (review, 2026-08-20)."""
+    args, *_ = build(tmp_path, ["a/one.stl"])
+    (Path(args.cache_dir) / "run-params.json").write_text("{ torn")
+    with pytest.raises(CacheUnusable):
+        Collection.load(args)
+
+
+@pytest.mark.parametrize("content", ["[]", "null", '"poses"'])
+def test_a_non_object_pose_cache_is_cache_unusable(tmp_path, content):
+    """A list- or null-shaped pose-cache.json raised AttributeError from
+    `raw.items()`, which no except clause named (review, 2026-08-20). The
+    file is hand-editable; its shape is a state of the cache, not a bug."""
+    args, *_ = build(tmp_path, ["a/one.stl"])
+    (Path(args.cache_dir) / "pose-cache.json").write_text(content)
+    with pytest.raises(CacheUnusable):
+        Collection.load(args)
+
+
+def test_a_null_pose_entry_is_dropped_like_a_stale_one(tmp_path):
+    """One bad *entry* costs one model, never the load: a null value crashed
+    `v.get("v")` before it could be filtered (review, 2026-08-20)."""
+    args, root, files = build(tmp_path, ["a/one.stl", "a/two.stl"])
+    cache = Path(args.cache_dir) / "pose-cache.json"
+    entries = json.loads(cache.read_text())
+    entries[pose.file_identity(files["a/one.stl"], root)] = None
+    cache.write_text(json.dumps(entries))
+
+    c = Collection.load(args)                            # must not raise
+    assert len(c.files) == 1 and c.missing == 1
+    assert c.files[0].name == "two.stl"
+
 
 def test_an_empty_cache_raises_instead_of_exiting_the_process(tmp_path):
     """`embed_store` raises SystemExit, which is a BaseException and walks

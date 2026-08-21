@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import csv
 import json
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -46,7 +45,7 @@ from src.instrument import stage
 # piece of cache identity rather than scoring — its home is the module that
 # owns the cache layout, so the CLI and the read-only tools can name a view
 # config without importing a module that loads torch.
-from src.cachedir import view_config
+from src.cachedir import view_config, write_atomic
 from src.identity import cache_key_from_identity
 from src.messages import (
     CacheContext,
@@ -234,15 +233,10 @@ class Done:
             if args.up_axis == "auto" and args.cache_dir:  # main:classify_stls.py:1255
                 p = Path(args.cache_dir) / "pose-cache.json"
                 p.parent.mkdir(parents=True, exist_ok=True)
-                tmp = p.with_name(p.name + ".tmp")
-                try:
-                    tmp.write_text(json.dumps(self.poses))   # byte-parity with
-                    os.replace(tmp, p)                       # save_pose_cache
-                finally:
-                    # a successful replace already consumed it; a failed one
-                    # would otherwise strand a half-written cache next to the
-                    # real file
-                    tmp.unlink(missing_ok=True)
+                # cachedir.write_atomic: unique temp name + finally-unlink,
+                # the one copy of the idiom (review, 2026-08-20); the JSON
+                # itself keeps byte-parity with save_pose_cache
+                write_atomic(p, json.dumps(self.poses))
         finally:
             with open(args.out, "w", newline="") as fh:      # :1263-1266
                 writer = csv.DictWriter(fh, fieldnames=CSV_FIELDS)

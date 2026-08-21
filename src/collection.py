@@ -222,35 +222,41 @@ class Collection:
         before the walk rather than after it: the walk's own failure mode is a
         silent zero-file result that reads as an empty cache."""
         inp = Path(args.input)
-        root = cache_root(inp, args.cache_dir, confirm=False)
-        cls._require_volume(root, inp, args.cache_dir)
-        # Both of these exit the process on failure, which is right for a CLI
-        # and wrong inside a request handler — see `CacheUnusable`. The version
-        # guard is the one every other cache consumer calls
+        # Everything that reads the cache runs inside one boundary. The two
+        # SystemExit raisers exit the process on failure, which is right for a
+        # CLI and wrong inside a request handler — see `CacheUnusable`. The
+        # version guard is the one every other cache consumer calls
         # (classify_stls.py, test_categories.py): without it a cache written
         # under an older key scheme misses on every lookup and reports
         # "run classify_stls.py first", when the fix is migrate_cache_keys.
+        # `cache_root` (a json.loads of run-params.json) and the pose-cache
+        # load sat *outside* the try, so a corrupt run-params.json or a
+        # list-shaped pose-cache.json escaped `POST /reload` as a bare 500
+        # with `/status` still reporting the stale success — the exact
+        # regression this conversion exists to prevent (review, 2026-08-20).
+        # `_require_volume`'s VolumeUnavailable is none of the caught types
+        # and propagates as itself.
         try:
+            root = cache_root(inp, args.cache_dir, confirm=False)
+            cls._require_volume(root, inp, args.cache_dir)
             require_cache_version(args.cache_dir)
             scanned = load_file_list(inp, args.cache_dir, args.rescan)
             matrix, files, missing = load_embedding_matrix(scanned, args, root)
+            poses = pose.load_pose_cache(args.cache_dir)
         except SystemExit as e:
             text = str(e)
             hint = next((ln.strip() for ln in text.splitlines()
                          if ln.strip().startswith("run:")), None)
             raise CacheUnusable(text.split("\n")[0], hint) from e
         except (ValueError, OSError) as e:
-            # A corrupt or unreadable cache file — a truncated walk cache
-            # raises JSONDecodeError (a ValueError) — is "the cache cannot
-            # answer", not a programming error. Without this it reached a
-            # request handler as a bare 500 with no envelope, since
-            # `post_reload` catches only this module's own errors (review,
-            # 2026-08-19). A TypeError still escapes, which is right: that
-            # would be a bug here rather than a state of the cache.
+            # A corrupt or unreadable cache file — a truncated walk cache or
+            # a non-object pose cache raises JSONDecodeError or ValueError —
+            # is "the cache cannot answer", not a programming error. A
+            # TypeError still escapes, which is right: that would be a bug
+            # here rather than a state of the cache.
             raise CacheUnusable(f"unreadable cache in {args.cache_dir}: {e}",
                                 "run: classify_stls.py --rescan to rebuild "
                                 "the file list") from e
-        poses = pose.load_pose_cache(args.cache_dir)
         return cls(args, root, files, scanned, matrix, poses, missing)
 
     @classmethod

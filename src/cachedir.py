@@ -40,6 +40,7 @@ import hashlib
 import json
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -51,6 +52,13 @@ from src.identity import (DEFAULT_ELEVATIONS, DEFAULT_MODEL,
 # Cache layout.
 EMBEDS_SUBDIR = "embeds"
 RENDERS_SUBDIR = "renders"
+
+# The process umask, for `write_atomic`'s chmod. Read once at import — the
+# only way to read it is the set-and-restore dance, which is a race the
+# moment a second thread runs, and this module is imported at process start
+# while the server and the classifier are still single-threaded.
+_UMASK = os.umask(0)
+os.umask(_UMASK)
 
 
 def view_config(args):
@@ -115,6 +123,38 @@ def render_index(rdir):
 # writes are the names `render_index` above parses.
 
 
+def write_atomic(path, text):
+    """Publish `text` at `path` so no reader ever sees a partial file.
+
+    The one copy of the temp-then-`os.replace` idiom, because the two
+    hand-rolled copies here each got half of it wrong (review, 2026-08-20):
+
+    * a **unique** temp name per writer, via mkstemp. A fixed `.tmp` beside
+      the target let two concurrent writers — `classify_stls.py` and a
+      `POST /reload {"rescan": true}` handler derive the same walk-cache
+      path — truncate each other's live handle and publish NUL-padded
+      invalid JSON, the very torn file the idiom exists to prevent (and the
+      loser's `os.replace` then raised FileNotFoundError);
+    * the **finally-unlink** `Done.flush` has: a write that dies half-way
+      (ENOSPC, Ctrl-C) must not strand a `.tmp` beside the real file. After
+      a successful replace the unlink is a no-op — the name is gone.
+
+    mkstemp opens 0600; the chmod restores exactly what a plain `write_text`
+    would have produced — 0666 under the process umask, read at import
+    (`_UMASK`), not a hardcoded 0644 that would silently widen files for
+    anyone running under 077 (review follow-up, 2026-08-21)."""
+    path = Path(path)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".",
+                               suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(text)
+        os.chmod(tmp, 0o666 & ~_UMASK)
+        os.replace(tmp, path)
+    finally:
+        Path(tmp).unlink(missing_ok=True)
+
+
 def find_stls(root):
     found = []
     for dirpath, dirnames, filenames in os.walk(root):
@@ -149,15 +189,14 @@ def load_file_list(inp, cache_dir, rescan=False):
     files = find_stls(inp)
     if walk_cache:
         walk_cache.parent.mkdir(parents=True, exist_ok=True)
-        # temp + os.replace, the same treatment `Done.flush` gives the pose
-        # cache. It matters more since `POST /reload {"rescan": true}` writes
-        # this from a request handler while `classify_stls.py` may be writing
-        # it too: a torn file is not merely a stale list, it is a
-        # JSONDecodeError on every subsequent read (review, 2026-08-19).
-        tmp = walk_cache.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(
+        # Atomic because `POST /reload {"rescan": true}` writes this from a
+        # request handler while `classify_stls.py` may be writing it too: a
+        # torn file is not merely a stale list, it is a JSONDecodeError on
+        # every subsequent read (review, 2026-08-19). `write_atomic` is what
+        # makes the concurrent-writer case actually safe — the first version
+        # here shared one fixed `.tmp` name between the racers.
+        write_atomic(walk_cache, json.dumps(
             {"scanned": time.time(), "files": [str(f) for f in files]}))
-        os.replace(tmp, walk_cache)
     return files
 
 
@@ -254,7 +293,12 @@ def cache_version(cache_dir):
     cache the first route to fail on one (2026-08-19). Reading corrupt as
     unstamped is the safe direction: `require_cache_version` then refuses a
     populated cache rather than accepting keys it cannot vouch for, which is
-    the same call it makes for a genuinely unstamped one (S2)."""
+    the same call it makes for a genuinely unstamped one (S2). Caching
+    disabled is 0 too — `Path("")` would otherwise quietly read
+    `./cache-meta.json` from whatever directory the process happens to run
+    in (review, 2026-08-20)."""
+    if not cache_dir:
+        return 0
     p = Path(cache_dir) / CACHE_META_FILE
     if not p.exists():
         return 0
@@ -265,18 +309,16 @@ def cache_version(cache_dir):
 
 
 def stamp_cache_version(cache_dir):
-    # temp + os.replace, like the walk cache and the pose cache: a torn stamp
-    # reads as version 0, which refuses a cache that was in fact current
+    # atomic like the walk cache and the pose cache: a torn stamp reads as
+    # version 0, which refuses a cache that was in fact current
     d = Path(cache_dir)
     d.mkdir(parents=True, exist_ok=True)
-    tmp = d / (CACHE_META_FILE + ".tmp")
-    tmp.write_text(json.dumps({
+    write_atomic(d / CACHE_META_FILE, json.dumps({
         "cache_version": CACHE_VERSION,
         # informational only, never compared — see the CACHE_VERSION note
         "cache_key_format": "sha1(rel|mtime|size|views|render_size|up_token"
                             "|model|pv[|e:...][|compiled][|evN])",
     }, indent=2))
-    os.replace(tmp, d / CACHE_META_FILE)
 
 
 def require_cache_version(cache_dir):
@@ -379,7 +421,10 @@ def save_run_params(args):
         k: v for k, v in params.items() if v is not None}
     p = Path(args.cache_dir) / RUN_PARAMS_FILE
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(params, indent=2))
+    # atomic like every other cache-describing file: `cache_root` json.loads
+    # this from a request handler, and W5's own test tears it to prove a torn
+    # manifest is reachable (review follow-up, 2026-08-21)
+    write_atomic(p, json.dumps(params, indent=2))
 
 
 def apply_run_params(parser):
