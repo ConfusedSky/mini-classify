@@ -124,33 +124,42 @@ class ServerState:
         silently reverted the fresher post-rescan collection the 200 had just
         promised (review, 2026-08-20). The generation check is the fix: any
         reload that wrote state bumps it (`supersede_warm`, failure included),
-        and a warm finding from before the bump is stale by definition. That
-        guards all three writes here, each against its own erasure:
+        and a warm finding from before the bump is stale by definition. Each
+        write here is guarded against its own erasure:
 
-        * the collection bind, against reverting a successful reload's;
         * the tail's `load_error = None`, against erasing a *failed* mid-warm
           reload's record — with a `VolumeUnavailable` erased, `/status` went
           back to `present: true, failure: null` off warm's collection while
           the drive was gone, the exact 2026-08-19 invariant `volume_of`
           exists to hold (reproduced, review follow-up 2026-08-21);
         * the except arm, the same erasure mirrored — a warm failure landing
-          after a successful reload must not mark a healthy server broken.
+          after a successful reload must not mark a healthy server broken;
+        * the collection bind, against reverting a successful reload's — and
+          only that, which is why it also binds when *nothing* is bound,
+          whatever the generation says. A failed reload binds no collection,
+          so an empty slot means this read is the only collection in
+          existence and publishing it reverts nothing. Discarding it cost the
+          server every query until the next reload, to protect a finding
+          `load_error` carries anyway: a *serving* process keeps its old
+          collection bound through exactly this failure (`post_reload`'s
+          409), and `volume_of` reports the drive gone over a bound
+          collection rather than by unbinding one (review follow-up,
+          2026-08-21).
 
-        A collection warm loaded while a reload *failed* is discarded with
-        the rest: the reload's read is the more recent finding about the
-        cache, and the operator's retry — not a bind racing it — is the
-        recovery. `load_embed` is stashed first, so `/reload` can retry a
-        failed SigLIP load — this thread is one-shot and was the only thing
-        that ever ran it. The embed bind itself is *not* generation-guarded:
-        the model is process state, not a cache finding, and a resident model
-        is right under any generation."""
+        `load_embed` is stashed first, so `/reload` can retry a failed SigLIP
+        load — this thread is one-shot and was the only thing that ever ran
+        it. The embed bind itself is *not* generation-guarded: the model is
+        process state, not a cache finding, and a resident model is right
+        under any generation."""
         self._load_embed = load_embed
         gen = self._generation
+        bound = False
         try:
             fresh = load_collection()
             with self.bind:
-                if self._generation == gen:
+                if self._generation == gen or self.collection is None:
                     self.collection = fresh
+                    bound = True
             with self.embed_loading:
                 # a mid-warm /reload may have run the retry path already;
                 # a second SigLIP load would only double the wait
@@ -159,8 +168,12 @@ class ServerState:
                     with self.bind:
                         self.embed, self.model, self.device = embed, model, device
             with self.bind:
-                if self._generation == gen:
+                # `loaded_at` follows the bind, not the generation: it
+                # describes the collection that is actually bound, and a
+                # successful mid-warm reload stamped its own
+                if bound:
                     self.loaded_at = time.time()
+                if self._generation == gen:
                     self.load_error = None
         except Exception as e:              # noqa: BLE001 - reported, not swallowed
             with self.bind:

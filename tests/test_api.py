@@ -515,10 +515,18 @@ def test_a_finished_warmup_does_not_erase_a_failed_reloads_record(tmp_path):
                lambda: (stub_embed(), "stub-model", "cpu"))
     assert state.load_error is not None    # warm did not erase the finding
     assert client.get("/status").json()["failure"]["kind"] == "CacheUnusable"
-    # and the collection warm read before the tear is discarded with the rest:
-    # the failed reload's read is the more recent finding about the cache, so
-    # the recovery is the operator's retry, not a bind racing it
-    assert state.collection is None
+    # ...and keeping the finding does not cost the collection: the failed
+    # reload bound nothing, so warm's read is the only one there is and
+    # publishing it reverts nothing. Discarding it left the server answering
+    # 503 to every query until someone reloaded again, where a *serving*
+    # process survives the identical failure with its old collection bound
+    # (the 409 arm). The failure is still reported over it.
+    assert state.collection is loadable
+    assert state.ready
+    assert client.post("/query", json={"text": "x"}).status_code == 200
+    s = client.get("/status").json()
+    assert s["failure"]["kind"] == "CacheUnusable"
+    assert s["loaded_at"] is not None      # ready with no load time is no state
 
 
 def test_a_late_warm_failure_does_not_clobber_a_successful_reload(tmp_path):
