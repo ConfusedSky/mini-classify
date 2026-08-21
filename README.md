@@ -65,8 +65,10 @@ refusal until you do:
 ```
 
 It answers `/status` immediately with `ready: false` and serves queries once
-SigLIP is resident (~16 s on the development machine); `/query` and `/similar`
-return 503 in between, so a consumer can tell warming from not-running.
+SigLIP is resident (16.0 s measured against `embed-cache2`, 2801 models,
+SigLIP on the 4060 — the model load is nearly all of it; LEARNINGS,
+2026-08-19); `/query` and `/similar` return 503 in between, so a consumer can
+tell warming from not-running.
 
 Four routes over the same code the REPL uses — `GET /status`, `POST /query`,
 `POST /similar`, `POST /reload`. It is loopback-only and unauthenticated by

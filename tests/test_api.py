@@ -197,6 +197,27 @@ def test_an_unknown_pool_is_rejected_by_the_schema(tmp_path):
     assert client.post("/query", json={"text": "x", "pool": "meen"}).status_code == 422
 
 
+def test_an_unscoped_query_scores_the_matrix_itself_not_a_copy(tmp_path, monkeypatch):
+    """The full-collection scope must hand `score` the matrix, not a
+    fancy-indexed copy — ~206 MB per request on embed-cache2, 3-4x the
+    scoring matmul (review, 2026-08-20). Pinned by identity, which is the
+    argument the shortcut rests on: rows == arange means the slice IS the
+    matrix. A scoped query still slices."""
+    from src import query
+    client, _, c = serve(tmp_path)
+    seen, real_score = [], query.score
+
+    def watching(matrix, text_T, pool):
+        seen.append(matrix)
+        return real_score(matrix, text_T, pool)
+
+    monkeypatch.setattr(query, "score", watching)
+    client.post("/query", json={"text": "x"})
+    assert seen[0] is c.matrix                       # identity, not equality
+    client.post("/query", json={"text": "x", "path": "a"})
+    assert seen[1] is not c.matrix and seen[1].shape[0] == 2
+
+
 def test_the_text_forward_is_serialised(tmp_path):
     """The threadpool means handlers really do run at once, and ollama and
     SigLIP cannot share the card. The lock covers the forward and not the
@@ -320,40 +341,202 @@ def test_status_stops_claiming_the_volume_after_a_reload_finds_it_gone(tmp_path)
     client, state, c = serve(tmp_path, layout=["a/one.stl"])
     shutil.rmtree(c.root)
 
-    assert client.post("/reload", json={}).status_code == 503
+    assert client.post("/reload", json={}).status_code == 409
     s = client.get("/status").json()
     assert s["volume"]["present"] is False               # not the stale true
     assert s["failure"]["kind"] == "VolumeUnavailable"
     assert client.post("/query", json={"text": "x"}).status_code == 200  # still serves
 
 
-def test_a_corrupt_cache_reloads_as_503_not_500(tmp_path):
-    """Every way a reload can fail must produce the one 503 envelope. A torn
-    walk cache raised JSONDecodeError past `post_reload`'s catch and became a
-    bare 500 with a plain-text body (review, 2026-08-19)."""
+def test_a_corrupt_cache_reload_is_enveloped_never_a_bare_500(tmp_path):
+    """Every way a reload can fail must be enveloped. A torn walk cache raised
+    JSONDecodeError past `post_reload`'s catch and became a bare 500 with a
+    plain-text body (review, 2026-08-19). On a *serving* process the envelope
+    is the 409 reload-failure shape — 503 with `ready: true` inside was a
+    self-contradiction the consumer folded into its warming state (review,
+    2026-08-20)."""
     from pathlib import Path as P
     client, state, first = serve(tmp_path)
     next(P(state.args.cache_dir).glob("walk-*.json")).write_text("")
 
     r = client.post("/reload", json={})
-    assert r.status_code == 503
-    assert set(r.json()["detail"]) == {"ready", "elapsed", "failure"}
+    assert r.status_code == 409
+    assert set(r.json()["detail"]) == {"reloaded", "ready", "failure"}
+    assert r.json()["detail"]["reloaded"] is False
+    assert r.json()["detail"]["ready"] is True        # and it says so honestly
     assert state.collection is first                  # still serving the old one
+    assert client.post("/query", json={"text": "x"}).status_code == 200
+
+
+def test_a_corrupt_run_params_or_pose_cache_is_enveloped_too(tmp_path):
+    """The two escapes the 2026-08-20 review found: `cache_root`'s json.loads
+    of run-params.json ran before the CacheUnusable boundary, and a
+    list-shaped pose-cache.json raised AttributeError from `raw.items()` —
+    both reached the client as bare 500s with `/status` reporting the stale
+    success."""
+    from pathlib import Path as P
+
+    client, state, first = serve(tmp_path)
+    params = P(state.args.cache_dir) / "run-params.json"
+    good = params.read_text()
+    params.write_text("{ torn")
+    assert client.post("/reload", json={}).status_code == 409
+    assert client.get("/status").json()["failure"]["kind"] == "CacheUnusable"
+
+    params.write_text(good)
+    (P(state.args.cache_dir) / "pose-cache.json").write_text("[]")
+    assert client.post("/reload", json={}).status_code == 409
     assert client.post("/query", json={"text": "x"}).status_code == 200
 
 
 def test_a_failed_reload_keeps_the_server_working(tmp_path):
     """A reload that cannot complete must not break a serving process: the old
-    collection stays bound and the failure is reported."""
+    collection stays bound and the failure is reported as a 409, not as the
+    503 the consumer reads as warming."""
     import shutil
     from src.cachedir import embeds_dir
     client, state, first = serve(tmp_path)
     shutil.rmtree(embeds_dir(state.args.cache_dir))
 
     r = client.post("/reload", json={})
-    assert r.status_code == 503
+    assert r.status_code == 409
     assert state.collection is first                  # unchanged
     assert client.post("/query", json={"text": "x"}).status_code == 200
+
+
+def test_a_failed_reload_on_an_unready_server_keeps_the_503_envelope(tmp_path):
+    """Not ready and cannot reload agree with each other: the 503 there is
+    true, and it is the shape the consumer's warming policy already parses."""
+    import shutil
+    args, root, _ = build(tmp_path, ["a/one.stl"])
+    shutil.rmtree(root)                                  # never loadable
+    state = ServerState(args, embed=stub_embed(), model="stub", device="cpu")
+    client = TestClient(create_app(state), raise_server_exceptions=False)
+
+    r = client.post("/reload", json={})
+    assert r.status_code == 503
+    assert set(r.json()["detail"]) == {"ready", "elapsed", "failure"}
+    assert r.json()["detail"]["ready"] is False
+
+
+def test_reload_does_not_erase_a_siglip_failure_it_cannot_repair(tmp_path):
+    """`post_reload` cleared `load_error` unconditionally while reloading only
+    the Collection — a failed SigLIP load was erased, nothing ever re-ran it,
+    and the one route built to explain a broken server answered
+    `ready: false, failure: null` forever (review, 2026-08-20). The reload
+    now retries the embed load; when that fails again, the failure stays
+    reported."""
+    args, root, _ = build(tmp_path, ["a/one.stl"])
+    state = ServerState(args)
+
+    def no_snapshot():
+        raise RuntimeError("no HF snapshot for stub-model")
+
+    client = TestClient(create_app(state), raise_server_exceptions=False)
+    state.warm(lambda: Collection.load(args), no_snapshot)
+    assert client.get("/status").json()["failure"] is not None
+
+    r = client.post("/reload", json={})
+    assert r.status_code == 200                       # the collection half worked
+    assert r.json()["ready"] is False                 # and the body says so
+    s = client.get("/status").json()
+    assert s["ready"] is False
+    assert s["failure"] is not None                   # not erased
+    assert "snapshot" in s["failure"]["reason"]
+
+
+def test_reload_is_the_retry_for_a_failed_siglip_load_too(tmp_path):
+    """`warm` is one-shot, so `/reload` is the only way the model ever gets a
+    second chance without a restart — the same story as the volume retry."""
+    args, root, _ = build(tmp_path, ["a/one.stl"])
+    state = ServerState(args)
+    attempts = []
+
+    def flaky_embed():
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise RuntimeError("CUDA out of memory")
+        return stub_embed(), "stub-model", "cpu"
+
+    client = TestClient(create_app(state), raise_server_exceptions=False)
+    state.warm(lambda: Collection.load(args), flaky_embed)
+    assert client.get("/status").json()["ready"] is False
+    assert client.post("/query", json={"text": "x"}).status_code == 503
+
+    r = client.post("/reload", json={})
+    assert r.status_code == 200 and r.json()["ready"] is True
+    assert client.get("/status").json()["failure"] is None
+    assert client.post("/query", json={"text": "x"}).status_code == 200
+
+
+def test_a_finished_warmup_does_not_revert_a_reload_that_landed_inside_it(tmp_path):
+    """`/reload` is reachable while warming — deliberately — and handlers run
+    concurrently with the warm thread, so a reload can finish inside `warm`'s
+    `load_collection()`. The unconditional assignment then reverted the
+    fresher post-rescan collection the 200 had just promised (review,
+    2026-08-20). Driven synchronously: the reload fires from inside warm's
+    loader, exactly the interleaving the generation counter exists for."""
+    args, root, _ = build(tmp_path, ["a/one.stl"])
+    stale = Collection.load(args)
+    state = ServerState(args)
+    client = TestClient(create_app(state), raise_server_exceptions=False)
+
+    def load_collection_with_reload_inside():
+        assert client.post("/reload", json={}).status_code == 200
+        return stale                       # warm's own, older result
+
+    state.warm(load_collection_with_reload_inside,
+               lambda: (stub_embed(), "stub-model", "cpu"))
+    assert state.collection is not stale   # the reload's newer instance stands
+    assert state.ready
+
+
+def test_a_finished_warmup_does_not_erase_a_failed_reloads_record(tmp_path):
+    """The residual W4-class hole (reproduced, review follow-up 2026-08-21):
+    warm's tail cleared `load_error` unconditionally, and a *failed* reload
+    did not bump the generation — so a reload failing during the warmup
+    window had its recorded failure erased when warm finished. With a
+    VolumeUnavailable erased, `/status` went back to `present: true,
+    failure: null` off warm's collection while the drive was gone — the
+    exact invariant `volume_of` exists to hold."""
+    from pathlib import Path as P
+    args, root, _ = build(tmp_path, ["a/one.stl"])
+    loadable = Collection.load(args)       # read while the cache is intact
+    state = ServerState(args)
+    client = TestClient(create_app(state), raise_server_exceptions=False)
+
+    def load_collection_with_failing_reload_inside():
+        (P(args.cache_dir) / "run-params.json").write_text("{ torn")
+        assert client.post("/reload", json={}).status_code == 503  # not ready yet
+        assert state.load_error is not None
+        return loadable
+
+    state.warm(load_collection_with_failing_reload_inside,
+               lambda: (stub_embed(), "stub-model", "cpu"))
+    assert state.load_error is not None    # warm did not erase the finding
+    assert client.get("/status").json()["failure"]["kind"] == "CacheUnusable"
+    # and the collection warm read before the tear is discarded with the rest:
+    # the failed reload's read is the more recent finding about the cache, so
+    # the recovery is the operator's retry, not a bind racing it
+    assert state.collection is None
+
+
+def test_a_late_warm_failure_does_not_clobber_a_successful_reload(tmp_path):
+    """The same erasure mirrored: warm's except arm wrote `load_error`
+    unconditionally, so a warm thread failing *after* a successful mid-warm
+    reload marked a healthy serving process broken."""
+    args, root, _ = build(tmp_path, ["a/one.stl"])
+    state = ServerState(args)
+    client = TestClient(create_app(state), raise_server_exceptions=False)
+
+    def load_collection_then_die():
+        assert client.post("/reload", json={}).status_code == 200
+        raise RuntimeError("walk cache torn under warm")
+
+    state.warm(load_collection_then_die,
+               lambda: (stub_embed(), "stub-model", "cpu"))
+    assert state.load_error is None        # the reload's clean state stands
+    assert client.get("/status").json()["failure"] is None
 
 
 # --- bind once --------------------------------------------------------------

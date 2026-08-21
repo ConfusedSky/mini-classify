@@ -167,15 +167,26 @@ branch on something that cannot happen.
 | `rescan` | bool | `false` | re-walk the input directory |
 
 Reloads the embedding matrix and the pose cache — for after a
-`classify_stls.py` run adds models. Does not reload SigLIP.
+`classify_stls.py` run adds models. SigLIP is reloaded only when it never
+loaded: warmup is one-shot, so this route is also the retry for a failed
+model load (2026-08-20), and a model already resident is never loaded twice.
 
-Returns `{n_models, missing, volume, loaded_at}`. **It does not require the
-server to be ready**, deliberately: it is the retry a failed startup asks for,
-so a server that could not load its cache — an unmounted volume, a key-scheme
-mismatch — recovers through this route rather than through a restart. A reload
-that fails leaves the previous collection bound and answers **503** with the
-same `{ready, elapsed, failure}` body every other unready response uses, so a
-working server stays working.
+Returns `{n_models, missing, volume, loaded_at, ready}` — `ready` because a
+reload can succeed while the server still is not (the collection half worked,
+the model half did not). **It does not require the server to be ready**,
+deliberately: it is the retry a failed startup asks for, so a server that
+could not load its cache — an unmounted volume, a key-scheme mismatch —
+recovers through this route rather than through a restart. A reload that
+fails leaves the previous collection bound, and which status it answers
+depends on what is true of the *server* (2026-08-20; it used to answer
+`503 {"ready": true}`, a self-contradiction this consumer folded into its
+warming state):
+
+* server **not ready**: **503** with the same `{ready, elapsed, failure}`
+  body every other unready response uses — the two facts agree;
+* server **serving**: **409** with `{reloaded: false, ready: true, failure}`
+  — do *not* fold this into the warming policy; queries still work, the
+  reload specifically failed, and `failure` says why.
 
 ## Shared shapes
 

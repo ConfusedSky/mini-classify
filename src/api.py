@@ -78,6 +78,18 @@ class ServerState:
         self.cache_version = cache_version(getattr(args, "cache_dir", ""))
         self.loaded_at: float | None = None
         self.load_error: Exception | None = None   # why the load did not complete
+        # The writers' lock: `warm` runs on its own thread while `/reload`
+        # handlers run in Starlette's threadpool, and the two both assign
+        # collection/loaded_at/load_error. Readers stay lock-free — the
+        # bind-once rule is what protects them.
+        self.bind = threading.Lock()
+        # At most one SigLIP load at a time: `warm` holds this across
+        # `load_embed`, and `/reload`'s retry takes it non-blocking — two
+        # concurrent loads would double the VRAM for nothing.
+        self.embed_loading = threading.Lock()
+        self._load_embed = None      # stashed by warm, so /reload can retry it
+        self._generation = 0         # bumped per state-writing /reload,
+                                     # failure included — see warm
         if self.ready:
             self.loaded_at = time.time()
 
@@ -104,20 +116,95 @@ class ServerState:
 
         Failures are recorded rather than raised: a server that cannot read its
         cache still has something true to say about why, and saying it is the
-        entire reason the port binds first."""
+        entire reason the port binds first.
+
+        `/reload` is deliberately reachable while this runs, so a reload can
+        finish *inside* our `load_collection()` — a real window, ~2801 np.load
+        calls on embed-cache2 — and an unconditional assignment here then
+        silently reverted the fresher post-rescan collection the 200 had just
+        promised (review, 2026-08-20). The generation check is the fix: any
+        reload that wrote state bumps it (`supersede_warm`, failure included),
+        and a warm finding from before the bump is stale by definition. That
+        guards all three writes here, each against its own erasure:
+
+        * the collection bind, against reverting a successful reload's;
+        * the tail's `load_error = None`, against erasing a *failed* mid-warm
+          reload's record — with a `VolumeUnavailable` erased, `/status` went
+          back to `present: true, failure: null` off warm's collection while
+          the drive was gone, the exact 2026-08-19 invariant `volume_of`
+          exists to hold (reproduced, review follow-up 2026-08-21);
+        * the except arm, the same erasure mirrored — a warm failure landing
+          after a successful reload must not mark a healthy server broken.
+
+        A collection warm loaded while a reload *failed* is discarded with
+        the rest: the reload's read is the more recent finding about the
+        cache, and the operator's retry — not a bind racing it — is the
+        recovery. `load_embed` is stashed first, so `/reload` can retry a
+        failed SigLIP load — this thread is one-shot and was the only thing
+        that ever ran it. The embed bind itself is *not* generation-guarded:
+        the model is process state, not a cache finding, and a resident model
+        is right under any generation."""
+        self._load_embed = load_embed
+        gen = self._generation
         try:
-            self.collection = load_collection()
-            self.embed, self.model, self.device = load_embed()
-            self.loaded_at = time.time()
-            self.load_error = None
+            fresh = load_collection()
+            with self.bind:
+                if self._generation == gen:
+                    self.collection = fresh
+            with self.embed_loading:
+                # a mid-warm /reload may have run the retry path already;
+                # a second SigLIP load would only double the wait
+                if self.embed is None:
+                    embed, model, device = load_embed()
+                    with self.bind:
+                        self.embed, self.model, self.device = embed, model, device
+            with self.bind:
+                if self._generation == gen:
+                    self.loaded_at = time.time()
+                    self.load_error = None
         except Exception as e:              # noqa: BLE001 - reported, not swallowed
-            self.load_error = e
+            with self.bind:
+                if self._generation == gen:
+                    self.load_error = e
+
+    def supersede_warm(self) -> None:
+        """Called (under `bind`) by every `/reload` that writes state, the
+        failure branch included: what the reload just learned is newer than
+        anything `warm` still has in flight, so warm's tail must not publish
+        over it."""
+        self._generation += 1
+
+    def retry_embed(self) -> Exception | None:
+        """`/reload`'s half of the warmup: load SigLIP iff it never loaded.
+
+        Returns the failure to report, or None (which also means "nothing to
+        do"). Non-blocking on `embed_loading`: if warm or another reload is
+        loading right now, the model is already on its way and a second load
+        would double the VRAM."""
+        if self.embed is not None or self._load_embed is None:
+            return None
+        if not self.embed_loading.acquire(blocking=False):
+            return None
+        try:
+            if self.embed is None:
+                try:
+                    embed, model, device = self._load_embed()
+                except Exception as e:      # noqa: BLE001 - reported by /reload
+                    return e
+                with self.bind:
+                    self.embed = embed
+                    self.model, self.device = model, device
+        finally:
+            self.embed_loading.release()
+        return None
 
     # --- what `/status` renders about the load ------------------------------
 
-    @property
-    def volume(self) -> dict:
-        """Storage, whether or not the collection loaded.
+    def volume_of(self, c) -> dict:
+        """Storage, whether or not the collection loaded. Takes the bound
+        collection rather than reading it — see `is_ready`. (The property
+        form of this died unused once `/status` bound its collection first;
+        review, 2026-08-20.)
 
         The absent case must carry the *root it looked for* — reporting
         `{"present": false, "root": null}` tells a UI nothing it could show a
@@ -134,10 +221,6 @@ class ServerState:
         one a consumer acts on when deciding whether to offer the affordance
         (review, 2026-08-19). Serving 200s from the intact local matrix stays
         right; claiming the volume is there does not."""
-        return self.volume_of(self.collection)
-
-    def volume_of(self, c) -> dict:
-        """`volume` for an already-bound collection — see `is_ready`."""
         if isinstance(self.load_error, VolumeUnavailable):
             return self.load_error.as_dict()
         if c is not None:
@@ -278,7 +361,14 @@ def create_app(state: ServerState) -> FastAPI:
 
         with state.gpu:                     # the only GPU work in the request
             text_T = state.embed([req.text], req.raw)
-        sims = query.score(c.matrix[scope.rows], text_T, pool).ravel()
+        # An unscoped query must not copy the matrix: `rows` is then the full
+        # arange, and fancy-indexing with it materialises a fresh ~206 MB
+        # array per request on embed-cache2 — measured at 3-4x the scoring
+        # matmul itself (review, 2026-08-20). Size equality is identity: rows
+        # are unique indices into files.
+        scoped = c.matrix if scope.rows.size == len(c.files) \
+            else c.matrix[scope.rows]
+        sims = query.score(scoped, text_T, pool).ravel()
         ranked = query.rank(sims, top=req.top, min_score=req.min_score)
 
         order = ranked.order
@@ -341,30 +431,61 @@ def create_app(state: ServerState) -> FastAPI:
         """Rebind a freshly loaded Collection, or keep the one we have.
 
         A failed reload must not break a working server, so the old collection
-        stays bound and the failure is reported — the same shape `/status`
-        carries.
+        stays bound and the failure is reported. On a server that is *serving*,
+        that failure is a **409** naming the reload, not a 503: `_unready` off
+        the still-healthy collection produced `503 {"ready": true}` — a
+        self-contradiction surface.md's consumer folded into its warming
+        state, flickering the search affordance off while queries returned
+        200s (review, 2026-08-20). A server that is not ready keeps the 503
+        envelope: there the reload's failure and the server's state agree.
 
         **This route does not require `ready`**, and that is the point: it is
         the retry a failed startup tells the operator to perform. A server that
         printed "mount the volume and retry" and then refused every attempt
         until it was restarted had the last step of that story missing
         (review, 2026-08-19). It loads from `state.args` rather than from a
-        bound collection, because when the first load failed there is none."""
+        bound collection, because when the first load failed there is none.
+        The same story is why this also retries a failed SigLIP load: `warm`
+        is one-shot, so without the retry a server whose model never landed
+        had `/reload` return 200 while every query kept 503ing — worse, the
+        route used to clear `load_error` it had not repaired, leaving
+        `/status` at `ready: false, failure: null` forever."""
+        c = state.collection                # bound once, like every handler
         try:
             fresh = Collection.load_with(state.args, rescan=req.rescan)
         except (CacheUnusable, VolumeUnavailable) as e:
             # Recorded so `/status` explains the stale data, but the old
             # collection stays bound: a failed reload must not break a server
-            # that is answering fine.
-            state.load_error = e
-            raise HTTPException(status_code=503, detail=_unready(state.collection)) from e
-        state.collection = fresh
-        state.load_error = None
-        state.loaded_at = time.time()
+            # that is answering fine. The supersede is the failure branch's
+            # too — without it a warm finishing after this erased the
+            # recorded failure (reproduced, review follow-up 2026-08-21).
+            with state.bind:
+                state.load_error = e
+                state.supersede_warm()
+            if state.is_ready(c):
+                raise HTTPException(status_code=409, detail={
+                    "reloaded": False, "ready": True,
+                    "failure": state.failure}) from e
+            raise HTTPException(status_code=503, detail=_unready(c)) from e
+
+        embed_error = state.retry_embed()   # a no-op once the model is resident
+
+        with state.bind:
+            state.collection = fresh
+            state.supersede_warm()          # a warm finding older than this
+            state.loaded_at = time.time()   # bind must not overwrite it
+            if state.is_ready(fresh):
+                # clear only what is repaired: with the embed still missing,
+                # erasing the recorded failure would leave `/status` at
+                # `ready: false, failure: null`
+                state.load_error = None
+            elif embed_error is not None:
+                state.load_error = embed_error
         state.cache_version = cache_version(getattr(state.args, "cache_dir", ""))
         log.info("reload rescan=%s -> %d models, %d missing",
                  req.rescan, len(fresh.files), fresh.missing)
         return {"n_models": len(fresh.files), "missing": fresh.missing,
-                "volume": fresh.volume, "loaded_at": state.loaded_at}
+                "volume": fresh.volume, "loaded_at": state.loaded_at,
+                "ready": state.is_ready(fresh)}
 
     return app
