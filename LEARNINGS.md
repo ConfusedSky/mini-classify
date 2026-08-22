@@ -117,6 +117,15 @@ notes at the bottom are amended in place. Open work is tracked separately in
   problem. The API's top-10 is identical to `test_categories.py`'s, which is
   what `src/query.py` was extracted to guarantee.
 
+- [Tri-state pass 2, and the new primary cache](docs/learnings/2026-08-21-tri-state-pass-2-and-embed-cache512.md)
+  — the retry split's default flips after three passes each found transient
+  failures on the permanent fallthrough; `arbitrated` becomes four-state with
+  absence reading as `false` (`bool("rejected") is True` nearly shipped a
+  schema that lied on disk); the warm/reload race took three tries because a
+  generation counter is one decision per field it guards. embed-cache512
+  (SigLIP-2 @512 px, 16 views) becomes the primary cache; its backfill census
+  — the first measurable answer to "is the arbiter worth it" — appends there.
+
 ## Evergreen notes
 
 - [Queries and filters](docs/learnings/queries-and-filters.md) — open-set
