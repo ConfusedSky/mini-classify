@@ -66,9 +66,9 @@ cache-identity flags to the last classify run's `run-params.json`, so after
 the first run the directory argument is usually optional.
 
 ```
-.venv/bin/python classify_stls.py <stl-dir> --cache-dir embed-cache2   # build the caches
-.venv/bin/python test_categories.py --cache-dir embed-cache2           # the REPL
-.venv/bin/python serve_api.py --cache-dir embed-cache2 --port 8077     # the query API
+.venv/bin/python classify_stls.py <stl-dir> --cache-dir embed-cache512 # build the caches
+.venv/bin/python test_categories.py --cache-dir embed-cache512           # the REPL
+.venv/bin/python serve_api.py --cache-dir embed-cache512 --port 8077     # the query API
 .venv/bin/python -m pytest tests/ -q                                   # the suite
 ```
 
@@ -93,9 +93,10 @@ against a scratch cache, not the project's entry point.
   them from a sample index; the collection grew mid-session once and the same
   seed stopped drawing the same models.
 - Name the cache and the volume beside every measured number, in docs, commits
-  and memory alike. Figures differ by cache (`embed-cache2` vs the small test
-  caches) and by disk, and an unlabelled one has been read across the wrong
-  column twice.
+  and memory alike. Figures differ by cache — `embed-cache512` (primary since
+  2026-08-21: SigLIP-2 @512 px, 16 views) vs `embed-cache2` (SigLIP-1, its
+  figures are historical) vs the small test caches — and by disk, and an
+  unlabelled one has been read across the wrong column twice.
 - Check for a running `classify_stls.py` before timing anything — it saturates
   the disk and the 4060. Syscall *counts* stay valid under load; wall-clock
   does not.

@@ -94,9 +94,44 @@ latency, the ~206 MB matrix copy, the ~1227 census are all
 measured-against-embed-cache2 and the matrix is now 16-view SigLIP-2.
 Re-measure before quoting.
 
-**Census pending.** When the backfill completes, the four-state markers
-make the arbiter's value measurable for the first time: `(source=vlm,
-true)` = moved, `(ensemble, true)` = confirmed, `"rejected"` and `false`
-tails. That split — how often the arbiter changes a pose, against the
-43/44 labelled accuracy — is the number "is the arbiter worth it" has
-always been missing, and it gets appended here when the run exits.
+## The census: the arbiter moves the pose 62% of the time it is asked
+
+The run exited cleanly the same evening (results.csv: **zero render
+errors**; pose cache and CSV stamped 21:18). First census over the
+four-state markers, embed-cache512, 3540 entries:
+
+| population | count |
+|---|---|
+| moved — `(vlm, true)` | **651** |
+| confirmed — `(ensemble, true)` | **397** (247 siglip + 150 geometry) |
+| `"rejected"` | 0 |
+| still `false` | 0 |
+| legacy `(vlm, absent)` — never re-asked, by design | 214 |
+| ungated `(ensemble, absent)` | 2224 |
+
+**1048 arbitrations completed, and the arbiter moved the pose on 651 of
+them — a 62.1% move rate.** That is the number this whole design was
+missing, and it settles "is it worth it" emphatically: on the population
+the margin gate escalates, the ensemble's answer is wrong (by the
+arbiter's 43/44-accurate judgment) more often than it is right. Those 651
+models — 18% of the collection — were embedded from sideways or
+upside-down renders in embed-cache2, and every one re-keyed and
+re-rendered under the corrected pose here. Some unmeasurable share of
+"searching under embed-cache512 feels a lot more accurate" is this, not
+the model upgrade; the two shipped together and cannot be separated after
+the fact.
+
+Zero `"rejected"` and zero residual `false` also matter: no safety blocks
+on this collection's renders (the `REJECTED_FINISH_REASONS` arm went
+unexercised in production — the pre-ship capture is still owed), no
+transient failures, breaker never armed past zero. The paced pool
+(workers 4, min-interval 1.0) took ~1048 calls through Vertex without a
+single 429 recorded — the 2026-08-19 storm's fix holding at full scale.
+
+Reconciliation of the gated leftovers, because an unlabelled residue
+becomes next month's mystery: 54 gated entries carry no marker — 39 are
+orphans (files the walk no longer sees), 11 are stale identities (the
+file was edited; its live identity got arbitrated), and **4 are
+unexplained** (present in the walk, gated cached margin, no marker, no
+render error). 4 of 3540 is noise-level; worth a look only if the next
+run grows it.

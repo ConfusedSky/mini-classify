@@ -123,8 +123,10 @@ notes at the bottom are amended in place. Open work is tracked separately in
   absence reading as `false` (`bool("rejected") is True` nearly shipped a
   schema that lied on disk); the warm/reload race took three tries because a
   generation counter is one decision per field it guards. embed-cache512
-  (SigLIP-2 @512 px, 16 views) becomes the primary cache; its backfill census
-  — the first measurable answer to "is the arbiter worth it" — appends there.
+  (SigLIP-2 @512 px, 16 views) becomes the primary cache, and its backfill
+  census answers "is the arbiter worth it" for the first time: **1048
+  arbitrations, 651 moved the pose — a 62% move rate** on the gated
+  population, zero rejections, zero transient failures, zero render errors.
 
 ## Evergreen notes
 
