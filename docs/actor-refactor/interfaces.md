@@ -229,7 +229,7 @@ class Transport(Protocol):            # src/transport.py
 
 ```python
 def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False,
-          settled: bool = False) \
+          settled: bool = False, *, arbiter_available: bool) \
         -> PoseRenderTask | EmbedRenderTask | CachedHit | Redraw | Retired
 ```
 
@@ -250,6 +250,20 @@ sufficiency re-check and takes the entry as it stands. Without it,
 arbiter call failed transiently — re-escalated the same file inside the
 same run, an unbounded re-render/re-bill loop (review, 2026-08-20). The
 cold call never passes it; that check is what admits a file to posing.
+
+`arbiter_available` is the driver's `cfg.poser.can_arbitrate()`, and it is
+**keyword-only with no default** so every caller breaks loudly
+(docs/tri-state-pass-2.md, 2026-08-21) — the `Resolved.pose_changed`
+precedent, since a default silently un-pins the W1 regression test. It is what
+makes a marked entry a miss only in a run that can actually escalate it:
+without it an arbiterless run (`--pose-vlm off`, a degraded `auto`, a tripped
+breaker) re-rendered the marked model, re-resolved it with no gate and erased
+the marker — and production runs `off`. At the `settled=True` site the
+parameter is **dead by construction** (`settled or ...` short-circuits before
+the sufficiency check), so nobody should read the breaker as able to flip a
+settled re-route into a re-render; it is passed there only because no-default
+demands it. The gate it is checked against is this run's `args.up_margin`,
+handed to `pose.pose_is_sufficient(entry, arbiter_available, args.up_margin)`.
 
 `CacheContext` (shape in data_structures.md) bundles what today is closure
 state: the pose store, embeds dir, render index, parsed args. `route`

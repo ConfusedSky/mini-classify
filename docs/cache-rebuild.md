@@ -73,7 +73,11 @@ not.
 * `done.py:175` handles a legacy int `front_view` on the write side.
 * `load_pose_cache` drops entries below `POSE_CACHE_VERSION`, whose changelog
   (v2 four-view ensemble, v3 geometry attenuation, v4 512 px contact sheet)
-  only matters for entries that predate v4.
+  only matters for entries that predate v4. **A bump also wipes all four
+  `arbitrated` states** (§8): the dropped entries take every `"rejected"`
+  with them, and the whole gated population is re-billed at the arbiter on
+  the next run. Price a v5 with §8's overnight figure in hand
+  (docs/tri-state-pass-2.md, 2026-08-21).
 
 **At a rebuild:** every entry is written fresh at the current version, so all
 four can go. `from_cache` becomes a plain constructor.
@@ -192,41 +196,94 @@ cheaper one: deleting just the pose entries where `source != "vlm" and margin
 < gate` makes exactly those models re-escalate on the next ordinary run, with
 no re-rendering and no re-embedding. Worth preferring if the arbiter's answers
 are the only thing wanted — though note it re-escalates the confirmed models
-too, because nothing distinguishes them.
+too, because nothing distinguishes them. **Superseded for this population as
+of 2026-08-21**: absence now reads as `false`, so the next arbiter-on run
+re-escalates exactly those entries with nothing deleted by hand (below).
 
-**Half of this is now fixed, and the half that remains is the expensive
-half.** As of 2026-08-19 a pose records `arbitrated` — the arbiter *ran and
-answered* — which is a different fact from `source == "vlm"`, the arbiter
-*moved the answer*. Three populations are distinguishable from here on:
+**This half is now fixed too, and it no longer needs a rebuild.** As of
+2026-08-19 a pose records `arbitrated` — the arbiter *ran and answered* —
+which is a different fact from `source == "vlm"`, the arbiter *moved the
+answer*. Since 2026-08-21 the flag is **four-state**
+(`docs/tri-state-pass-2.md`):
 
 | `source` | `arbitrated` | meaning |
 |---|---|---|
 | `vlm` | `true` | the arbiter moved the pose |
 | ensemble | `true` | it ran and confirmed the ensemble |
-| ensemble | `false` | it was asked and never answered |
-| any | **absent** | never asked — or written before the flag existed |
+| ensemble | `"rejected"` | the API judged the request; never ask again |
+| ensemble | `false` | the escalation the margin asked for did not happen |
+| any | **absent** | no claim — **reads as `false`** |
 
-The flag is **tri-state**, and the absent/`false` split is the load-bearing
-part: `false` is written at the fold, which only runs for a model that was
-actually submitted to the arbiter, so it means "retry this one" about a
-specific model where absent means nothing. Written only when known, so no
-`POSE_CACHE_VERSION` bump and no effect on older readers.
+`false` covers a transient failure (`pose.VLMUnavailable`), a cancellation,
+abandonment at abort, *and* the gate firing in a run with no arbiter — that
+last one is the C3 marking, so an `off` or degraded run now says so on the
+entry instead of leaving it silent. `"rejected"` is the permanent side and it
+is the **enumerated** one: a non-auth 4xx (`pose.VLMRejected`) or a 200 whose
+body states a block verdict (`pose.REJECTED_FINISH_REASONS`). Everything else
+— an unknown exception type included — records `false` and is asked again,
+because three passes each found a transient failure sitting on what used to
+be an open-ended permanent fallthrough. Still no `POSE_CACHE_VERSION` bump:
+`to_cache` writes the string through unchanged and older readers ignore an
+`arbitrated` they do not understand exactly as they ignored `false`.
 
-**Done since 2026-08-19: `pose_is_sufficient` reads it.** *Only* an explicit
-`false` is a miss, so legacy entries (no key) are untouched and re-escalation
-carries no bill — genuine refusals recorded from 2026-08-19 onward re-ask on
-their next run. Two things a later review (2026-08-20) had to add before the
-flip was safe to ship, both worth knowing at rebuild time:
+**Done since 2026-08-19: `pose_is_sufficient` reads it** — and since
+2026-08-21 it reads *absence* too, against this run:
+`pose_is_sufficient(entry, arbiter_available, margin_threshold)`. An entry
+with no claim (or a `false`) is a miss only when this run can actually
+escalate it **and** its margin is under this run's gate. Three things reviews
+had to add before the flips were safe to ship, all worth knowing at rebuild
+time:
 
 * the miss applies to a **later run only** — the driver's re-route of a
   just-folded answer passes `settled=True` to `route`, because re-checking
   sufficiency in the same run turned every rate-limited call into an
-  unbounded re-render/re-bill loop;
+  unbounded re-render/re-bill loop (review, 2026-08-20);
 * the transient side of the split is `pose.VLMUnavailable`, not just
-  `RateLimited`: network drops, HTTP 5xx and CLI timeouts also record
-  `false`, and `settle` records `false` for the in-flight calls it abandons
-  at Ctrl-C. Only a request the API judged on its merits (a 4xx) leaves the
-  key absent.
+  `RateLimited`: network drops, HTTP 5xx, gcloud/ADC failures, auth
+  (401/403/404) and CLI timeouts all record `false`, and `settle` records
+  `false` for the in-flight calls it abandons at Ctrl-C. Only a request the
+  API judged on its merits records `"rejected"`;
+* `arbiter_available` — a run with no arbiter (`--pose-vlm off`, a degraded
+  `auto`, or the tripped `Poser` breaker) must not re-render a marked entry
+  it cannot escalate. It would re-resolve the pose with no gate and erase the
+  marker, and **production runs `off`** (docs/tri-state-pass-2.md,
+  2026-08-21).
+
+**So this section's debt is payable without a rebuild — by one run.** Absence
+reading as `false` re-opens the gated legacy population: the **first
+arbiter-on run after 2026-08-21** re-renders and re-asks everything under the
+gate that carries no marker, and afterwards every gated entry says explicitly
+which of the four states it is in. That is the confirmed-vs-never-asked
+ambiguity above (the 1243 on `embed-cache2`) closing for good, at the price of
+one run rather than a rebuild.
+
+**Budget it at full magnitude.** It is roughly the cold-enable bill the census
+already names — **~1227 paid calls** on `embed-cache2` (39–44 % of ~2800
+models; `src/pose.py`'s `MARGIN_THRESHOLD` comment, review U4), about $0.30
+of API — but the money is the small half. Each of the ~1227 is a full
+`PoseRenderTask` (3–28 s of child work), the arbiter tail is bounded by
+`WINDOW = 3` at a 24 s mean call — **~2.7 h even with perfect overlap** — and
+under `--save-renders` every pose the arbiter moves forces a redraw. **The
+first arbiter-on run after this ships is an overnight job on `embed-cache2`**,
+not a lunch break; plan it as one, and run it with the paced arbiter above.
+
+**Run that backfill without `--skip-embed`.** Re-resolution replaces the whole
+entry, so `front_view` is dropped: on the normal path `Done._score` recomputes
+and merges it back, and under `--skip-embed` nothing does. The backfill
+re-resolves the entire gated population, so `--skip-embed` would strip
+`front_view` — a published API field — from all ~1227 of them (accepted edge,
+docs/tri-state-pass-2.md, 2026-08-21).
+
+**The marked set is stable only to ~1e-2.** Filament's draw-history dependence
+(CLAUDE.md's hard constraint) moves an ensemble margin by that much between
+runs, so a model whose margin sits within ~1e-2 of `MARGIN_THRESHOLD` flips
+sides of the gate from one run to the next. A `false` marker whose re-resolved
+margin clears the gate is therefore erased — the entry records absent, and
+absent-above-the-gate is a hit forever after. That is the one marker-loss path
+in the four-state machine, and it is accepted: the ensemble is now confident,
+so settling it is arguably correct, and preserving the old marker would need
+the Poser to read the store, which J6 forbids. Never quote "the marked
+population" as an exact count across runs.
 
 ## Not on this list
 

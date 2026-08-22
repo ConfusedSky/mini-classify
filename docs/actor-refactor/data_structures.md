@@ -338,18 +338,37 @@ class Pose:
                                    # fresh resolutions pass POSE_CACHE_VERSION
                                    # explicitly (D10)
     margin: float | None = None
-    arbitrated: bool | None = None # TRI-state, not a bool (shipped shape;
+    arbitrated: bool | str | None = None
+                                   # FOUR-state (docs/tri-state-pass-2.md,
+                                   # 2026-08-21; tri-state before that, and
                                    # this doc said `bool = False` while the
                                    # code shipped the tri-state — review,
                                    # 2026-08-20). True: the VLM ran AND
                                    # answered — a different fact from
                                    # source == "vlm", which means it MOVED
-                                   # the answer. False: asked, no answer yet
-                                   # (transient failure / cancellation /
-                                   # abandoned at abort) — a miss for a later
-                                   # run (`pose_is_sufficient`). None: never
-                                   # asked; serialised only when not None, so
-                                   # entries written before it read as None
+                                   # the answer. "rejected": the API judged
+                                   # the request (non-auth 4xx, or a 200
+                                   # stating a block verdict) — settled, never
+                                   # re-asked. False: the escalation the
+                                   # margin asked for did not happen —
+                                   # transient failure / cancellation /
+                                   # abandoned at abort / the gate fired in a
+                                   # run with no arbiter — a miss for a later
+                                   # run (`pose_is_sufficient`). None:
+                                   # serialised only when not None, so entries
+                                   # written before it are absent — and
+                                   # absence READS AS False. The mixed
+                                   # bool/str is deliberate: a clean string
+                                   # enum would force load-time mapping of
+                                   # every true/false written since
+                                   # 2026-08-19 for no semantic gain, so
+                                   # readers compare explicitly
+                                   # (`in (True, "rejected")`), never by
+                                   # truthiness — and `to_cache` passes the
+                                   # string through rather than coercing it
+                                   # (`bool("rejected") is True` collapsed the
+                                   # schema on disk while every in-memory test
+                                   # passed — review 2, 2026-08-21)
     front_view: dict[str, int] = field(default_factory=dict)   # view_cfg -> index
 
     @classmethod
@@ -390,8 +409,14 @@ class Pose:
   field default of `POSE_CACHE_VERSION` would stamp unversioned entries as
   freshly resolved and silently defeat that drop rule (D10).
 * (Wave 2 retired `pose_is_sufficient`'s second parameter with the
-  `--no-up-ensemble` flag — the ensemble is always available now, so the
-  function is single-arg: `pose_is_sufficient(entry)`.)
+  `--no-up-ensemble` flag — the ensemble is always available now. ~~so the
+  function is single-arg: `pose_is_sufficient(entry)`~~ — **false since
+  2026-08-21**: it is `pose_is_sufficient(entry, arbiter_available,
+  margin_threshold)`, and the availability flag it takes now is a different
+  one, the *arbiter's*, plus this run's gate. Neither new parameter has a
+  default, deliberately: the `Resolved.pose_changed` precedent, since a
+  default silently un-pins the W1 regression test and every caller breaking
+  loudly is the point. See docs/tri-state-pass-2.md §C4, 2026-08-21.)
 * **`pose_is_sufficient` stays a module function over the raw entry
   `dict | None`** (D11, corrected 2026-08-17 — B's review proved the
   earlier `Pose | None` wording wrong: the store holds what

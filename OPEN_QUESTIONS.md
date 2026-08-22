@@ -73,6 +73,25 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   the up ensemble is still `UP_TILE_AZIMUTHS = 2`, so that half stays open
   below.
 
+- **Which side of the arbiter retry split gets enumerated** — decided
+  2026-08-21, and it is the *permanent* side (`docs/tri-state-pass-2.md`).
+  `arbitrated` used to default to permanent: a failure the code did not
+  recognise left the key absent and the model was never asked again. The
+  evidence against that is three passes each finding a transient failure
+  sitting on the open-ended fallthrough — W2 (2026-08-20) found network
+  drops, HTTP 5xx and every claude-backend failure there; this pass found
+  gcloud/ADC failures, HTTP 401/403/404 and an undiggable 200 body; and the
+  spec's own second review found `subprocess.TimeoutExpired` leaking through
+  pass 2's *first draft* of the fix. A rule that leaks on every reading is
+  the wrong way round. So `_fold`'s `except Exception` arm now records
+  `False` — ask again — and the permanent state `"rejected"` is bought only
+  by `pose.VLMRejected`, raised for a non-auth 4xx or a 200 whose body states
+  a block verdict (`pose.REJECTED_FINISH_REASONS`). That side is closed by
+  construction: the HTTP status space is finite and a judged verdict has only
+  those two shapes, where "everything that can go wrong with a network call"
+  never will be. The cost of being wrong is now a re-ask instead of a
+  permanent wrong pin, which is the cheaper error — see
+  `docs/cache-rebuild.md` §8 for what the population costs to re-ask.
 - **Raise the contact sheet to `thumb=512`** — done, with the scaled numerals
   it depends on, now in `pose.make_contact_sheet` rather than only in the eval
   harness. sonnet gains 10 of 44 across that step and gemma 3; gemini-3.5-flash
@@ -223,6 +242,24 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   an error bar nobody has measured. The 3-sample gemma test earlier (21/23
   unanimous) is the only evidence in the other direction, and it was a different
   model on a different backend.
+- **Should an attempt counter bound cross-run re-asks?** Filed 2026-08-21 with
+  the four-state `arbitrated` (`docs/tri-state-pass-2.md`, out of scope
+  there). `false` means "ask again on a later run", with no memory of how many
+  runs have already asked — so a failure that is *deterministic for one model*
+  and never returns a judged verdict is re-asked, and re-billed, once per
+  arbiter-on run forever. The run-level breaker cannot catch it: it trips on
+  **consecutive** `VLMUnavailable` folds, and one model failing among hundreds
+  that succeed never produces a streak. This bites both backends, and the
+  claude one hardest — `_ask_claude` raises only `VLMUnavailable`, so it can
+  never write `"rejected"` at all, and a deterministic claude parse failure
+  has no path to settling. The shape of a fix is a counted state in the same
+  field (`arbitrated: 0|1|2|true`, absent still reading as no-claim), which
+  keeps the schema's mixed-type readers but needs a rule for what happens at
+  the cap — settle it as `"rejected"`, or keep re-asking and just report the
+  count. What is unknown is whether the population is real: nobody has
+  measured how many models fail the same way on two consecutive arbiter-on
+  runs, and until the first backfill run (§8 of `docs/cache-rebuild.md`) there
+  is no marked population to measure it over.
 - **What does `--save-renders` cost on a *warm* embedding cache?** Measured free
   on a cold one (456 s against 459 s, inside noise), but that run rendered every
   model anyway. Warm, the flag is the difference between rendering nothing and
