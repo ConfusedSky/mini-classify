@@ -347,7 +347,9 @@ def test_forced_axis_ignores_warm_auto_entry(tmp_path):
     forced_npy = rig.ctx.embeds_dir / (
         cache_key_from_identity(ident, rig.ctx.args,
                                 pose.up_str(pose.FORCED_UPS["z"])) + ".npy")
-    hit = route(f, 0, rig.ctx)
+    # arbiter_available is dead on the forced path (the pose store is never
+    # read at all), but the parameter has no default — see C4
+    hit = route(f, 0, rig.ctx, arbiter_available=False)
     assert isinstance(hit, CachedHit)
     assert hit.cache_file == forced_npy and forced_npy.exists()
     np.testing.assert_array_equal(np.load(forced_npy), img.float().cpu().numpy())

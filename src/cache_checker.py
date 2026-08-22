@@ -40,7 +40,7 @@ from src.messages import (
 # --- The decision ------------------------------------------------------------
 
 def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False,
-          settled: bool = False) \
+          settled: bool = False, *, arbiter_available: bool) \
         -> PoseRenderTask | EmbedRenderTask | CachedHit | Redraw | Retired:
     """One file's cache decision. Raises on I/O errors (a vanished file, an
     unreadable directory) — the driver converts to `Failure` (J3).
@@ -58,7 +58,17 @@ def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False,
     re-route — back into a `PoseRenderTask`, and the run re-rendered,
     re-escalated and re-billed the same file in an unbounded loop, each lap
     bumping the stall clock (review, 2026-08-20). `false` means "ask again
-    on a later run"; this flag is what confines it to one."""
+    on a later run"; this flag is what confines it to one.
+
+    `arbiter_available` — the driver's `cfg.poser.can_arbitrate()`, and
+    **keyword-only with no default** so every caller breaks loudly
+    (docs/tri-state-pass-2.md, 2026-08-21). It is what makes a marked entry a
+    miss only in a run that can actually escalate it: without it an
+    arbiterless run re-rendered the marked model, re-resolved it with no gate
+    and erased the marker — and production runs `--pose-vlm off`. At the
+    `settled=True` site the parameter is dead by construction (`settled or
+    ...` short-circuits before the sufficiency check), so nobody should read
+    the breaker as able to flip a settled re-route into a re-render."""
     args = ctx.args
 
     # Pose: forced axis skips the pose-cache lookup entirely (migration-notes
@@ -71,11 +81,13 @@ def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False,
     else:
         entry = ctx.poses.get(pose.file_identity(f, ctx.root))
         # The ensemble always runs now (`--no-up-ensemble`/`--up-conf` retired
-        # 2026-08-17, actors_proposal.md Migration notes), which is why
-        # `pose_is_sufficient` no longer takes the availability flag: a
-        # geometry-only entry — margin None, written by some older pass —
-        # always reads insufficient and is upgraded in place.
-        if entry is None or not (settled or pose.pose_is_sufficient(entry)):
+        # 2026-08-17, actors_proposal.md Migration notes), so a geometry-only
+        # entry — margin None, written by some older pass — always reads
+        # insufficient and is upgraded in place. The availability flag
+        # `pose_is_sufficient` takes is a different one: the *arbiter's*, plus
+        # this run's gate (docs/tri-state-pass-2.md, 2026-08-21).
+        if entry is None or not (settled or pose.pose_is_sufficient(
+                entry, arbiter_available, args.up_margin)):
             return PoseRenderTask(file=f, index=index)
         resolved = pose.Pose.from_cache(entry)
 

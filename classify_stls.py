@@ -97,6 +97,37 @@ def profile_dir(argv=None):
     return known.profile
 
 
+def _confirm_degraded(why):
+    """`--pose-vlm auto` probed and found no arbiter: ask, default No
+    (docs/tri-state-pass-2.md, 2026-08-21).
+
+    A silent degrade is what made an `auto` run indistinguishable from an
+    `off` one, and every pose it resolves is marked `arbitrated: false` — a
+    whole run's escalations deferred on a gcloud failure nobody was told
+    about.
+
+    Two deliberate deviations from `cache_root`'s prompt, which is precedent
+    for the shape and not for these: **stdin AND stderr** must be ttys, and
+    the prompt is written to **stderr** — `input()` writes its own prompt to
+    stdout, so a redirected-stdout run would appear to hang. A backgrounded
+    job with a tty stdin still SIGTTIN-stops, the same hazard `cache_root`
+    accepts."""
+    print(f"pose VLM: gemini unavailable ({why})", file=sys.stderr)
+    if not (sys.stdin.isatty() and sys.stderr.isatty()):
+        raise SystemExit(
+            "--pose-vlm auto found no arbiter and this run is not interactive. "
+            "Re-run with --pose-vlm off to accept the ensemble's answers "
+            "(gated poses are marked `arbitrated: false` and revisited by the "
+            "first arbiter-on run), or fix gcloud: "
+            "`gcloud auth application-default login`")
+    print("continuing keeps the ensemble's answer for every ambiguous pose; "
+          "each one is marked `arbitrated: false` and revisited by the first "
+          "run with an arbiter.", file=sys.stderr)
+    if input("continue without the arbiter? [y/N] ").strip().lower() not in ("y", "yes"):
+        raise SystemExit("--pose-vlm auto: no arbiter, declined")
+    return None
+
+
 def resolve_pose_vlm(args):
     """--pose-vlm to the backend the Poser is built with, announcing the choice.
 
@@ -104,7 +135,11 @@ def resolve_pose_vlm(args):
     no inline arm, and a pooled ollama call would overlap SigLIP on the 4060 —
     10.1 s of model reload against 0.49 s of inference, this repo's one hard
     GPU constraint. So `auto` is gemini or nothing, and `VlmConfig` refuses the
-    name at construction if it ever reaches it another way."""
+    name at construction if it ever reaches it another way.
+
+    `auto` finding nothing is a question now rather than a shrug
+    (`_confirm_degraded`); the explicit choices are unchanged — `gemini` is an
+    error if unavailable, `off` is silent."""
     from src import pose        # module-local: pose pulls open3d (docstring)
     backend = args.pose_vlm
     if backend == "off":
@@ -119,9 +154,7 @@ def resolve_pose_vlm(args):
             pose.gcloud_token()
             backend = "gemini"
         except Exception as e:
-            print(f"pose VLM: gemini unavailable ({e}) — ambiguous poses keep "
-                  f"the ensemble's answer")
-            return None
+            return _confirm_degraded(e)
     vlm_model = args.pose_vlm_model or pose.DEFAULT_VLM_MODELS.get(backend)
     if backend == "gemini":
         # Fail here rather than on the first ambiguous model, thousands of
@@ -357,6 +390,16 @@ def main():
     errors = sum(1 for r in done.rows.values() if isinstance(r, Failure))
     print(f"wrote {args.out} ({len(done.rows)} rows"
           + (f", {errors} of them render errors" if errors else "") + ")")
+    # The run's product is reportability: a breaker-tripped or arbiterless run
+    # must not read like a healthy one in the log tail
+    # (docs/tri-state-pass-2.md, 2026-08-21).
+    if poser.gate_fired_no_call:
+        print(f"{poser.gate_fired_no_call} ambiguous poses kept the ensemble's "
+              f"answer with no arbiter call, marked `arbitrated: false` — the "
+              f"first run with an arbiter revisits them"
+              + (" (run that one WITHOUT --skip-embed: re-resolution wipes "
+                 "front_view and only the scoring path recomputes it)"
+                 if args.skip_embed else ""))
     instrument.report()
 
 

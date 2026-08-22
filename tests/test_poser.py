@@ -74,10 +74,25 @@ def sig_embeds(win, n_az=2):
     return torch.from_numpy(e)
 
 
-def make_poser(done=None, arb=None, **cfg):
+class FakeClock:
+    """The breaker's injected clock (C5): time only moves when a test says so."""
+
+    def __init__(self):
+        self.t = 1000.0
+
+    def __call__(self):
+        return self.t
+
+    def advance(self, seconds):
+        self.t += seconds
+
+
+def make_poser(done=None, arb=None, clock=None, **cfg):
     done = done or RecordingDone()
     arb = arb or FakeArbiter()
-    return Poser(UP_T, DOWN_T, arb, done.record_pose, VlmConfig(**cfg)), done, arb
+    poser = Poser(UP_T, DOWN_T, arb, done.record_pose, VlmConfig(**cfg),
+                  clock=clock or FakeClock())
+    return poser, done, arb
 
 
 def feed(poser, win=0, geo=GEO_CONFIDENT, index=7, n_az=2, file=F):
@@ -161,9 +176,28 @@ def test_run_mode_never_changes_the_exit():
 
 
 def test_no_backend_never_parks_however_low_the_margin():
-    poser, _, arb = make_poser(backend=None, margin_threshold=5.0)
+    poser, done, arb = make_poser(backend=None, margin_threshold=5.0)
     assert feed(poser) == Resolved(F, 7, pose_changed=False)
     assert not arb.calls and not poser.parked
+    # ...and the gate firing with no call to make is recorded, not silent (C3):
+    # an arbiterless run used to leave the key absent for everything it
+    # resolved, foreclosing arbitration for the whole run's output
+    assert done.poses[-1][2].arbitrated is False
+    assert poser.gate_fired_no_call == 1
+
+
+def test_an_ungated_resolution_makes_no_claim():
+    """`None` -> the key stays absent: nothing asked for an escalation here, so
+    there is nothing to say. Only the gate firing writes `false`."""
+    poser, done, _ = make_poser(backend="gemini", margin_threshold=0.45)
+    feed(poser)                                  # margin 1.98, well clear
+    assert done.poses[-1][2].arbitrated is None
+    assert poser.gate_fired_no_call == 0
+
+
+def test_can_arbitrate_follows_the_backend():
+    assert not make_poser(backend=None)[0].can_arbitrate()
+    assert make_poser(backend="gemini")[0].can_arbitrate()
 
 
 # --- park and resume ---------------------------------------------------------
@@ -175,8 +209,11 @@ def test_low_margin_parks_after_recording_the_ensemble_pose():
     pf = poser.parked[7]
     assert pf.file == F and pf.future is arb.futures[0]
     assert pf.resolved == ((0.0, 0.0, 1.0), 0.02, "geometry", 1.98)
-    # I15's floor: the ensemble pose is recorded BEFORE the park
+    # I15's floor: the ensemble pose is recorded BEFORE the park — and as
+    # `false` since C3, so every completion path *overwrites* a record that is
+    # already correct, rather than each having to remember to write one
     assert len(done.poses) == 1 and done.poses[0][2].source == "geometry"
+    assert done.poses[0][2].arbitrated is False
 
 
 def test_vlm_call_sees_the_grids_first_column_as_pil():
@@ -228,9 +265,9 @@ def test_arbitrated_separates_a_confirmation_from_a_refusal():
     indistinguishable on disk, and 1243 entries in embed-cache2 are that
     ambiguity (2026-08-19). `arbitrated` is the fact that the call *ran*.
 
-    Three populations, and the pair (source, arbitrated) names each:
-    moved = ('vlm', True), confirmed = (ensemble, True), refused = (ensemble,
-    False)."""
+    Four populations, and the pair (source, arbitrated) names each:
+    moved = ('vlm', True), confirmed = (ensemble, True), not-yet-asked =
+    (ensemble, False), judged = (ensemble, 'rejected')."""
     def fold(result=None, exc=None):
         poser, done, arb = make_poser(**ESCALATE)
         feed(poser)
@@ -252,11 +289,18 @@ def test_arbitrated_separates_a_confirmation_from_a_refusal():
     assert fold(exc=pose.VLMUnavailable("network failure: timed out")) == \
         ("geometry", False)
     # a request the API rejects on its merits cannot succeed on a retry, so it
-    # leaves the key absent rather than re-escalating forever (2026-08-19)
-    assert fold(exc=RuntimeError("HTTP 400")) == ("geometry", None)
+    # is settled permanently — and only its own type buys that now
+    assert fold(exc=pose.VLMRejected("HTTP 400")) == ("geometry", "rejected")
+    # the flipped default (C1, docs/tri-state-pass-2.md, 2026-08-21): an
+    # unknown failure type retries loudly instead of pinning silently. Three
+    # passes each found a transient failure sitting on the permanent side,
+    # because permanent was the open-ended fallthrough
+    assert fold(exc=RuntimeError("HTTP 400")) == ("geometry", False)
+    assert fold(exc=TypeError("NoneType is not subscriptable")) == \
+        ("geometry", False)
 
     # and a model that never escalated leaves it absent, which is what keeps
-    # "refused" separable from "never asked" and from every legacy entry
+    # "not asked yet" separable from "no claim" and from every legacy entry
     poser, done, _ = make_poser()               # no escalation configured
     feed(poser)
     assert done.poses[-1][2].arbitrated is None
@@ -296,31 +340,43 @@ def test_the_real_call_path_maps_each_failure_to_its_own_record(monkeypatch):
     assert outcome(ret=2) is True                          # answered
     assert outcome(exc=pose.RateLimited("HTTP 429")) is False   # retry later
     assert outcome(exc=pose.VLMUnavailable("HTTP 502")) is False  # retry later
-    assert outcome(exc=RuntimeError("HTTP 400")) is None    # cannot succeed
+    assert outcome(exc=pose.VLMRejected("HTTP 400")) == "rejected"  # judged
+    # an unknown type is retryable now, not permanent (C1)
+    assert outcome(exc=RuntimeError("HTTP 418")) is False
     # an unparseable answer stays retryable — a judgement, not a leftover
     assert outcome(ret=None) is False
 
 
-def test_arbitrated_round_trips_as_three_states_not_two():
-    """absent / false / true are three different facts, and the absent-vs-false
-    split is what makes the flag actionable: `false` says "retry this one",
-    where absent says nothing — so a retry rule can re-escalate genuine
-    refusals without re-billing every legacy entry that merely lacks the key
-    (2026-08-19)."""
+def test_arbitrated_round_trips_as_four_states_on_disk(tmp_path):
+    """true / "rejected" / false / absent, asserted **on disk** and through
+    the production writers (B1, docs/tri-state-pass-2.md, 2026-08-21).
+
+    The Pose-level assertion alone passes with the bug this pins: `to_cache`
+    coerced `bool(self.arbitrated)`, and `bool("rejected") is True` — the
+    schema collapsed to three states in the file while every in-memory test
+    stayed green."""
     def mk(**kw):
         return pose.Pose(up=(0.0, 0.0, 1.0), confidence=0.5, source="geometry",
                          v=pose.POSE_CACHE_VERSION, margin=0.2, **kw)
 
     assert mk(arbitrated=True).to_cache()["arbitrated"] is True
     assert mk(arbitrated=False).to_cache()["arbitrated"] is False
-    assert "arbitrated" not in mk().to_cache()          # never asked
+    assert mk(arbitrated="rejected").to_cache()["arbitrated"] == "rejected"
+    assert "arbitrated" not in mk().to_cache()          # no claim
 
-    for value in (True, False):
-        assert pose.Pose.from_cache(mk(arbitrated=value).to_cache()).arbitrated is value
-    assert pose.Pose.from_cache(mk().to_cache()).arbitrated is None
+    cache = {f"model-{i}|0|0": mk(**kw).to_cache() for i, kw in enumerate(
+        [{"arbitrated": True}, {"arbitrated": False},
+         {"arbitrated": "rejected"}, {}])}
+    pose.save_pose_cache(tmp_path, cache)
+    loaded = pose.load_pose_cache(tmp_path)
+    assert [e.get("arbitrated") for e in loaded.values()] == \
+        [True, False, "rejected", None]
+    assert [pose.Pose.from_cache(e).arbitrated for e in loaded.values()] == \
+        [True, False, "rejected", None]
 
-    # a legacy entry has no such key, and must not be read as "refused" —
-    # that is the whole difference between a free change and a ~1243-call one
+    # a legacy entry has no such key. It reads as `false` now — absence is no
+    # claim, and the gate check is what keeps that affordable — but it must
+    # still round-trip as absent rather than being stamped with a verdict
     legacy = {"up": [0, 0, 1], "confidence": 0.5, "source": "siglip",
               "margin": 0.2, "v": pose.POSE_CACHE_VERSION}
     assert pose.Pose.from_cache(legacy).arbitrated is None
@@ -353,7 +409,10 @@ def test_poll_resumes_a_cancelled_future_on_the_park_time_pose():
     assert len(done.poses) == 2                     # re-recorded, not skipped
     assert done.poses[-1][2].source == "geometry"   # the park-time answer stands
     assert done.poses[-1][2].arbitrated is False    # ...and will be asked again
-    assert not pose.pose_is_sufficient(done.poses[-1][2].to_cache())
+    # under ESCALATE's threshold, by a run that can ask: both conditions C4
+    # added, on the fixture's own margin (1.98)
+    assert not pose.pose_is_sufficient(done.poses[-1][2].to_cache(),
+                                       True, ESCALATE["margin_threshold"])
     assert not poser.parked
 
 
@@ -453,7 +512,8 @@ def test_settle_timeout_abandons_to_the_ensemble_pose():
     assert len(done.poses) == 2            # park-time floor + the retry record
     assert done.poses[-1][2].source == "geometry"   # the park-time answer stands
     assert done.poses[-1][2].arbitrated is False    # ...and will be asked again
-    assert not pose.pose_is_sufficient(done.poses[-1][2].to_cache())
+    assert not pose.pose_is_sufficient(done.poses[-1][2].to_cache(),
+                                       True, ESCALATE["margin_threshold"])
 
 
 def test_settle_waits_out_and_folds_an_in_flight_answer():
@@ -520,3 +580,123 @@ def test_settle_distinguishes_a_calls_own_timeout_from_the_waits(capsys):
     assert not poser.parked
     assert [p.source for _, _, p in done.poses] == ["geometry", "geometry"]
     assert "arbiter failed" in capsys.readouterr().out
+
+
+# --- the run-level circuit breaker (C5) --------------------------------------
+
+def fold_outcome(poser, arb, outcome, index):
+    """One file through park → fold. `outcome` is an exception, "cancel", or
+    the arbiter's answer."""
+    feed(poser, index=index, file=Path(f"models/{index}.stl"))
+    future = arb.futures[-1]
+    if isinstance(outcome, BaseException):
+        future.set_exception(outcome)
+    elif outcome == "cancel":
+        future.cancel()
+    else:
+        future.set_result(outcome)
+    poser.poll()
+
+
+def unavailable(n, poser, arb, clock, gap, first=0):
+    """`n` consecutive transient failures, `gap` seconds apart."""
+    for i in range(n):
+        if i:
+            clock.advance(gap)
+        fold_outcome(poser, arb, pose.VLMUnavailable(f"HTTP 502 #{i}"),
+                     first + i)
+
+
+def test_the_breaker_trips_on_five_consecutive_failures_spanning_a_minute(capsys):
+    """N = 5 **and** ≥ 60 s, both (review 2, confirmed by Masa 2026-08-21).
+    Vertex quota is a rate refilled per minute, effective concurrency is 3 and
+    VLM_BACKOFF makes five consecutive rate-limited folds reachable in well
+    under a minute — a sub-minute storm must not zero out an overnight run's
+    arbitration."""
+    clock = FakeClock()
+    poser, _, arb = make_poser(clock=clock, **ESCALATE)
+    unavailable(4, poser, arb, clock, gap=20.0)
+    assert poser.can_arbitrate()           # four is not five
+    clock.advance(20.0)                    # 80 s spanned by the fifth
+    fold_outcome(poser, arb, pose.RateLimited("HTTP 429"), 4)
+    assert not poser.can_arbitrate()
+    out = capsys.readouterr()
+    assert "arbiter disabled" in out.err    # one loud line, on stderr
+
+
+def test_a_sub_minute_storm_does_not_trip_the_breaker():
+    clock = FakeClock()
+    poser, _, arb = make_poser(clock=clock, **ESCALATE)
+    unavailable(8, poser, arb, clock, gap=5.0)     # 35 s, eight failures
+    assert poser.can_arbitrate()
+    clock.advance(30.0)                            # the ninth spans 65 s
+    fold_outcome(poser, arb, pose.VLMUnavailable("HTTP 502"), 8)
+    assert not poser.can_arbitrate()
+
+
+def test_every_fold_the_api_answered_resets_the_counter():
+    """The API spoke, so the environment is healthy — whatever it said. Four
+    failures, one answer, four more: consecutive is what counts."""
+    for spoke in (3, None, pose.VLMRejected("HTTP 400")):
+        clock = FakeClock()
+        poser, _, arb = make_poser(clock=clock, **ESCALATE)
+        unavailable(4, poser, arb, clock, gap=30.0)
+        clock.advance(30.0)
+        fold_outcome(poser, arb, spoke, 4)         # answer / unparseable / judged
+        clock.advance(30.0)
+        unavailable(4, poser, arb, clock, gap=30.0, first=5)
+        assert poser.can_arbitrate(), spoke
+
+
+def test_cancellation_neither_counts_nor_resets():
+    """The abort path folds and settles a whole queue of cancellations: it
+    must not trip the breaker on the way out, nor clear a streak that was
+    about to."""
+    clock = FakeClock()
+    poser, _, arb = make_poser(clock=clock, **ESCALATE)
+    for i in range(6):                             # six cancels, spread wide
+        clock.advance(30.0)
+        fold_outcome(poser, arb, "cancel", i)
+    assert poser.can_arbitrate()                   # counted nothing
+
+    unavailable(4, poser, arb, clock, gap=30.0, first=10)
+    clock.advance(30.0)
+    fold_outcome(poser, arb, "cancel", 20)         # cleared nothing
+    clock.advance(30.0)
+    fold_outcome(poser, arb, pose.VLMUnavailable("HTTP 502"), 21)
+    assert not poser.can_arbitrate()               # the fifth, not a first
+
+
+def test_a_tripped_breaker_marks_instead_of_parking():
+    """After the trip: nothing new parks, the gate's firing is still recorded
+    `false`, and the count the run reports rises. `can_arbitrate()` is what
+    the driver hands `route`, which is what stops the marked backlog
+    re-rendering for the rest of the run."""
+    clock = FakeClock()
+    poser, done, arb = make_poser(clock=clock, **ESCALATE)
+    unavailable(5, poser, arb, clock, gap=20.0)
+    assert not poser.can_arbitrate()
+    assert poser.gate_fired_no_call == 0           # every one of those asked
+
+    parked_before = len(arb.calls)
+    assert feed(poser, index=99) == Resolved(F, 99, pose_changed=False)
+    assert len(arb.calls) == parked_before and not poser.parked
+    assert done.poses[-1][2].arbitrated is False
+    assert poser.gate_fired_no_call == 1
+
+
+def test_an_already_parked_call_still_folds_after_the_trip():
+    """The trip stops *submissions*, not folds: the ~N calls already in flight
+    are paid for and their answers must land. A healthy one among them does
+    not re-enable arbitration — the breaker never untrips within a run."""
+    clock = FakeClock()
+    poser, done, arb = make_poser(clock=clock, **ESCALATE)
+    feed(poser, index=90, file=Path("models/90.stl"))      # in flight throughout
+    unavailable(5, poser, arb, clock, gap=20.0)
+    assert not poser.can_arbitrate() and set(poser.parked) == {90}
+
+    arb.futures[0].set_result(3)
+    assert poser.poll() == [Resolved(Path("models/90.stl"), 90,
+                                     pose_changed=True)]
+    assert done.poses[-1][2].arbitrated is True           # the paid answer
+    assert not poser.can_arbitrate()

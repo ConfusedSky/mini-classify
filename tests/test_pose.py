@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -245,9 +246,110 @@ def test_gemini_maps_each_transport_failure_to_the_retry_split(monkeypatch):
     assert with_urlopen(http_error(503)) is pose.RateLimited
     assert with_urlopen(http_error(500)) is pose.VLMUnavailable
     assert with_urlopen(http_error(502)) is pose.VLMUnavailable
-    assert with_urlopen(http_error(400)) is RuntimeError      # judged: permanent
+    # auth/entitlement (401/403/404) and the intermediary timeouts
+    # (408/409/425) are the environment, not a verdict on the request, and
+    # they are discovered only mid-run — the startup probe never makes a
+    # Vertex call (docs/tri-state-pass-2.md, 2026-08-21)
+    for code in pose.TRANSIENT_HTTP_STATUS:
+        assert with_urlopen(http_error(code)) is pose.VLMUnavailable, code
+    # only a request judged on its merits is permanent, and it now has its own
+    # type: a bare RuntimeError is the *transient* default since C1
+    assert with_urlopen(http_error(400)) is pose.VLMRejected
+    assert with_urlopen(http_error(422)) is pose.VLMRejected
     assert with_urlopen(urllib.error.URLError("dns down")) is pose.VLMUnavailable
     assert with_urlopen(socket.timeout("timed out")) is pose.VLMUnavailable
+
+    # gcloud failing mid-run is the third permanent-record class this pass
+    # closes: the token cache's 1800 s TTL guarantees a collection run
+    # re-mints, and an ADC that expired then raised past every transient arm
+    def broken_token():
+        raise RuntimeError("gcloud ADC unavailable")
+
+    monkeypatch.setattr(pose, "gcloud_token", broken_token)
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda *a, **k: pytest.fail("called with no token"))
+    with pytest.raises(pose.VLMUnavailable, match="gcloud"):
+        pose._ask_gemini(b"png", 6, "m", project="p")
+
+
+def test_gcloud_helpers_normalise_their_subprocess_failures(monkeypatch):
+    """The helpers promise `RuntimeError`, and a hung or missing gcloud broke
+    that promise: `TimeoutExpired` and `FileNotFoundError` escaped into
+    `_ask_gemini`, where the generic arm recorded the model permanently
+    (docs/tri-state-pass-2.md, 2026-08-21)."""
+    import subprocess as sp
+
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.delenv("GCLOUD_PROJECT", raising=False)
+    pose._token_cache.clear()
+
+    for exc in (sp.TimeoutExpired(cmd="gcloud", timeout=30),
+                FileNotFoundError("no gcloud on PATH")):
+        def run_fails(*a, **k):
+            raise exc
+
+        monkeypatch.setattr(pose.subprocess, "run", run_fails)
+        with pytest.raises(RuntimeError, match="gcloud"):
+            pose.gcloud_project()
+        with pytest.raises(RuntimeError, match="gcloud"):
+            pose.gcloud_token()
+
+
+def http_body(payload):
+    """A 200 response object standing in for urlopen's — only `.read()` is
+    ever called, and the bytes are what the parse split reads."""
+    class Response:
+        def read(self):
+            return payload if isinstance(payload, bytes) else json.dumps(payload).encode()
+    return Response()
+
+
+def gemini_body(monkeypatch, payload):
+    import urllib.request
+
+    monkeypatch.setattr(pose, "gcloud_token", lambda: "tok")
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda req, timeout=None: http_body(payload))
+    return pose._ask_gemini(b"png", 6, "m", project="p")
+
+
+def test_a_200_body_is_rejected_only_when_it_states_a_verdict(monkeypatch):
+    """B2: `"rejected"` is inferred from the API's stated verdict, never from
+    a KeyError. A `finishReason: MAX_TOKENS` with no parts — the
+    thinking-token exhaustion this repo has measured twice — is deterministic
+    per model *config*, so treating a missing `parts` as a judgement would pin
+    the whole collection permanently on one bad config."""
+    def blocked(reason):
+        return {"candidates": [{"finishReason": reason}]}
+
+    for reason in pose.REJECTED_FINISH_REASONS:
+        with pytest.raises(pose.VLMRejected, match=reason):
+            gemini_body(monkeypatch, blocked(reason))
+    # a prompt-level block carries no candidate at all
+    with pytest.raises(pose.VLMRejected, match="blocked"):
+        gemini_body(monkeypatch, {"promptFeedback": {"blockReason": "SAFETY"}})
+
+    # ...and everything else that carries no answer is transient
+    with pytest.raises(pose.VLMUnavailable, match="MAX_TOKENS"):
+        gemini_body(monkeypatch, blocked("MAX_TOKENS"))
+    with pytest.raises(pose.VLMUnavailable, match="OTHER"):
+        gemini_body(monkeypatch, blocked("OTHER"))
+    with pytest.raises(pose.VLMUnavailable, match="no answer"):
+        gemini_body(monkeypatch, {})
+    with pytest.raises(pose.VLMUnavailable, match="no answer"):
+        gemini_body(monkeypatch, {"candidates": []})
+    with pytest.raises(pose.VLMUnavailable, match="no answer"):
+        gemini_body(monkeypatch, {"candidates": [{"content": {"parts": []}}]})
+    # transport damage, not a verdict
+    with pytest.raises(pose.VLMUnavailable, match="unparseable"):
+        gemini_body(monkeypatch, b"<html>502 Bad Gateway</html>")
+
+    # the unchanged lane: parts that carry no usable answer still flatten to
+    # None, which `_fold` records retryable
+    assert gemini_body(monkeypatch,
+                       {"candidates": [{"content": {"parts": [{}]}}]}) is None
+    assert gemini_body(monkeypatch, {"candidates": [{"content": {"parts": [
+        {"text": '{"tile": 3}'}]}}]}) == 2
 
 
 def test_claude_cli_failures_are_transient(monkeypatch):
@@ -405,51 +507,79 @@ def test_margin_gate_escalates_only_the_unsure():
     assert pose.needs_arbiter_margin(0.9, threshold=1.0)
 
 
+GATE = pose.MARGIN_THRESHOLD
+
+
+def sufficient(entry, arbiter_available=True, margin_threshold=GATE):
+    return pose.pose_is_sufficient(entry, arbiter_available, margin_threshold)
+
+
 def test_geometry_only_pose_is_a_miss():
     # margin is None exactly when the ensemble did not run: one old
     # geometry-only pass must not pin the pose, so this run re-resolves the
-    # entry. The `ensemble_available` parameter is retired with
-    # --no-up-ensemble (2026-08-17) — the ensemble always runs, so the arm
-    # that took any cached answer had no reachable caller left.
+    # entry — in an arbiterless run too, since the ensemble is what upgrades it
     geo = {"up": [0, 0, 1], "confidence": 0.4, "source": "geometry", "margin": None}
-    assert not pose.pose_is_sufficient(geo)
+    assert not sufficient(geo)
+    assert not sufficient(geo, arbiter_available=False)
 
 
 def test_full_run_poses_stay_cached():
     # geometry-with-margin means the ensemble ran and agreed with geometry
-    assert pose.pose_is_sufficient({"source": "geometry", "margin": 0.62})
-    assert pose.pose_is_sufficient({"source": "siglip", "margin": 0.51})
+    assert sufficient({"source": "geometry", "margin": 0.62})
+    assert sufficient({"source": "siglip", "margin": 0.51})
     # a VLM answer outranks the ensemble whichever gate escalated it, so a
     # geometry-gated arbiter call from an old --no-up-ensemble run is not
     # re-bought
-    assert pose.pose_is_sufficient({"source": "vlm", "margin": None})
+    assert sufficient({"source": "vlm", "margin": None})
 
 
-def test_a_refused_arbiter_call_is_a_miss():
-    """`arbitrated: false` is the ensemble's answer standing in for one that
-    was asked for and never arrived — a 429, an error, a cancellation. Without
-    this it was a permanent cache hit that nothing would ever re-ask
-    (2026-08-19)."""
-    refused = {"source": "siglip", "margin": 0.2, "arbitrated": False}
-    assert not pose.pose_is_sufficient(refused)
+def test_the_missing_escalation_is_a_miss_only_where_it_could_happen():
+    """C4, the four-state read (docs/tri-state-pass-2.md, 2026-08-21).
+
+    `false` and **absent** both mean "the escalation the margin asked for did
+    not happen", and both are misses — but only in a run that could actually
+    do something about it. Two conditions, each closing a marker-losing hole:
+
+    * no arbiter -> hit. The laundering bug: an `off` run re-rendered the
+      marked model, re-resolved it with no gate and recorded the key absent,
+      erasing the marker. Production runs `off`, so this destroyed them
+      routinely.
+    * margin above *this run's* gate -> hit. A threshold change must not
+      launder markers either, and an entry the gate would not escalate is
+      owed no call."""
+    for marked in ({"source": "siglip", "margin": 0.2, "arbitrated": False},
+                   {"source": "siglip", "margin": 0.2}):          # absent
+        assert not sufficient(marked)                             # re-ask
+        assert sufficient(marked, arbiter_available=False)        # cannot ask
+        assert sufficient(marked, margin_threshold=0.1)           # not owed
+    # above the gate, the two conditions agree with each other
+    assert sufficient({"source": "siglip", "margin": 0.61})
 
 
-def test_only_an_explicit_false_re_escalates():
-    """The distinction that made this affordable. An *absent* key is every
-    entry written before the flag and every model that never escalated —
-    treating those as misses would re-escalate ~1243 models of embed-cache2 on
-    the first run, which is why this waited for the flag to be tri-state."""
-    legacy = {"source": "siglip", "margin": 0.2}            # no key at all
-    answered = {"source": "geometry", "margin": 0.2, "arbitrated": True}
-    assert pose.pose_is_sufficient(legacy)
-    assert pose.pose_is_sufficient(answered)
+def test_a_settled_entry_is_never_re_asked():
+    """`true` and `"rejected"` are the two settled states: asked and answered,
+    or asked and judged. Neither is worth a second call, whatever this run's
+    gate says — and `"rejected"` must not read as settled by truthiness alone,
+    which is why readers compare explicitly."""
+    for state in (True, "rejected"):
+        assert sufficient({"source": "geometry", "margin": 0.2,
+                           "arbitrated": state})
+        # ...but a settled entry with no margin is still a geometry-only pass
+        assert not sufficient({"source": "geometry", "margin": None,
+                               "arbitrated": state})
     # and a vlm answer is sufficient however the flag reads — it moved the pose
-    assert pose.pose_is_sufficient({"source": "vlm", "margin": 0.2,
-                                    "arbitrated": False})
+    assert sufficient({"source": "vlm", "margin": 0.2, "arbitrated": False})
 
 
 def test_no_entry_is_never_sufficient():
-    assert not pose.pose_is_sufficient(None)
+    assert not sufficient(None)
+
+
+def test_pose_is_sufficient_has_no_defaults():
+    """The `Resolved.pose_changed` precedent: a default silently un-pins the
+    W1 regression test, and every caller breaking loudly is the point."""
+    with pytest.raises(TypeError):
+        pose.pose_is_sufficient({"source": "siglip", "margin": 0.2})
 
 
 def test_file_identity_changes_with_mtime_and_size(tmp_path):

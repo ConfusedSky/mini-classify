@@ -180,9 +180,11 @@ class FakePoser:
     for a park). `polls` is a list of lists: one drain's worth of poll output
     per entry, then empty forever."""
 
-    def __init__(self, log, answers=None, polls=(), parked=None):
+    def __init__(self, log, answers=None, polls=(), parked=None,
+                 arbiter_available=True):
         self.log = log
         self.answers = dict(answers or {})
+        self.arbitrates = arbiter_available
         self.polls = [list(p) for p in polls]
         self.parked = {} if parked is None else parked   # by reference: a test
                                                          # clears it to model a
@@ -190,6 +192,11 @@ class FakePoser:
         self.dropped = []
         self.folded = 0
         self.abandoned = 0
+
+    def can_arbitrate(self):
+        # read per route call, not cached by the driver: a breaker that trips
+        # mid-run has to change the answer (C5)
+        return self.arbitrates
 
     def on_tiles(self, m):
         self.log.append(("on_tiles", m.index))
@@ -251,17 +258,19 @@ class Rig:
     def __init__(self, monkeypatch, files=1, routes=None, script=(),
                  answers=None, polls=(), parked=None, on_empty=None,
                  window=2, skip_embed=False, exitcode=None,
-                 fail_tiles=(), fail_views=()):
+                 fail_tiles=(), fail_views=(), arbiter_available=True):
         self.log = []
         self.tasks = FakeTasks(self.log)
         self.results = FakeResults(script, on_empty=on_empty)
         self.child = FakeChild(self.log, exitcode)
         self.done = FakeDone(self.log)
-        self.poser = FakePoser(self.log, answers, polls, parked)
+        self.poser = FakePoser(self.log, answers, polls, parked,
+                               arbiter_available)
         self.embedder = FakeEmbedder(self.log, fail_tiles, fail_views)
         self.arbiter = FakeArbiter(self.log)
         self.route_calls = []
         self.settled_calls = []
+        self.arbiter_calls = []
         self.routes = routes or {}
         self.tasks.probe = lambda: (self.done.admission.in_flight(),
                                     len(self.poser.parked))
@@ -276,9 +285,11 @@ class Rig:
             poser=self.poser, embedder=self.embedder, done=self.done,
             arbiter=self.arbiter, skip_embed=skip_embed, window=window)
 
-    def _route(self, file, index, ctx, pose_changed=False, settled=False):
+    def _route(self, file, index, ctx, pose_changed=False, settled=False, *,
+               arbiter_available):
         self.route_calls.append((index, pose_changed))
         self.settled_calls.append((index, settled))
+        self.arbiter_calls.append((index, arbiter_available))
         out = self.routes.get((index, pose_changed),
                               self.routes.get(index, PoseRenderTask(file, index)))
         if isinstance(out, Exception):
@@ -338,6 +349,27 @@ def test_resolved_reroutes_as_settled_and_the_cold_call_does_not(monkeypatch):
               answers={0: Resolved(f(0), 0, pose_changed=True)})
     rig.run()
     assert rig.settled_calls == [(0, False), (0, True)]
+
+
+def test_route_is_told_whether_this_run_can_still_arbitrate(monkeypatch):
+    """C4/C5 (docs/tri-state-pass-2.md, 2026-08-21): the flag is the Poser's
+    `can_arbitrate()`, asked at every route call — the resolved backend stays
+    owned by `VlmConfig`, so no `CacheContext` field and no message shape
+    changed. A run with no arbiter must not re-render the entries it marked,
+    and a breaker that trips mid-run has to change the answer, which caching
+    it once at startup would prevent."""
+    rig = Rig(monkeypatch, files=1,
+              routes={(0, False): PoseRenderTask(f(0), 0),
+                      (0, True): Retired(f(0), 0)},
+              script=[PoseTiles(f(0), 0, np.zeros(6), [[np.zeros((2, 2, 3))]])],
+              answers={0: Resolved(f(0), 0, pose_changed=True)})
+    rig.run()
+    assert rig.arbiter_calls == [(0, True), (0, True)]
+
+    off = Rig(monkeypatch, files=1, arbiter_available=False,
+              routes={0: Retired(f(0), 0)})
+    off.run()
+    assert off.arbiter_calls == [(0, False)]
 
 
 def test_a_parked_file_produces_no_task_until_poll_resolves_it(monkeypatch):

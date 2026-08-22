@@ -288,7 +288,13 @@ def run(cfg: DriverConfig) -> None:
                 # re-render/re-bill loop the stall clock never saw because
                 # each lap was progress (review, 2026-08-20).
                 dispatch(route(out.file, out.index, cfg.ctx,
-                               pose_changed=out.pose_changed, settled=True))
+                               pose_changed=out.pose_changed, settled=True,
+                               # dead by construction here (`settled or ...`
+                               # short-circuits), passed because the parameter
+                               # has no default — the breaker cannot flip a
+                               # settled re-route into a re-render
+                               # (docs/tri-state-pass-2.md, 2026-08-21)
+                               arbiter_available=cfg.poser.can_arbitrate()))
             case Redraw():
                 done.on(out.hit)             # the row (retires=False) ...
                 tasks.send(out.task)         # ... retirement is the child's ack
@@ -430,7 +436,11 @@ def run(cfg: DriverConfig) -> None:
                 drv.admission.admitted += 1
                 drv.admitted_files[index] = f
                 try:
-                    dispatch(route(f, index, cfg.ctx))
+                    # can_arbitrate() is read per admission, not once: a
+                    # breaker that trips mid-run must stop the marked backlog
+                    # re-rendering from that point on (C5)
+                    dispatch(route(f, index, cfg.ctx,
+                                   arbiter_available=cfg.poser.can_arbitrate()))
                 except Exception as e:    # the warm path's error boundary (J3):
                     done.on(Failure(f, index, str(e)))   # route stats a file
                 drain(block=False)        # the cache may list but that vanished,

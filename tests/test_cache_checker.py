@@ -34,6 +34,12 @@ ENTRIES = {
             "margin": None, "v": pose.POSE_CACHE_VERSION},
     "siglip": {"up": [0.0, 1.0, 0.0], "confidence": 0.83, "source": "siglip",
                "margin": 0.61, "v": pose.POSE_CACHE_VERSION},
+    # the same entry from *under* the gate: margin 0.61 clears MARGIN_THRESHOLD,
+    # so it is the wrong fixture for anything about the escalation-owed states
+    # (docs/tri-state-pass-2.md, review 2 S1)
+    "siglip-gated": {"up": [0.0, 1.0, 0.0], "confidence": 0.83,
+                     "source": "siglip", "margin": 0.2,
+                     "v": pose.POSE_CACHE_VERSION},
     "vlm": {"up": [1.0, 0.0, 0.0], "confidence": 1.0, "source": "vlm",
             "margin": None, "v": pose.POSE_CACHE_VERSION},
 }
@@ -56,7 +62,10 @@ def make_args(**over):
     # sufficiency with it enabled unconditionally and reads no flag for it.
     d = dict(views=4, elevations=[20.0], render_size=512, model="test-model",
              compile=False, up_axis="auto", skip_embed=False,
-             save_renders=False, cache_dir="embed-cache")
+             save_renders=False, cache_dir="embed-cache",
+             # this run's escalation gate: route reads it for the four-state
+             # sufficiency check (docs/tri-state-pass-2.md, 2026-08-21)
+             up_margin=pose.MARGIN_THRESHOLD)
     d.update(over)
     return argparse.Namespace(**d)
 
@@ -74,6 +83,7 @@ class Case:
     renders: str = "none"           # "none" | "partial" | "last-ring" | "all"
     elevations: list = field(default_factory=lambda: [20.0])
     pose_changed: bool = False      # the driver's second-call input
+    arbiter_available: bool = True  # the driver's cfg.poser.can_arbitrate()
     needs_embed: bool | None = None  # asserted on EmbedRenderTask / Redraw.task
     retires: bool | None = None      # asserted on CachedHit
 
@@ -212,7 +222,8 @@ def build(tmp_path, case):
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
 def test_route_decision_table(tmp_path, case):
     f, ctx, expected_pose, cache_file = build(tmp_path, case)
-    out = route(f, 7, ctx, case.pose_changed)
+    out = route(f, 7, ctx, case.pose_changed,
+                arbiter_available=case.arbiter_available)
 
     assert type(out) is case.expect
     if isinstance(out, Redraw):
@@ -243,7 +254,7 @@ def test_route_keys_embed_cache_on_the_pose_up(tmp_path):
     ident = pose.file_identity(f, ctx.root)
     expected = cache_checker.cache_key_from_identity(ident, ctx.args, "0,1,0")
     assert cache_file.name == f"{expected}.npy"
-    assert route(f, 0, ctx).cache_file == cache_file
+    assert route(f, 0, ctx, arbiter_available=True).cache_file == cache_file
 
 
 def test_pose_changed_defaults_to_false(tmp_path):
@@ -253,8 +264,8 @@ def test_pose_changed_defaults_to_false(tmp_path):
     case = Case("d", CachedHit, embed_cached=True, save_renders=True,
                 renders="all", retires=True)
     f, ctx, _, _ = build(tmp_path, case)
-    assert type(route(f, 0, ctx)) is CachedHit
-    assert type(route(f, 0, ctx, True)) is Redraw
+    assert type(route(f, 0, ctx, arbiter_available=True)) is CachedHit
+    assert type(route(f, 0, ctx, True, arbiter_available=True)) is Redraw
 
 
 def test_settled_reroute_accepts_the_pose_a_cold_call_would_re_escalate(tmp_path):
@@ -264,19 +275,77 @@ def test_settled_reroute_accepts_the_pose_a_cold_call_would_re_escalate(tmp_path
     Cold, that entry is a miss (the later run's re-ask); on the re-route,
     `settled=True` says this run's decision is made, so the same entry must
     flow on to the embedding decision instead of a fresh PoseRenderTask,
-    which would re-render, re-park, re-bill and never converge."""
-    case = Case("s", PoseRenderTask)
+    which would re-render, re-park, re-bill and never converge.
+
+    The fixture is the **below-gate** entry, and that is load-bearing: under
+    C4 a marked entry whose margin clears this run's gate is a hit anyway, so
+    the pin on the old `ENTRIES["siglip"]` (margin 0.61 against a 0.45 gate)
+    would pass without `settled` doing anything at all — asserting nothing
+    (docs/tri-state-pass-2.md, review 2 S1). `arbiter_available=True` on both
+    calls for the same reason: an arbiterless run takes the same entry as a
+    hit cold."""
+    case = Case("s", PoseRenderTask, pose_state="siglip-gated")
     f, ctx, _, cache_file = build(tmp_path, case)
     ident = pose.file_identity(f, ctx.root)
     ctx.poses[ident] = dict(ctx.poses[ident], arbitrated=False)
 
-    assert type(route(f, 0, ctx)) is PoseRenderTask          # the later run
-    out = route(f, 0, ctx, settled=True)                     # the re-route
+    assert type(route(f, 0, ctx, arbiter_available=True)) is PoseRenderTask
+    out = route(f, 0, ctx, settled=True, arbiter_available=True)  # the re-route
     assert type(out) is EmbedRenderTask and out.needs_embed
     # settled does not conjure a pose that was never resolved: no entry is
     # still a render, whatever the flag says
     ctx.poses.clear()
-    assert type(route(f, 0, ctx, settled=True)) is PoseRenderTask
+    assert type(route(f, 0, ctx, settled=True,
+                      arbiter_available=True)) is PoseRenderTask
+
+
+def marked(tmp_path, state, **entry_over):
+    """A below-gate entry in one of the four `arbitrated` states."""
+    f, ctx, _, _ = build(tmp_path, Case("m", PoseRenderTask,
+                                        pose_state="siglip-gated"))
+    ident = pose.file_identity(f, ctx.root)
+    ctx.poses[ident] = dict(ctx.poses[ident], **entry_over)
+    if state is not ...:
+        ctx.poses[ident]["arbitrated"] = state
+    else:
+        ctx.poses[ident].pop("arbitrated", None)
+    return f, ctx
+
+
+def test_an_owed_escalation_is_a_miss_only_where_it_could_happen(tmp_path):
+    """C4 (docs/tri-state-pass-2.md, 2026-08-21). `false` and an absent key
+    both say the escalation the margin asked for did not happen, and both are
+    re-rendered — but only by a run that could do something about it.
+
+    The two conditions each close a marker-losing hole. Without
+    `arbiter_available`, a `--pose-vlm off` run (what production runs)
+    re-rendered the marked model, re-resolved it with no gate and recorded the
+    key absent: the marker erased and the entry settled forever. Without the
+    gate check, lowering `--up-margin` would launder markers the same way."""
+    for state in (False, ...):                          # false, absent
+        f, ctx = marked(tmp_path / f"s{state}", state)
+        assert type(route(f, 0, ctx, arbiter_available=True)) is PoseRenderTask
+        assert type(route(f, 0, ctx, arbiter_available=False)) is EmbedRenderTask
+        ctx.args.up_margin = 0.1                        # below the entry's 0.2
+        assert type(route(f, 0, ctx, arbiter_available=True)) is EmbedRenderTask
+
+
+def test_a_settled_entry_is_never_re_rendered(tmp_path):
+    """`true` and `"rejected"` are settled: the call happened and either
+    answered or was judged, so no run re-buys it. `"rejected"` must survive
+    the round trip as a string — coerced to a bool it would read as `true`
+    here and be indistinguishable from an answer (B1)."""
+    for state in (True, "rejected"):
+        f, ctx = marked(tmp_path / f"s{state}", state)
+        assert type(route(f, 0, ctx, arbiter_available=True)) is EmbedRenderTask
+
+
+def test_route_demands_the_arbiter_flag(tmp_path):
+    """No default (the `Resolved.pose_changed` precedent): a caller that has
+    not thought about it fails loudly rather than silently un-pinning W1."""
+    f, ctx, _, _ = build(tmp_path, Case("d", PoseRenderTask))
+    with pytest.raises(TypeError):
+        route(f, 0, ctx)
 
 
 def test_route_raises_on_vanished_file(tmp_path):
@@ -285,11 +354,11 @@ def test_route_raises_on_vanished_file(tmp_path):
     f, ctx, _, _ = build(tmp_path, case)
     f.unlink()
     with pytest.raises(OSError):
-        route(f, 0, ctx)
+        route(f, 0, ctx, arbiter_available=True)
     ctx.args.up_axis = "z"          # the forced path stats too (embed key)
     ctx.poses = ForbiddenPoses()
     with pytest.raises(OSError):
-        route(f, 0, ctx)
+        route(f, 0, ctx, arbiter_available=True)
 
 
 # The key-composition pin that lived here (cache_checker's builders against

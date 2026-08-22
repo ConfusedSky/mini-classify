@@ -105,20 +105,53 @@ class VlmConfig:
                 f"expected one of {VLM_BACKENDS}")
 
 
+BREAKER_N = 5
+"""Consecutive `VLMUnavailable` folds before the run stops arbitrating."""
+
+BREAKER_WINDOW_S = 60.0
+"""...and how long they must span to count as an outage rather than a storm.
+
+Vertex quota is a *rate*, refilled per minute (`--arbiter-min-interval` exists
+because the 2026-08-19 incident was a storm, not an outage): effective
+concurrency is WINDOW = 3 and VLM_BACKOFF makes five consecutive rate-limited
+folds reachable in well under a minute, so N alone would let a sub-minute
+storm zero out an overnight run's arbitration (review 2, confirmed by Masa
+2026-08-21)."""
+
+
 class Poser:
     def __init__(self, up_T: np.ndarray, down_T: np.ndarray, arbiter,
                  record_pose: Callable[[Path, int, Pose], None],
-                 vlm_cfg: VlmConfig):
+                 vlm_cfg: VlmConfig, clock: Callable[[], float] = monotonic):
         self.up_T = up_T
         self.down_T = down_T
         self.arbiter = arbiter
         self.record_pose = record_pose
         self.cfg = vlm_cfg
+        self._clock = clock            # injection seam: the breaker's window
         # continuation state, written only here — the abort pair owns its
         # emptying — and READ by the driver (P4): quiescence and the M4/N1
         # subtractions need membership, hence an exposed dict, not a predicate
         self.parked: dict[int, ParkedFile] = {}
         self._stash: dict[int, tuple[np.ndarray, list[list[np.ndarray]]]] = {}
+        # The breaker (C5, docs/tri-state-pass-2.md, 2026-08-21). Touched only
+        # from the parent thread — `poll`/`fold_done`/`settle` and the driver's
+        # routing all run there — so no lock, and the count is fold-ordered by
+        # construction.
+        self._unavailable = 0          # consecutive VLMUnavailable folds
+        self._unavailable_since = 0.0  # when that streak started
+        self._tripped = False          # never untrips within a run
+        # Gated resolutions recorded `false` with no call made — no backend,
+        # an `off`/degraded run, or the breaker tripped. The run's closing
+        # output reports it: a breaker-tripped full-collection run must not be
+        # indistinguishable from a healthy one in the log tail.
+        self.gate_fired_no_call = 0
+
+    def can_arbitrate(self) -> bool:
+        """Can this run still buy an answer? A backend is configured and the
+        breaker has not tripped. `route` reads it through the driver, which is
+        what stops a tripped run re-rendering the marked backlog (C4)."""
+        return bool(self.cfg.backend) and not self._tripped
 
     # --- the ensemble ------------------------------------------------------
 
@@ -149,15 +182,29 @@ class Poser:
         source = "geometry" if idx == geo_idx else "siglip"
         up = tuple(float(v) for v in pose.UP_CANDIDATES[idx])
         resolved = (up, ratio, source, margin)
-        p = self._make_pose(*resolved)
-        self.record_pose(m.file, m.index, p)
 
-        if self.cfg.backend and pose.needs_arbiter_margin(
-                margin, self.cfg.margin_threshold):
+        gated = pose.needs_arbiter_margin(margin, self.cfg.margin_threshold)
+        if gated and self.can_arbitrate():
+            # The park-time record is `False`, not absent (C3,
+            # docs/tri-state-pass-2.md, 2026-08-21): every completion path
+            # overwrites it, so the settle-record, the CancelledError
+            # re-record and the (defensive) drop-on-parked path all become
+            # consequences of the default rather than special cases.
+            self.record_pose(m.file, m.index,
+                             self._make_pose(*resolved, arbitrated=False))
             sheet_tiles = [Image.fromarray(row[0]) for row in grid]
             future = self.arbiter.submit(self._vlm_call(m.file, sheet_tiles))
             self.parked[m.index] = ParkedFile(m.file, resolved, future)
             return None
+        # The gate fired and no call was made — whatever the reason (no
+        # backend, an `off` run, a degraded run, the breaker tripped). Marking
+        # it `false` is what stops an arbiterless run foreclosing arbitration
+        # for everything it resolves; ungated resolutions make no claim.
+        if gated:
+            self.gate_fired_no_call += 1
+        self.record_pose(m.file, m.index,
+                         self._make_pose(*resolved,
+                                         arbitrated=False if gated else None))
         return self._resolved(m.file, m.index, source)
 
     # --- resuming parked files --------------------------------------------
@@ -262,17 +309,25 @@ class Poser:
         call keeps the ensemble's answer (main:classify_stls.py:1233-1235).
         May raise; the caller is the boundary.
 
-        Four outcomes, three records, and the split is the retry rule
+        Five outcomes, three records, and the split is the retry rule
         (`pose.pose_is_sufficient`):
 
-        * an answer — `arbitrated=True`, settled either way;
+        * an answer — `arbitrated=True`, settled either way (an answer that
+          would not parse twice stays `False`: retryable);
+        * `pose.VLMRejected` — `"rejected"`: the API judged the request, so a
+          retry cannot succeed and re-escalating forever would pay a call per
+          run for an answer that cannot come;
         * a **transient failure** (`pose.VLMUnavailable`: rate limit, network,
-          5xx, CLI timeout) or a **cancellation** — `arbitrated=False`, because
-          both mean "asked and not answered *yet*" and a later run should ask
-          again;
-        * any other failure — the key is left **absent**, because a request the
-          API rejects on its merits cannot succeed on a retry, and re-escalating
-          it forever would pay a call per run for an answer that cannot come.
+          auth, 5xx, CLI timeout) or a **cancellation** — `arbitrated=False`,
+          because both mean "asked and not answered *yet*";
+        * any other failure — `False` as well. The default is the transient
+          side (C1, docs/tri-state-pass-2.md, 2026-08-21): permanent was the
+          open-ended fallthrough, and three passes each found a transient
+          failure sitting on it. An unknown type now retries loudly rather
+          than pinning silently.
+
+        The `VLMUnavailable` arm is mandatory rather than cosmetic even though
+        its record matches the generic arm's: it is where the breaker counts.
 
         "A later run", not this one: the driver re-routes the Resolved with
         `settled=True`, so an `arbitrated=False` record cannot re-escalate
@@ -285,22 +340,34 @@ class Poser:
         indistinguishable from "never asked". `arbiter.shutdown()` cancels the
         queued futures on every Ctrl-C, so one interrupt pinned a whole queue
         of models to their ensemble answers forever."""
-        arbitrated = None
         try:
             idx = pf.future.result(timeout=0)
             arbitrated = idx is not None
+            self._breaker_reset()            # the API spoke; the environment
+                                             # is healthy, parse or no parse
         except CancelledError:
+            # Neither counts nor resets: it exits before classification, and
+            # the abort path's fold_done/settle must not trip or clear the
+            # breaker during shutdown.
             up, ratio, source, margin = pf.resolved
             self.record_pose(pf.file, index,
                              self._make_pose(up, ratio, source, margin,
                                              arbitrated=False))
             return None
+        except pose.VLMRejected as e:        # judged: never ask again
+            print(f"  arbiter rejected {pf.file.stem}: {e}")
+            idx, arbitrated = None, "rejected"
+            self._breaker_reset()            # five safety-blocked models in a
+                                             # row must not disable arbitration
         except pose.VLMUnavailable as e:     # transient: ask again next run
             print(f"  arbiter unavailable for {pf.file.stem}: {e}")
             idx, arbitrated = None, False
+            self._breaker_count(e)
         except Exception as e:               # one bad call must not sink the rest
             print(f"  arbiter failed for {pf.file.stem}: {e}")
-            idx, arbitrated = None, None     # not retryable; leave the key off
+            idx, arbitrated = None, False    # the flipped default (C1)
+            self._breaker_count(e)           # unavailability, as far as the
+                                             # breaker can tell
         up, ratio, source, margin = pf.resolved
         if idx is not None and not np.allclose(pose.UP_CANDIDATES[idx],
                                                np.asarray(up)):
@@ -313,6 +380,34 @@ class Poser:
         p = self._make_pose(up, ratio, source, margin, arbitrated=arbitrated)
         self.record_pose(pf.file, index, p)
         return p
+
+    def _breaker_reset(self) -> None:
+        self._unavailable = 0
+        self._unavailable_since = 0.0
+
+    def _breaker_count(self, e: Exception) -> None:
+        """One unavailable fold. Trips at BREAKER_N consecutive failures that
+        also span BREAKER_WINDOW_S — both, because a sub-minute quota storm is
+        a rate refusal and not an outage.
+
+        Tripping stops new submissions; `can_arbitrate()` turning false then
+        stops `route` re-rendering the marked backlog for the rest of the run,
+        bounding the wasted re-renders to the ~N models already in flight.
+        Already-parked futures still fold normally, and the breaker never
+        untrips within a run."""
+        if self._unavailable == 0:
+            self._unavailable_since = self._clock()
+        self._unavailable += 1
+        if self._tripped or self._unavailable < BREAKER_N:
+            return
+        if self._clock() - self._unavailable_since < BREAKER_WINDOW_S:
+            return
+        self._tripped = True
+        print(f"pose arbiter disabled for the rest of this run: "
+              f"{self._unavailable} consecutive failures over "
+              f"{self._clock() - self._unavailable_since:.0f}s (last: {e}). "
+              f"Gated poses keep the ensemble's answer, marked "
+              f"`arbitrated: false` for a later run", file=sys.stderr)
 
     def _resolved(self, file: Path, index: int, source: str) -> Resolved:
         # the one place the source → pose_changed mapping lives, so the

@@ -66,8 +66,15 @@ class Pose:
                                    # fresh resolutions pass POSE_CACHE_VERSION
                                    # explicitly (D10)
     margin: float | None = None
-    arbitrated: bool | None = None  # None = never asked (or legacy);
-                                    # False = asked, no answer; True = answered
+    arbitrated: bool | str | None = None
+                                    # None = no claim (never asked, or legacy);
+                                    # False = the escalation did not happen;
+                                    # True = answered; "rejected" = the API
+                                    # judged the request (docs/tri-state-pass-2.md,
+                                    # 2026-08-21). `str` is deliberate: a clean
+                                    # string enum would force load-time mapping
+                                    # of every true/false written since
+                                    # 2026-08-19 for no semantic gain.
     front_view: dict[str, int] = field(default_factory=dict)   # view_cfg -> index
 
     @classmethod
@@ -96,38 +103,40 @@ class Pose:
         `front_view` is included only once something has been resolved,
         matching entries that predate front-view caching.
 
-        `arbitrated` is tri-state and written only when it is known, which is
-        what makes it actionable rather than merely informative:
+        `arbitrated` is four-state, and **absence reads as `false`**
+        (docs/tri-state-pass-2.md, 2026-08-21):
 
-        * **absent** — never asked, or written before the flag existed
-          (2026-08-19). Not a claim.
-        * **false** — the arbiter was asked and the answer never arrived
-          *yet*: a rate limit or any other transient failure
-          (`VLMUnavailable` — network, 5xx, CLI timeout), a cancellation
-          from `arbiter.shutdown()` on an abort, or a call still in flight
-          when `settle`'s wait ran out. Worth asking again. A request the
-          API rejects on its merits is **not** this — it leaves the key
-          absent, because a retry cannot succeed and would pay a call per
-          run forever.
-        * **true** — it answered, whether or not its answer was taken.
+        * **true** — asked and answered, whether or not the answer moved the
+          pose.
+        * **"rejected"** — asked, and the API judged the request on its
+          merits (a non-auth 4xx, or a coherent 200 refusal — the
+          safety-block shape). Never re-ask; the ensemble answer stands
+          permanently.
+        * **false** — the escalation the margin asked for did not happen: a
+          transient failure (`VLMUnavailable` — network, 5xx, auth, CLI
+          timeout), a cancellation from `arbiter.shutdown()` on an abort,
+          abandonment when `settle`'s wait ran out, or the gate firing in a
+          run with no arbiter. Ask when possible.
+        * **absent** — no claim; read as `false`. `pose_is_sufficient` is
+          what makes that precise: an absent entry whose margin clears the
+          gate is never touched.
 
         It is deliberately *not* the same fact as `source == "vlm"`, which
         means the arbiter **moved** the answer: a call that ran and confirmed
         the ensemble keeps the ensemble's label, so without this a
         confirmation and a refusal are identical on disk.
 
-        The absent/false split is the load-bearing part. `false` says "this
-        one is worth retrying" about a specific model, where absent says
-        nothing — so a future `pose_is_sufficient` can re-escalate genuine
-        refusals without re-billing every legacy entry that merely lacks the
-        key."""
+        The string passes through rather than being coerced: `bool("rejected")
+        is True`, which collapsed the schema to three states on disk while
+        every in-memory test passed (review 2 blocker B1)."""
         d = {"up": [float(x) for x in self.up],
              "confidence": self.confidence,
              "source": self.source,
              "margin": self.margin,
              "v": self.v}
         if self.arbitrated is not None:
-            d["arbitrated"] = bool(self.arbitrated)
+            d["arbitrated"] = (self.arbitrated if isinstance(self.arbitrated, str)
+                               else bool(self.arbitrated))
         if self.front_view:
             d["front_view"] = dict(self.front_view)
         return d
@@ -252,7 +261,7 @@ def save_pose_cache(cache_dir, cache):
     p.write_text(json.dumps(cache))
 
 
-def pose_is_sufficient(entry):
+def pose_is_sufficient(entry, arbiter_available, margin_threshold):
     """Is this cached pose good enough for the current run, or a miss?
 
     `margin` is None exactly when the SigLIP ensemble did not run — a
@@ -263,35 +272,40 @@ def pose_is_sufficient(entry):
     place. A VLM answer outranks the ensemble whichever gate escalated it, so
     it stands regardless of its margin.
 
-    The `ensemble_available` parameter is retired (2026-08-17, with
-    `--no-up-ensemble`/`--up-conf` — actors_proposal.md Migration notes): the
-    ensemble always runs now, so every caller passed True and the False arm —
-    "take any cached answer" — had no way to be reached."""
+    The four states of `arbitrated`, read against *this* run
+    (docs/tri-state-pass-2.md, 2026-08-21):
+
+    * `true` / `"rejected"` — settled. The call happened and either answered
+      or was judged; a retry buys nothing.
+    * `false` or **absent** — the escalation the margin asked for has not
+      happened. Absence reads as `false`, and the two conditions below are
+      what keep that affordable.
+
+    Both new parameters take **no default** (the `Resolved.pose_changed`
+    precedent): a default silently un-pins the W1 regression test, and every
+    caller breaking loudly is the point.
+
+    `arbiter_available` kills the laundering bug: a run with no arbiter
+    (explicit `off`, a degraded `auto`, or a tripped breaker) must not
+    re-render a marked entry it cannot escalate — it would re-resolve the pose
+    with no gate and erase the marker, and production runs `off`.
+    `margin_threshold` is this run's gate: an entry whose margin clears it is
+    not owed a call at all, so a threshold change cannot launder markers
+    either."""
     if entry is None:
         return False
     if entry["source"] == "vlm":
         return True
-    # `arbitrated: false` means the arbiter was asked and the answer never
-    # arrived *yet* — a transient failure (rate limit, network, 5xx), or a
-    # cancellation/abandonment on an abort. That is a miss, because the entry
-    # is the ensemble's answer standing in for one that was wanted, and
-    # nothing else would ever ask again (2026-08-19). It is a miss for a
-    # *later* run only: the driver's re-route of a just-folded answer passes
-    # `settled=True` to `route`, or a rate-limited call would re-render and
-    # re-bill in a loop within the run that just failed to arbitrate it
-    # (review, 2026-08-20).
-    # A hard failure is deliberately not false: it leaves the key absent, so a
-    # request the API rejects on its merits is cached once rather than re-paid
-    # on every future run.
-    #
-    # Only an explicit `false`. An *absent* key is every entry written before
-    # the flag existed and every model that never escalated, and treating
-    # those as misses would re-escalate ~1243 models of `embed-cache2` on the
-    # first run after the change — the bill that made this wait for a rebuild
-    # until the flag became tri-state.
-    if entry.get("arbitrated") is False:
+    if entry.get("arbitrated") in (True, "rejected"):
+        return entry.get("margin") is not None
+    if entry.get("margin") is None:
         return False
-    return entry.get("margin") is not None
+    # A miss for a *later* run only: the driver's re-route of a just-folded
+    # answer passes `settled=True` to `route`, or a rate-limited call would
+    # re-render and re-bill in a loop within the run that just failed to
+    # arbitrate it (review, 2026-08-20).
+    return not (arbiter_available
+                and needs_arbiter_margin(entry["margin"], margin_threshold))
 
 
 def up_str(up):
@@ -650,13 +664,26 @@ _GEMINI_SCHEMA = {"type": "object", "properties": {"tile": {"type": "integer"}},
 _token_cache = {}
 
 
+def _run_gcloud(argv, timeout):
+    """`gcloud`, with its process-level failures normalised to the RuntimeError
+    the two helpers below already promise (docs/tri-state-pass-2.md,
+    2026-08-21). A hung or missing binary raised `TimeoutExpired`/`OSError`
+    out of helpers whose callers catch `RuntimeError`, and inside `_ask_gemini`
+    that leak took `_fold`'s permanent arm — the mid-run ADC-expiry case, since
+    the token cache's TTL guarantees a collection run re-mints."""
+    try:
+        return subprocess.run(argv, capture_output=True, text=True,
+                              timeout=timeout)
+    except (subprocess.SubprocessError, OSError) as e:
+        raise RuntimeError(f"could not run gcloud: {e}") from e
+
+
 def gcloud_project():
     """The GCP project for the Gemini backend, from the environment or gcloud."""
     for var in ("GOOGLE_CLOUD_PROJECT", "GCLOUD_PROJECT"):
         if os.environ.get(var):
             return os.environ[var]
-    out = subprocess.run(["gcloud", "config", "get-value", "project"],
-                         capture_output=True, text=True, timeout=30)
+    out = _run_gcloud(["gcloud", "config", "get-value", "project"], 30)
     project = out.stdout.strip()
     if out.returncode != 0 or not project or project == "(unset)":
         raise RuntimeError("no GCP project — set GOOGLE_CLOUD_PROJECT or run "
@@ -670,8 +697,8 @@ def gcloud_token(ttl=1800):
     now = time.monotonic()
     if _token_cache.get("expires", 0) > now:
         return _token_cache["token"]
-    out = subprocess.run(["gcloud", "auth", "application-default", "print-access-token"],
-                         capture_output=True, text=True, timeout=60)
+    out = _run_gcloud(["gcloud", "auth", "application-default",
+                       "print-access-token"], 60)
     if out.returncode != 0:
         raise RuntimeError("gcloud ADC unavailable — run "
                            f"`gcloud auth application-default login` ({out.stderr.strip()})")
@@ -693,6 +720,17 @@ class VLMUnavailable(RuntimeError):
     (review, 2026-08-20)."""
 
 
+class VLMRejected(RuntimeError):
+    """The API judged the request; a retry cannot succeed.
+
+    The permanent side of the retry split, and the side that is **enumerated**
+    (docs/tri-state-pass-2.md, 2026-08-21): a judged verdict can only arrive
+    as a non-auth 4xx or a coherent 200 refusal, where the transient side is
+    open-ended. Three review passes found transient failures pinned as
+    permanent while permanent was the fallthrough — so `_fold`'s default is
+    now `False` and this type is what buys `"rejected"`."""
+
+
 class RateLimited(VLMUnavailable):
     """The VLM said "later" (HTTP 429/503), not "no".
 
@@ -709,6 +747,22 @@ class RateLimited(VLMUnavailable):
 VLM_BACKOFF = [5.0, 20.0]
 
 
+TRANSIENT_HTTP_STATUS = (401, 403, 404, 408, 409, 425)
+"""4xx statuses that are the environment, not a verdict on the request.
+
+401/403/404 are auth, entitlement and a wrong endpoint — every model in such
+a run fails identically, and a permanent record is a wrong pin the next run
+cannot clear. 408/409/425 are a request timeout, a conflict and a
+too-early retry from an intermediary: transient by definition, and mapping
+them permanent is the leak this pass exists to end (review 2)."""
+
+REJECTED_FINISH_REASONS = ("SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT",
+                           "RECITATION", "SPII", "IMAGE_SAFETY")
+"""`finishReason`s that say the API judged the request. Enumerated, like the
+rest of the permanent side: `MAX_TOKENS`, `OTHER` and a missing reason are
+transient, because a body that merely carries no answer is not a verdict."""
+
+
 def _ask_gemini(png_bytes, n_tiles, model, project=None):
     """Vertex AI arbiter. Raw HTTPS rather than an SDK: one POST, no dependency,
     and the same call the eval harness measured at 43/44 standalone."""
@@ -716,7 +770,18 @@ def _ask_gemini(png_bytes, n_tiles, model, project=None):
     import urllib.error
     import urllib.request
 
-    project = project or gcloud_project()
+    # The environment being broken is not the request being judged: a missing
+    # project or an expired ADC token is transient, and the token cache's
+    # 1800 s TTL guarantees a collection run re-mints mid-run, where the
+    # startup probe cannot see it (docs/tri-state-pass-2.md, 2026-08-21).
+    # `gcloud_project()` is unreachable from the pipeline — resolve_pose_vlm
+    # always populates args.gemini_project — so the live path is the token
+    # half; both are wrapped anyway.
+    try:
+        project = project or gcloud_project()
+        token = gcloud_token()
+    except RuntimeError as e:
+        raise VLMUnavailable(f"gcloud: {e}") from e
     url = (f"https://{GEMINI_HOST}/v1/projects/{project}/locations/{GEMINI_LOCATION}"
            f"/publishers/google/models/{model}:generateContent")
     body = json.dumps({
@@ -727,10 +792,13 @@ def _ask_gemini(png_bytes, n_tiles, model, project=None):
         "generationConfig": {"temperature": 0, "responseMimeType": "application/json",
                              "responseSchema": _GEMINI_SCHEMA},
     }).encode()
-    req = urllib.request.Request(url, body, {"Authorization": f"Bearer {gcloud_token()}",
+    req = urllib.request.Request(url, body, {"Authorization": f"Bearer {token}",
                                              "Content-Type": "application/json"})
+    # The `HTTPError` clause stays ABOVE the `OSError` one — HTTPError
+    # subclasses OSError — while `.read()`'s IncompleteRead is an
+    # HTTPException and lands transient below.
     try:
-        d = json.loads(urllib.request.urlopen(req, timeout=300).read())
+        raw = urllib.request.urlopen(req, timeout=300).read()
     except urllib.error.HTTPError as e:
         detail = f"HTTP {e.code}: {e.read()[:200].decode(errors='replace')}"
         # 429/503 are "come back later", not "this request is wrong", and they
@@ -740,17 +808,37 @@ def _ask_gemini(png_bytes, n_tiles, model, project=None):
         # Vertex quota and the un-paced pool turned it into a storm).
         if e.code in (429, 503):
             raise RateLimited(detail) from e
-        # any other 5xx is the server failing, not the request being judged —
-        # transient like a network drop, without 429/503's backoff
-        if e.code >= 500:
+        # Auth/entitlement and intermediary-timeout statuses are the
+        # environment, not a verdict on the request, and both are discovered
+        # only mid-run — the startup probe never makes a Vertex call
+        # (docs/tri-state-pass-2.md, 2026-08-21). Any 5xx is the server
+        # failing, transient like a network drop, without 429/503's backoff.
+        if e.code in TRANSIENT_HTTP_STATUS or e.code >= 500:
             raise VLMUnavailable(detail) from e
-        raise RuntimeError(detail) from e
+        raise VLMRejected(detail) from e
     except (OSError, http.client.HTTPException) as e:
         # URLError and socket timeouts are OSErrors; a mid-read protocol error
         # is HTTPException. None of them is the API saying "no", so none may
         # land on the permanent side of the retry split (review, 2026-08-20).
         raise VLMUnavailable(f"network failure: {e}") from e
-    parts = d["candidates"][0]["content"]["parts"]
+    # Read split from parse, and `"rejected"` inferred from the API's stated
+    # verdict rather than from a KeyError (review 2 blocker B2): a
+    # `finishReason: MAX_TOKENS` with no parts — the thinking-token exhaustion
+    # measured twice in this repo — is deterministic per model *config* and
+    # would otherwise pin the whole collection permanently.
+    try:
+        d = json.loads(raw)
+    except ValueError as e:
+        raise VLMUnavailable(f"unparseable 200 body: {raw[:200]!r}") from e
+    cand = (d.get("candidates") or [{}])[0]
+    feedback = d.get("promptFeedback") or {}
+    reason = cand.get("finishReason") or feedback.get("blockReason")
+    parts = (cand.get("content") or {}).get("parts")
+    if not parts:
+        if reason in REJECTED_FINISH_REASONS or "blockReason" in feedback:
+            raise VLMRejected(f"blocked ({reason}): {raw[:200]!r}")
+        raise VLMUnavailable(
+            f"200 with no answer (finishReason={reason!r}): {raw[:200]!r}")
     return parse_tile_answer("".join(p.get("text", "") for p in parts), n_tiles)
 
 
@@ -774,8 +862,13 @@ def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None
     * `VLMUnavailable` (including `RateLimited`, which additionally backs off
       here) — the API never judged the request: worth asking again on a
       later run;
-    * anything else — a request the API rejects on its merits, which cannot
-      succeed on a retry and would pay a call per run forever.
+    * `VLMRejected` — the API judged the request, which cannot succeed on a
+      retry and would pay a call per run forever. It gets no arm of its own
+      here: the generic arm below already retries once and re-raises under
+      `raise_failures`, and a judged rejection rarely differs on attempt 2
+      (docs/tri-state-pass-2.md, 2026-08-21);
+    * anything else — an unknown failure, which `_fold` records retryable
+      since three passes found transient failures on the permanent side.
 
     An earlier version raised only `RateLimited`, which left every hard
     failure returning None and therefore indistinguishable from an answer of
