@@ -69,10 +69,22 @@ Two review catches worth remembering as a class:
   pass. Rejection is now read from the API's stated `finishReason`/
   `blockReason`, enumerated like the rest of the permanent side.
 
-Still owed: the pre-ship capture of one real blocked body and one
-MAX_TOKENS body against this repo's model (one paid call, raw output to
-eval/out/, write-up here) — until then `REJECTED_FINISH_REASONS` matches
-the documented Vertex shapes, not a captured one.
+The pre-ship capture ran the same evening
+(`eval/capture_vertex_verdicts.py`, two paid calls, raw bodies in
+`eval/out/vertex-verdicts/`, shapes pinned in
+`tests/test_pose.py::test_the_captured_vertex_envelopes_classify_as_designed`).
+Both real envelopes classify as designed, with one surprise: **MAX_TOKENS
+from gemini-3.5-flash arrives with `parts: [{"text": ""}]`** — a non-empty
+parts list holding one empty text, not the documented no-parts husk — so it
+reaches the retryable record through the unparseable lane rather than the
+no-parts branch (the husk shape stays pinned transient by the earlier
+test; both roads lead to retryable). The SAFETY block arrives as `content`
+with **no `parts` key** and a candidate-level `finishReason: "SAFETY"` —
+no `promptFeedback.blockReason` at all — and `VLMRejected` fires through
+the enumerated branch: the rejection arm's first exercise against a real
+body, since the backfill hit it zero times. Uncaptured and stated:
+`IMAGE_SAFETY` from an actually-unsafe image, which will not be
+manufactured.
 
 ## embed-cache512 is the primary cache now
 

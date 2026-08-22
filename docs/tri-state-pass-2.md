@@ -159,12 +159,16 @@ enumerated. `_fold`'s arms become:
   permanent side stays the enumerated one all the way down; `MAX_TOKENS`,
   `OTHER` and a missing reason are transient. An unparseable body is
   transport damage; only a body that coherently states a block verdict is
-  the API judging the request. **Pre-ship check:** record one real
-  blocked-response body *and* one `MAX_TOKENS` body (or assert the current
-  model emits none) against this repo's model — one eval call, raw output
-  to eval/out/, and per CLAUDE.md's conventions the result is a measured
-  finding: dated write-up in docs/learnings/ plus a LEARNINGS.md index
-  line, and an eval/README.md row if it lands as a script.
+  the API judging the request. **Pre-ship check — done 2026-08-21**
+  (`eval/capture_vertex_verdicts.py`, two paid calls, raw bodies in
+  eval/out/vertex-verdicts/): both real envelopes classify as designed.
+  MAX_TOKENS arrives with `parts: [{"text": ""}]` — retryable via the
+  unparseable lane, not the no-parts branch — and SAFETY arrives as
+  content-without-parts with a candidate-level `finishReason`, firing
+  `VLMRejected` through the enumeration. Shapes pinned in
+  `tests/test_pose.py::test_the_captured_vertex_envelopes_classify_as_designed`;
+  write-up in the 2026-08-21 learnings entry. `IMAGE_SAFETY` from an
+  actually-unsafe image stays uncaptured, deliberately.
 * `ask_vlm_up` gains no new arm for `VLMRejected` — the generic arm
   already retries once and re-raises under `raise_failures`; a judged
   rejection on attempt 1 rarely differs on attempt 2, but one immediate

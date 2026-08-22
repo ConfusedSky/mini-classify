@@ -352,6 +352,33 @@ def test_a_200_body_is_rejected_only_when_it_states_a_verdict(monkeypatch):
         {"text": '{"tile": 3}'}]}}]}) == 2
 
 
+def test_the_captured_vertex_envelopes_classify_as_designed(monkeypatch):
+    """The two shapes gemini-3.5-flash actually returns, captured live on
+    2026-08-21 (eval/capture_vertex_verdicts.py, two paid calls; raw bodies
+    in eval/out/vertex-verdicts/, this test is the durable copy). Until then
+    the C2 split matched the *documented* Gemini shapes only, and the
+    backfill run exercised the rejection arm zero times.
+
+    * MAX_TOKENS arrives with `parts: [{"text": ""}]` — a non-empty parts
+      list holding one empty text, NOT the documented no-parts husk. It
+      therefore flows through the unparseable lane to None (retryable), not
+      the no-parts branch; the no-parts thinking-model shape is pinned in
+      the test above and lands transient too. Both roads lead to retryable.
+    * SAFETY arrives as `content` with NO `parts` key and a candidate-level
+      `finishReason: "SAFETY"` — no `promptFeedback.blockReason` at all —
+      and must classify VLMRejected through the enumerated branch."""
+    assert gemini_body(monkeypatch, {
+        "candidates": [{"content": {"role": "model", "parts": [{"text": ""}]},
+                        "finishReason": "MAX_TOKENS"}]}) is None
+    with pytest.raises(pose.VLMRejected, match="SAFETY"):
+        gemini_body(monkeypatch, {
+            "candidates": [{"content": {"role": "model"},
+                            "finishReason": "SAFETY",
+                            "safetyRatings": [
+                                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                                 "probability": "MEDIUM", "blocked": True}]}]})
+
+
 def test_claude_cli_failures_are_transient(monkeypatch):
     """The claude backend could never say `RateLimited` at all: a timed-out
     CLI raised TimeoutExpired into the permanent branch, and a non-zero exit
