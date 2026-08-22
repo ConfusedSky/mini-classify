@@ -147,3 +147,32 @@ file was edited; its live identity got arbitrated), and **4 are
 unexplained** (present in the walk, gated cached margin, no marker, no
 render error). 4 of 3540 is noise-level; worth a look only if the next
 run grows it.
+
+## Phase 3 re-measured against embed-cache512
+
+Same methodology as the 2026-08-19 run (12 distinct sequential queries,
+localhost, GPU idle at 33 MiB before start), same-day caveat named: the
+backfill wrote this cache hours earlier, so the page cache was warm.
+`embed-cache512`, 3380 models × 16 views × 1152 (~249 MB matrix),
+`missing: 0` — full coverage, a first.
+
+| | embed-cache2 (2026-08-19) | embed-cache512 (2026-08-21) |
+|---|---|---|
+| models loaded | 2801 | **3380** |
+| first `/status` | immediate | 0.32 s |
+| time to ready | 16.0 s | **13.6 s** |
+| first query | 202 ms | 193 ms |
+| `/query` median | 49 ms | **27 ms** (min 26, max 31, n=12) |
+| `/similar` | 50 ms | 66 ms |
+| server resident | ~2370 MiB | 2361 MiB |
+
+The headline is the median **nearly halving against a 21 % larger
+matrix**: that is the unscoped-`/query` fix landing (review, 2026-08-20 —
+the full-collection scope no longer fancy-index-copies the matrix per
+request, and at this matrix size the copy alone would now cost ~249 MB per
+query). `/similar` tells the same story from the other side: it still
+slices per request (its rows genuinely exclude the target), which is why
+it now costs *more* than an unscoped `/query` where on embed-cache2 the
+two were even. If `/similar` latency ever matters, that slice is the
+known place to look. VRAM is unchanged within noise, so the two-instances
+concurrency answer from 2026-08-19 stands for SigLIP-2 as well.

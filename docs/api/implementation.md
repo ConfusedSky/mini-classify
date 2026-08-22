@@ -278,6 +278,17 @@ answered — two SigLIP instances occupy 4740 of 8188 MiB, so the server and a
 classify run coexist, and `/reload` keeps the shape it has. Write-up:
 `docs/learnings/2026-08-19-the-query-api-live.md`.
 
+**Re-measured 2026-08-21 against `embed-cache512`** (SigLIP-2 @512 px,
+3380 models × 16 views × 1152, ~249 MB matrix, page cache warm from the
+same-day backfill): first `/status` at 0.32 s, ready in **13.6 s**, first
+query 193 ms, then `/query` median **27 ms** (min 26, max 31, n=12
+distinct) and `/similar` 66 ms, server resident at 2361 MiB, `missing: 0`.
+Median nearly halved against a 21 % larger matrix because the unscoped
+`/query` no longer fancy-index-copies the whole matrix per request
+(review, 2026-08-20); `/similar` still slices, which is why it now costs
+more than an unscoped `/query` instead of the same. Write-up:
+`docs/learnings/2026-08-21-tri-state-pass-2-and-embed-cache512.md`.
+
 One thing the run turned up that no test would have: `/reload {"rescan": true}`
 rewrites the walk cache, which is **shared state changed by an endpoint whose
 other calls only read**. The result was more accurate (it found 595 models
