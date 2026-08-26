@@ -8,4 +8,4 @@
 # size and in what they hold (2026-08-19: a pose-distribution figure taken
 # from this cache was wrong by 3.7x for exactly that reason).
 
-HF_HUB_OFFLINE=1 .venv/bin/python classify_stls.py /run/media/masa/STLLibrary/DM\ Stash/ --out results4.csv --cache-dir embed-cache4 --elevations '20,-20' --render-size 384 --views 8 --pose-vlm off --save-renders --compile "$@"
+HF_HUB_OFFLINE=1 .venv/bin/python classify_stls.py /home/masa/Documents/tests/test-models/thingiverse/source/ --out results-test.csv --cache-dir embed-cache-test --elevations '20,-20' --render-size 512 --views 8 --pose-vlm off --save-renders --compile --model "google/siglip2-so400m-patch16-512" "$@"
