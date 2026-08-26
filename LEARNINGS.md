@@ -128,6 +128,17 @@ notes at the bottom are amended in place. Open work is tracked separately in
   arbitrations, 651 moved the pose — a 62% move rate** on the gated
   population, zero rejections, zero transient failures, zero render errors.
 
+- [Loading SigLIP without the hub](docs/learnings/2026-08-26-loading-siglip-without-the-hub.md)
+  — `from_pretrained` on a repo id revalidates etags, so a fully cached model
+  still needed the network; the failure was a **per-file 5-retry ladder** over
+  files the repo does not even contain, indistinguishable from a wedged
+  server, not an error. `src/embedder.py:load_siglip` is now the one load path
+  for all five call sites: `local_files_only=True` first, retrying online on
+  `OSError` so an unpulled model still downloads. It loads the **processor
+  before the model** — a doomed offline attempt otherwise leaves an fp16 copy
+  on the 4060 for the whole retry, since the traceback keeps the raising
+  frame's locals alive, peaking at two.
+
 ## Evergreen notes
 
 - [Queries and filters](docs/learnings/queries-and-filters.md) — open-set

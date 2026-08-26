@@ -33,7 +33,7 @@ from src.cachedir import (add_cache_args, apply_run_params, cache_root,
                           load_file_list, render_index, renders_dir,
                           require_cache_version, total_views, view_config)
 from src.embed_store import load_embedding_matrix
-from src.embedder import embed_raw, embed_texts
+from src.embedder import embed_raw, embed_texts, load_siglip
 from src.identity import render_key
 
 
@@ -137,10 +137,8 @@ def main():
               f"another view or the STL; rerun classify_stls.py --save-renders")
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    from transformers import AutoModel, AutoProcessor
     print(f"loading {args.model} on {device} ...")
-    model = AutoModel.from_pretrained(args.model, torch_dtype=torch.float16).to(device).eval()
-    processor = AutoProcessor.from_pretrained(args.model)
+    model, processor = load_siglip(args.model, device)
 
     def text_matrix(texts, raw):
         emb = (embed_raw if raw else embed_texts)(model, processor, texts, device)

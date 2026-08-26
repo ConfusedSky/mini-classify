@@ -52,13 +52,10 @@ def main():
         # Deferred: importing torch is the slow half of the warmup and must not
         # happen while the port is being bound.
         import torch
-        from transformers import AutoModel, AutoProcessor
-        from src.embedder import embed_raw, embed_texts
+        from src.embedder import embed_raw, embed_texts, load_siglip
         device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"loading {args.model} on {device} ...")
-        model = (AutoModel.from_pretrained(args.model, torch_dtype=torch.float16)
-                 .to(device).eval())
-        processor = AutoProcessor.from_pretrained(args.model)
+        model, processor = load_siglip(args.model, device)
 
         def embed(texts, raw=False):
             """(dim, n_texts) of unit rows — the shape `query.score` takes.

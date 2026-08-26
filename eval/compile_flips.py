@@ -37,7 +37,7 @@ import torch
 from src import pose
 from src.cachedir import (add_cache_args, apply_run_params, cache_key,
                           cache_root, embeds_dir, load_file_list, renders_dir)
-from src.embedder import as_tensor, embed_texts
+from src.embedder import as_tensor, embed_texts, load_siglip
 from src.identity import render_key
 from src.query import pool_sims
 
@@ -77,10 +77,8 @@ def main():
         work.append((f, npy, views))
     print(f"{len(work)} models with cached embeddings and full render sets")
 
-    from transformers import AutoModel, AutoProcessor
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = AutoModel.from_pretrained(args.model, torch_dtype=torch.float16).to(device).eval()
-    processor = AutoProcessor.from_pretrained(args.model)
+    model, processor = load_siglip(args.model, device)
     with torch.no_grad():
         t32 = embed_texts(model, processor, categories, device).float().cpu().numpy()
 

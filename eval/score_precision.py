@@ -36,7 +36,7 @@ from common import OUT  # puts REPO on sys.path
 
 import torch
 from src.cachedir import add_cache_args, apply_run_params, embeds_dir
-from src.embedder import embed_texts
+from src.embedder import embed_texts, load_siglip
 from src.query import pool_sims
 
 DRIFT = 9.8e-4          # torch.compile's max embedding drift, LEARNINGS
@@ -57,10 +57,8 @@ def main():
     print(f"{len(files)} cached models, {len(categories)} categories, "
           f"run-params pool={args.pool}")
 
-    from transformers import AutoModel, AutoProcessor
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = AutoModel.from_pretrained(args.model, torch_dtype=torch.float16).to(device).eval()
-    processor = AutoProcessor.from_pretrained(args.model)
+    model, processor = load_siglip(args.model, device)
     with torch.no_grad():
         text_embeds = embed_texts(model, processor, categories, device)  # fp16, device
     t32 = text_embeds.float().cpu().numpy()

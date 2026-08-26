@@ -37,7 +37,7 @@ import torch
 
 import src.embedder
 from src import pose
-from src.embedder import DEFAULT_MODEL, PROMPT_TEMPLATES, Embedder
+from src.embedder import DEFAULT_MODEL, PROMPT_TEMPLATES, Embedder, load_siglip
 from src.messages import Embedded, EmbedTilesRequest, EmbedViews, TileEmbeds
 from src.pose import Pose
 
@@ -90,8 +90,9 @@ def fake(monkeypatch):
     proc = FakeProcessor()
     mod = types.ModuleType("transformers")
     mod.AutoModel = types.SimpleNamespace(
-        from_pretrained=lambda name, torch_dtype=None: FakeModel())
-    mod.AutoProcessor = types.SimpleNamespace(from_pretrained=lambda name: proc)
+        from_pretrained=lambda name, torch_dtype=None, local_files_only=False: FakeModel())
+    mod.AutoProcessor = types.SimpleNamespace(
+        from_pretrained=lambda name, local_files_only=False: proc)
     monkeypatch.setitem(sys.modules, "transformers", mod)
     emb = Embedder(["dragon", "terrain"], device="cpu")
     return emb, proc
@@ -171,12 +172,50 @@ def test_prompt_banks_numpy(fake):
         assert np.allclose(np.linalg.norm(bank, axis=-1), 1.0, atol=5e-3)
 
 
+@pytest.mark.parametrize("cached, expected", [
+    (True, [("processor", True), ("model", True)]),
+    # Uncached, the offline attempt dies on the processor — which loads first,
+    # so the model is only ever built once, and never on the GPU twice.
+    (False, [("processor", True), ("processor", False), ("model", False)]),
+])
+def test_load_siglip_tries_the_local_cache_first(monkeypatch, cached, expected):
+    """Both halves load out of the local cache with no hub round-trip; an
+    uncached model still downloads, which is what the retry buys over a bare
+    local_files_only. Asserting the processor too: it is half the round-trip,
+    and dropping its flag is a silent regression the model call cannot catch."""
+    proc = FakeProcessor()
+    seen = []
+
+    def offline_raises(what, name, local_files_only):
+        seen.append((what, local_files_only))
+        if local_files_only and not cached:
+            raise OSError(f"{name} is not in the local cache")
+
+    def model_from_pretrained(name, torch_dtype=None, local_files_only=False):
+        offline_raises("model", name, local_files_only)
+        return FakeModel()
+
+    def proc_from_pretrained(name, local_files_only=False):
+        offline_raises("processor", name, local_files_only)
+        return proc
+
+    mod = types.ModuleType("transformers")
+    mod.AutoModel = types.SimpleNamespace(from_pretrained=model_from_pretrained)
+    mod.AutoProcessor = types.SimpleNamespace(from_pretrained=proc_from_pretrained)
+    monkeypatch.setitem(sys.modules, "transformers", mod)
+
+    model, processor = load_siglip(DEFAULT_MODEL, "cpu")
+    assert seen == expected          # all-True = the network was never touched
+    assert isinstance(model, FakeModel) and processor is proc
+
+
 def test_views_batching_matches_whole_and_tiles_ignore_it(monkeypatch):
     proc = FakeProcessor()
     mod = types.ModuleType("transformers")
     mod.AutoModel = types.SimpleNamespace(
-        from_pretrained=lambda name, torch_dtype=None: FakeModel())
-    mod.AutoProcessor = types.SimpleNamespace(from_pretrained=lambda name: proc)
+        from_pretrained=lambda name, torch_dtype=None, local_files_only=False: FakeModel())
+    mod.AutoProcessor = types.SimpleNamespace(
+        from_pretrained=lambda name, local_files_only=False: proc)
     monkeypatch.setitem(sys.modules, "transformers", mod)
     emb = Embedder(["dragon"], device="cpu", embed_batch=2)
 

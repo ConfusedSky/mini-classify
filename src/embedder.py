@@ -26,6 +26,11 @@ against a model they loaded themselves. Those free functions came here from
 `classify_stls.py` in the eval-debt cleanup, and the methods now delegate to
 them — so the CLI holds no embedding code at all and there is one arrangement
 of each forward rather than two pinned equal by a parity suite.
+
+`load_siglip` is exported unbound for the same reason, and is the one load
+path: the Embedder builds its model through it, and so do the REPL, the
+server and the eval harnesses that used to call `from_pretrained` themselves
+— which is what gets them all the offline-first cache lookup.
 """
 from __future__ import annotations
 
@@ -50,6 +55,42 @@ PROMPT_TEMPLATES = [
     "a photo of a {} figurine",
     "a tabletop miniature of a {}",
 ]
+
+
+def load_siglip(model_name: str, device: str, torch_dtype=torch.float16):
+    """`(model, processor)` for `model_name`, off the local HF cache when it
+    holds a complete snapshot.
+
+    `from_pretrained` on a repo id revalidates every file's etag against the
+    hub, so a fully cached model still needs the network to load — the server,
+    the REPL and the eval harnesses all failed offline for a round-trip that
+    downloads nothing. `local_files_only=True` skips it. The retry keeps a
+    model you have never pulled working, since offline raises rather than
+    fetches; `OSError` is the shape transformers raises for both a missing
+    snapshot (`LocalEntryNotFoundError`) and a partial one.
+
+    The `transformers` import stays deferred, as at every other load site: the
+    signature already implies torch (interfaces.md §import rules), but the
+    module is imported by tools that never load a model.
+    """
+    from transformers import AutoModel, AutoProcessor
+
+    def load(local_only):
+        # Processor first: it is the cheap CPU-side half, and on a partial
+        # snapshot it is the half that raises. Loading the model first left an
+        # fp16 copy resident on the 4060 — the traceback keeps the failed
+        # frame alive — for the whole retry, peaking at two.
+        processor = AutoProcessor.from_pretrained(model_name,
+                                                  local_files_only=local_only)
+        model = (AutoModel.from_pretrained(model_name, torch_dtype=torch_dtype,
+                                           local_files_only=local_only)
+                 .to(device).eval())
+        return model, processor
+
+    try:
+        return load(True)
+    except OSError:
+        return load(False)
 
 
 def as_tensor(feat):
@@ -104,10 +145,7 @@ class Embedder:
                  embed_batch: int = 0):
         # Same device pick as main (main:classify_stls.py:960): the 4060 via CUDA.
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        from transformers import AutoModel, AutoProcessor  # deferred, as in main()
-        self.model = (AutoModel.from_pretrained(model_name, torch_dtype=torch.float16)
-                      .to(self.device).eval())
-        self.processor = AutoProcessor.from_pretrained(model_name)
+        self.model, self.processor = load_siglip(model_name, self.device)
         if compile_image_forward:
             # compile the bound method — wrapping the model only intercepts
             # forward() and get_image_features silently stays eager. Lazy: the
