@@ -208,15 +208,21 @@ def test_the_count_cut_is_top_n_best_first():
 
 
 def test_the_bounds_compose_floor_first_then_count():
-    # "the best N of everything at least this similar" — and the order is the
-    # claim, not just the size: floor-then-count returns the *strongest* 4 of
-    # the 20 that cleared 0.5, where count-then-floor would return the 4
-    # strongest overall filtered by the floor. They differ whenever the count
-    # is smaller than the floor set, which is the whole reason to pin it.
+    """The rows cannot tell the two orders apart; `matched` is what can.
+
+    Worth stating because the obvious assertion is a tautology: the floor tests
+    the same key the sort ordered, so the floor set is always a *prefix* of the
+    descending order, and `order[mask][:t]` and `order[:t][mask]` select the
+    same rows for every input — ties included (fuzzed 20000 cases, zero
+    divergences, 2026-08-27). Slicing first would still return these four rows.
+    What it could not do is report 20, because the 16 below the floor would
+    already have been thrown away, so `matched` is the assertion that has any
+    force here and the rows are only the shape check."""
     sims = np.linspace(0.0, 1.0, 40, dtype=np.float32)
     r = rank(sims, top=4, min_score=0.5)
     assert r.order.tolist() == [39, 38, 37, 36]
     assert len(r.order) == 4 and np.all(sims[r.order] >= 0.5)
+    assert r.matched == 20          # 4 if the count had cut first
 
 
 def test_a_floor_with_no_count_returns_the_whole_floor_set():
@@ -402,6 +408,35 @@ def test_parity_holds_over_random_collections():
 
 
 # --- the import rule --------------------------------------------------------
+
+def test_the_repl_sends_its_ten_away_when_a_floor_is_in_force():
+    """The REPL's translation, pinned against the REPL itself.
+
+    Nothing else pins it. `repl_rank` above is a *copy* of `show_query`'s call,
+    so the parity oracles confirm the copy and would stay green while the real
+    `show_query` drifted back to composing with its display default — `:min
+    0.1` silently answering 10 rows of a set the caller asked to be exhaustive,
+    in the tool where querying actually happens. Verified as a live gap: that
+    mutation passed the whole suite (review, 2026-08-27).
+
+    A subprocess for the reason `test_the_query_path_costs_no_torch` uses one —
+    `test_categories` imports torch at module scope and this file's process
+    stays numpy-only. The outlier is what keeps the query non-weak, since a
+    weak verdict returns before the listing and would pass either way."""
+    import subprocess
+    import sys
+    from pathlib import Path
+    sims = "np.append(np.linspace(0.50, 0.60, 40), 5.0).astype(np.float32)"
+    out = subprocess.run(
+        [sys.executable, "-c",
+         "import numpy as np, test_categories as t; "
+         f"s = {sims}; "
+         "t.show_query(s, [str(i) for i in range(len(s))], min_score=0.5)"],
+        capture_output=True, text=True, check=True,
+        cwd=str(Path(__file__).resolve().parent.parent))
+    assert "41 models >= 0.5" in out.stdout, out.stdout
+    assert "WEAK" not in out.stdout
+
 
 def test_the_query_path_costs_no_torch():
     # interfaces.md row `query`: numpy and stdlib only. The module exists so a

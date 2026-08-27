@@ -139,10 +139,12 @@ def rank(sims, top=None, min_score=None):
     `top` defaulting to 10 while the bounds compose is the trap this signature
     exists to avoid, and it is not hypothetical: every floor-only caller omits
     the count. Measured 2026-08-27 on embed-cache512 (3380 models,
-    `/run/media/masa/STLLibrary`), `fantasy character` at floor 0.1 — **875
-    rows with no count, 10 with the old default in force**, the cut landing at
-    0.143 of a set running 0.146 down to 0.100. Ten rows nobody asked to be
-    cut to, out of a set the caller asked to be exhaustive.
+    `/run/media/masa/STLLibrary`), `fantasy character` templated, pool softmax,
+    floor 0.1 — **875 rows with no count, 10 with the old default in force**,
+    the cut landing at 0.143 of a set running 0.146 down to 0.100. Ten rows
+    nobody asked to be cut to, out of a set the caller asked to be exhaustive.
+    Those are `rank`'s numbers; over HTTP the same request answers 500 with
+    `truncated: true` unless `cap` is raised, the cap being a later layer.
 
     Scoring nothing is not an error: a path-scoped query whose directory holds
     no cached models slices `matrix` to zero rows, and that is a request the

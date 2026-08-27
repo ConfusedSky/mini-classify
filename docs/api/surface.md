@@ -226,7 +226,9 @@ warming state):
 
 **`rel_path` is the join key, and a hit whose file has moved is normal.** The
 consumer joins hits to its own tree snapshot by `rel_path` and stats the
-misses, bounded by `top` — which is why `rel_path` matters more than `path`,
+misses, bounded by `top` where a count is in force and by `cap` otherwise —
+a floor-only request is the consumer's default, so `cap` is the number that
+actually bounds the stats — which is why `rel_path` matters more than `path`,
 and why `hit` carries no mtime or size (model-browser keys thumbnails on
 path+mtime and reads both itself). Two independent caches of one tree drift by
 design: `id` is stem plus 6 hex of the *relative path*, so a moved file is
