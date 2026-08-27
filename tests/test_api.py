@@ -121,7 +121,8 @@ def test_status_names_the_volume_it_looked_for_when_it_is_absent(tmp_path):
 def test_query_returns_hits_in_the_documented_shape(tmp_path):
     client, _, _ = serve(tmp_path)
     body = client.post("/query", json={"text": "anything"}).json()
-    assert set(body) == {"scope", "weak", "best_z", "truncated", "results"}
+    assert set(body) == {"scope", "weak", "best_z", "truncated", "matched",
+                         "results"}
     assert set(body["results"][0]) == {"id", "path", "rel_path", "name",
                                        "score", "z", "pose"}
     assert body["scope"]["status"] == "indexed"
@@ -178,6 +179,58 @@ def test_the_cap_is_a_ceiling_on_top_too(tmp_path):
     client, _, _ = serve(tmp_path)
     body = client.post("/query", json={"text": "x", "top": 3, "cap": 2}).json()
     assert len(body["results"]) == 2 and body["truncated"] is True
+
+
+# a dozen: enough that a ten-row default would be visible as one
+MANY = [f"a/m{i:02d}.stl" for i in range(12)]
+
+
+def test_a_floor_with_no_count_is_not_cut_to_a_default(tmp_path):
+    """The regression the composing branch would otherwise have shipped.
+
+    model-browser sends a floor and omits `top` — that is its default view —
+    so while `top` defaulted to 10 and the bounds composed, every floor-only
+    request came back as ten rows of a set that could be hundreds. Absent means
+    not in force; this is the test that says so over HTTP."""
+    client, _, _ = serve(tmp_path, layout=MANY)
+    body = client.post("/query", json={"text": "x", "min_score": -1.0}).json()
+    assert len(body["results"]) == 12
+    assert body["matched"] == 12 and body["truncated"] is False
+
+
+def test_a_bare_query_is_bounded_by_the_cap_alone(tmp_path):
+    """`top` has no default at all now, which is a contract change: a request
+    naming no bound used to be cut to ten and is now cut by `cap` (surface.md
+    §`POST /query`). Pinned because "default 10" is what every reader of that
+    table believed until 2026-08-27."""
+    client, _, _ = serve(tmp_path, layout=MANY)
+    body = client.post("/query", json={"text": "x"}).json()
+    assert len(body["results"]) == 12
+
+
+def test_the_bounds_compose_over_http_and_matched_says_what_was_cut(tmp_path):
+    client, _, _ = serve(tmp_path, layout=MANY)
+    body = client.post("/query", json={"text": "x", "min_score": -1.0,
+                                       "top": 4}).json()
+    assert len(body["results"]) == 4
+    # the count's cut is reported by `matched`, never by `truncated` — that bit
+    # is the cap's alone, and a count at or under the cap can never fire it
+    assert body["matched"] == 12 and body["truncated"] is False
+
+
+def test_matched_counts_the_floor_set_not_the_collection(tmp_path):
+    client, _, c = serve(tmp_path, layout=MANY)
+    body = client.post("/query", json={"text": "x", "min_score": 2.0}).json()
+    assert body["results"] == [] and body["matched"] == 0
+
+
+def test_an_unindexed_scope_still_answers_with_a_matched_count(tmp_path):
+    """Zero, not absent: a client reading the field must not have to special-case
+    the one response shape that skips the ranking entirely."""
+    client, _, _ = serve(tmp_path, layout=["a/one.stl", "b/two.stl"],
+                         embed=["a/one.stl"])
+    body = client.post("/query", json={"text": "x", "path": "b"}).json()
+    assert body["matched"] == 0
 
 
 @pytest.mark.parametrize("path,code", [

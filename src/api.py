@@ -259,7 +259,12 @@ class QueryRequest(BaseModel):
     path: str | None = None
     raw: bool = False
     pool: POOL | None = None
-    top: int = Field(10, ge=1, le=1000)
+    # Both bounds are optional and compose (`query.rank`): the floor filters,
+    # the count caps what survived. Absent means *not in force*, so `top` has
+    # no default — a bare query is bounded by `cap` alone, which is a change
+    # from the ten rows this field used to impose. Nothing but a count bounds a
+    # count, and a client that wants ten says ten.
+    top: int | None = Field(None, ge=1, le=1000)
     min_score: float | None = None
     cap: int = Field(500, ge=1, le=10000)
 
@@ -370,7 +375,7 @@ def create_app(state: ServerState) -> FastAPI:
             log.info("query %r scope=%s %s — nothing indexed here",
                      req.text[:60], scope.path or "-", scope.status)
             return {"scope": scope.as_dict(), "weak": False, "best_z": None,
-                    "truncated": False, "results": []}
+                    "truncated": False, "matched": 0, "results": []}
 
         with state.gpu:                     # the only GPU work in the request
             text_T = state.embed([req.text], req.raw)
@@ -397,6 +402,10 @@ def create_app(state: ServerState) -> FastAPI:
             "weak": ranked.weak,
             "best_z": float(ranked.z[ranked.best]),
             "truncated": truncated,
+            # what `top` cut from, so a client showing 60 of 875 can say 875.
+            # `truncated` is still the *cap* alone: three bounds, and each one
+            # reports its own act rather than borrowing another's bit.
+            "matched": ranked.matched,
             "results": [c.hit(int(scope.rows[j]), sims[j], ranked.z[j])
                         for j in order],
         }

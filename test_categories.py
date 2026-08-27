@@ -68,8 +68,15 @@ def show_query(sims_1d, names, top=10, min_score=None):
     """Print one query's ranking. The judging is `src/query.py`'s; the terminal
     is this function's — including the choice to say nothing at all about a
     weak query, which the API deliberately does not make (docs/api/surface.md).
-    """
-    r = query.rank(sims_1d, top=top, min_score=min_score)
+
+    The two bounds compose in `rank` now, but this terminal's ten is a display
+    default rather than a bound anyone chose, so a floor sends it away instead
+    of composing with it — `:min` reads as "threshold *instead of* top-10", and
+    an exhaustive listing is the whole point of asking for one. A caller that
+    wants both passes both; the REPL has no way to say that and does not need
+    one."""
+    r = query.rank(sims_1d, min_score=min_score,
+                   top=None if min_score is not None else top)
     if r.weak:
         print(f"  WEAK QUERY (best z {r.z[r.best]:.1f}) — nothing stands out; "
               f"probably not represented in the collection")

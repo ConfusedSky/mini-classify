@@ -94,9 +94,15 @@ def robust_z(sims):
 @dataclass(frozen=True, eq=False)
 class Ranked:
     """One query's verdict. `z` and `scores` are per-model over everything
-    scored; `order` indexes into them, best first, already cut to `top` or
-    filtered by `min_score`. `weak` judges the *query*, not the cut, so it is
-    still set when `order` is non-empty — a caller may show weak hits.
+    scored; `order` indexes into them, best first, already filtered by
+    `min_score` and cut to `top`. `weak` judges the *query*, not the cut, so it
+    is still set when `order` is non-empty — a caller may show weak hits.
+
+    `matched` is how many models the floor let through, counted *before* `top`
+    cut them: the size of the set the count sampled from. Without a floor it is
+    everything scored. It is a field rather than something a caller derives
+    because nothing downstream can recover it — `order` has already been cut,
+    and "showing 60 of 875 above the floor" has no other source for the 875.
 
     `best` is the top-scoring model before any cut, and is what the weak
     verdict was read off. It is a separate field because `order` is not: a
@@ -116,15 +122,27 @@ class Ranked:
     scores: np.ndarray
     weak: bool
     best: int | None
+    matched: int
 
 
-def rank(sims, top=10, min_score=None):
+def rank(sims, top=None, min_score=None):
     """Rank one query's scores. `sims` is 1-D, one pooled score per model.
 
-    `min_score` replaces the top-N cut with a floor: every model at or above
-    it, which is what an exhaustive listing wants. It is opt-in because the
-    top-N cut already hides most of what it would catch (`--min-score`/`:min`),
-    and it can legitimately return nothing.
+    The two bounds **compose**: `min_score` filters, then `top` caps whatever
+    survived — "the best N of everything at least this similar". Either bound
+    alone is that sentence with the other half absent, and absent means *no
+    bound*, which is why `top` has no ten-row default any more. A floor-only
+    caller passes no count and gets the whole floor set; a count-only caller
+    passes no floor and gets the best N of everything. Both absent ranks the
+    lot, and the API's `cap` is what stops that being a 3380-row response.
+
+    `top` defaulting to 10 while the bounds compose is the trap this signature
+    exists to avoid, and it is not hypothetical: every floor-only caller omits
+    the count. Measured 2026-08-27 on embed-cache512 (3380 models,
+    `/run/media/masa/STLLibrary`), `fantasy character` at floor 0.1 — **875
+    rows with no count, 10 with the old default in force**, the cut landing at
+    0.143 of a set running 0.146 down to 0.100. Ten rows nobody asked to be
+    cut to, out of a set the caller asked to be exhaustive.
 
     Scoring nothing is not an error: a path-scoped query whose directory holds
     no cached models slices `matrix` to zero rows, and that is a request the
@@ -134,7 +152,7 @@ def rank(sims, top=10, min_score=None):
     returns nan, so guarding the index alone would leave the noise behind."""
     if len(sims) == 0:
         return Ranked(order=np.empty(0, dtype=np.intp), z=sims, scores=sims,
-                      weak=False, best=None)
+                      weak=False, best=None, matched=0)
     z = robust_z(sims)
     # stable, so exact ties break by ascending index rather than by whatever
     # quicksort did with them: two byte-identical renders across duplicated
@@ -148,6 +166,9 @@ def rank(sims, top=10, min_score=None):
     weak = bool(z[best] < WEAK_Z)
     if min_score is not None:
         order = order[sims[order] >= min_score]
-    else:
+    # counted here and not after: `top` is about to make this unrecoverable
+    matched = len(order)
+    if top is not None:
         order = order[:top]
-    return Ranked(order=order, z=z, scores=sims, weak=weak, best=best)
+    return Ranked(order=order, z=z, scores=sims, weak=weak, best=best,
+                  matched=matched)

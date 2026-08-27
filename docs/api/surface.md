@@ -117,16 +117,36 @@ minimum; volume identity would be better.
 | `path` | string | whole collection | directory or file prefix to search within — see **scope** |
 | `raw` | bool | `false` | verbatim text instead of the miniature templates (`:raw`) |
 | `pool` | `mean\|max\|softmax` | server default | `:pool` |
-| `top` | int | 10 | ignored when `min_score` is set |
-| `min_score` | float | — | every model at or above, instead of top-N (`:min`) |
-| `cap` | int | 500 | hard ceiling on returned hits, `min_score` or not |
+| `top` | int | — | at most this many, of whatever `min_score` let through |
+| `min_score` | float | — | every model at or above (`:min`) |
+| `cap` | int | 500 | hard ceiling on returned hits, whatever the bounds |
 
-Returns `{scope, weak, best_z, truncated, results: [hit]}`. `truncated` is the
-`cap` biting — the same flag deep name search returns, so the UI's existing
-"there are more" affordance works unchanged. The cap applies to `top` as well
-as to a `min_score` floor: it is a ceiling on what the server will serialise,
-not a companion to one field, and a caller that sets `top` above it gets
-`truncated: true` rather than a quietly larger response. `weak` is the z < 2.0 rule;
+**The two bounds compose, and absent means not in force.** `min_score` filters,
+then `top` caps what survived: *the best N of everything at least this similar*.
+Either alone is that sentence with the other half missing — a floor with no
+count returns the whole floor set, a count with no floor returns the best N of
+everything, and neither returns everything the `cap` will carry.
+
+`top` therefore has **no default**, which is a change from the ten rows it used
+to impose on a request that omitted it (2026-08-27, with the composition: the
+old default was safe only while `min_score` *replaced* it, and a floor-only
+caller — every one of them omits the count — would otherwise have had its floor
+set silently cut to ten). A client that wants ten asks for ten; a bare
+`{"text": …}` is bounded by the `cap` alone.
+
+Returns `{scope, weak, best_z, truncated, matched, results: [hit]}`. `truncated`
+is the `cap` biting and nothing else — the same flag deep name search returns,
+so the UI's existing "there are more" affordance works unchanged. The cap
+applies to `top` as well as to a `min_score` floor: it is a ceiling on what the
+server will serialise, not a companion to one field, and a caller that sets
+`top` above it gets `truncated: true` rather than a quietly larger response.
+Note that a caller clamping its own count at the cap can no longer see the bit
+fire at all — `top ≤ cap` makes the comparison false by construction — which is
+why the count's own cut is reported separately: `matched` is how many models
+cleared the floor **before** `top` cut them, so a client showing 60 of 875 has
+somewhere to read the 875. Without a floor it is everything scored. It is
+additive: a client that does not know the field is unaffected, and one that
+does must tolerate its absence from an older index. `weak` is the z < 2.0 rule;
 results are still returned — the REPL suppresses them, but the UI can show
 them greyed and let a person judge, which is what the z number is for. z is
 computed over the **scoped** subset, so a query inside one kit is judged

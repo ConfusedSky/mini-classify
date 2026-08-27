@@ -60,6 +60,20 @@ def repl_show_query(sims_1d, top=10, min_score=None):
     return ("list", [(int(i), z[i]) for i in order])
 
 
+def repl_rank(sims_1d, top=10, min_score=None):
+    """`show_query`'s *call*, not `rank`'s signature.
+
+    The oracle above is exclusive because the REPL is: its ten is a display
+    default, so a floor sends it away rather than composing with it. `rank`
+    stopped being exclusive when the bounds composed (2026-08-27), which is a
+    change to what a caller may ask for and not to what the REPL shows — so
+    parity is still a claim about the REPL, and it is this translation that has
+    to hold it. A parity test calling `rank` directly would now be asserting
+    that the composition never happened."""
+    return rank(sims_1d, min_score=min_score,
+                top=None if min_score is not None else top)
+
+
 def as_repl(r: Ranked):
     """The same tuple, read off a `Ranked`, the way the REPL reads it now."""
     if r.weak:
@@ -184,21 +198,66 @@ def test_a_weak_query_still_reports_its_best():
     assert r.best == 8 and np.isfinite(r.z[r.best])
 
 
-# --- rank: the two cuts -----------------------------------------------------
+# --- rank: the two cuts, and how they compose -------------------------------
 
-def test_the_default_cut_is_top_n_best_first():
+def test_the_count_cut_is_top_n_best_first():
     sims = np.array([0.1, 0.9, 0.3, 0.7, 0.5], dtype=np.float32)
     r = rank(sims, top=3)
     assert r.order.tolist() == [1, 3, 4]
     assert np.all(np.diff(sims[r.order]) <= 0)
 
 
-def test_min_score_replaces_the_top_n_cut_with_a_floor():
-    # not "the floor applied to the top 10": an exhaustive listing is the point
+def test_the_bounds_compose_floor_first_then_count():
+    # "the best N of everything at least this similar" — and the order is the
+    # claim, not just the size: floor-then-count returns the *strongest* 4 of
+    # the 20 that cleared 0.5, where count-then-floor would return the 4
+    # strongest overall filtered by the floor. They differ whenever the count
+    # is smaller than the floor set, which is the whole reason to pin it.
     sims = np.linspace(0.0, 1.0, 40, dtype=np.float32)
-    r = rank(sims, top=10, min_score=0.5)
+    r = rank(sims, top=4, min_score=0.5)
+    assert r.order.tolist() == [39, 38, 37, 36]
+    assert len(r.order) == 4 and np.all(sims[r.order] >= 0.5)
+
+
+def test_a_floor_with_no_count_returns_the_whole_floor_set():
+    # the regression this signature exists for: while `top` defaulted to 10,
+    # composing turned every floor-only caller's set into ten rows (the API's
+    # own default did it over HTTP, `show_query`'s did it in the REPL)
+    sims = np.linspace(0.0, 1.0, 40, dtype=np.float32)
+    r = rank(sims, min_score=0.5)
     assert len(r.order) == 20
     assert np.all(sims[r.order] >= 0.5)
+
+
+def test_a_count_with_no_floor_is_the_best_n_of_everything():
+    sims = np.linspace(0.0, 1.0, 40, dtype=np.float32)
+    assert rank(sims, top=3).order.tolist() == [39, 38, 37]
+
+
+def test_neither_bound_ranks_everything():
+    # absent means not in force, both times over: nothing but `cap` (the API's,
+    # not this module's) stops a bare ranking being the whole collection
+    sims = np.linspace(0.0, 1.0, 40, dtype=np.float32)
+    assert len(rank(sims).order) == 40
+
+
+def test_matched_is_the_floor_set_before_the_count_cuts_it():
+    # the field exists because this number is unrecoverable downstream: `order`
+    # is 4 long and nothing else in the result knows it was drawn from 20
+    sims = np.linspace(0.0, 1.0, 40, dtype=np.float32)
+    r = rank(sims, top=4, min_score=0.5)
+    assert (len(r.order), r.matched) == (4, 20)
+
+
+def test_matched_without_a_floor_is_everything_scored():
+    sims = np.linspace(0.0, 1.0, 40, dtype=np.float32)
+    assert rank(sims, top=4).matched == 40
+    assert rank(sims).matched == 40
+
+
+def test_matched_is_zero_when_nothing_clears_the_floor():
+    # distinct from "nothing was scored": `best` still names the query's best
+    assert rank(spread(3.1), min_score=99.0).matched == 0
 
 
 def test_a_floor_that_nothing_clears_returns_an_empty_order():
@@ -314,7 +373,7 @@ def test_a_scope_matching_nothing_flows_through_to_rank():
 def test_ranking_matches_the_pre_extraction_repl(peak, min_score):
     sims = spread(peak)
     want = repl_show_query(sims, min_score=min_score)
-    got = as_repl(rank(sims, min_score=min_score))
+    got = as_repl(repl_rank(sims, min_score=min_score))
     assert want[0] == got[0]
     if want[0] == "weak":
         assert want[1] == pytest.approx(got[1])
@@ -334,7 +393,7 @@ def test_parity_holds_over_random_collections():
             # effect on top-N membership went unmeasured in the first place
         if trial % 3 == 0:
             sims[rng.integers(len(sims))] += 8      # force the non-weak arm
-        want, got = repl_show_query(sims), as_repl(rank(sims))
+        want, got = repl_show_query(sims), as_repl(repl_rank(sims))
         assert want[0] == got[0]
         if want[0] == "weak":
             assert want[1] == pytest.approx(got[1])
