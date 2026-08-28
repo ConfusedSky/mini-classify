@@ -6,7 +6,7 @@ that residency only pays if the resident geometry is reusable as-is. `R.T` was
 proven pixel-identical only for the *pose tile* grid at one elevation
 (render_up_candidate_grid), while the classification views span 8 azimuths x 2
 elevations, and the roundtrip spike that produced the residency numbers
-*rotated held meshes* (eval/overlap_spike.py:101-103). This script tested the
+*rotated held meshes* (`overlap_spike.roundtrip_child`). This script tested the
 draft rule and it failed: the ambient fill is a world-fixed environment map, so
 rotating the rig lights the geometry differently, and every cached embedding
 was computed with the mesh rotated. `views` now rotates a **copy** of the
@@ -21,7 +21,7 @@ Arms:
 
   nopost   post-processing off, production lighting — the real I11 test
   noibl    nopost + indirect light off (sun only) — attribution: the ambient
-           fill is a world-fixed environment map (classify_stls.py:61-69), so
+           fill is a world-fixed environment map (`renderer.FILL_INTENSITY`), so
            if the camera trick differs only through it, this arm is identical
   default  production config, one model — places both deltas against the
            repeat noise production already carries

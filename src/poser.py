@@ -14,9 +14,9 @@ as `Resolved(file, index, pose_changed)` and the *driver* re-routes it
 through `cache_checker.route` — the second-call rule (interfaces §route):
 the pose store is warm by then, so the warm-`.npy` shortcut and the redraw
 arm apply instead of an unconditional re-embed. `pose_changed` rides along
-because the Poser is the one that knows which tier moved the answer. That re-route is main's
-post-resolution check (main:classify_stls.py:1148-1155), whose loss was the
-regression escalated against the first draft of this module; a `_next_step`
+because the Poser is the one that knows which tier moved the answer. That
+re-route is the post-resolution check whose loss was the regression escalated
+against the first draft of this module; a `_next_step`
 here building the task itself is exactly what reintroduces it.
 
 The Poser consumes geometry *scores* (computed child-side) and tiles, never
@@ -53,8 +53,9 @@ design item; failing here is what keeps it from arriving as a silent
 eight-way regression."""
 
 MOVED_SOURCES = ("vlm", "siglip")
-"""Sources that make `Resolved.pose_changed` true — parity with
-`main:classify_stls.py:1146`. Saved renders predate a fresh override, so they show
+"""Sources that make `Resolved.pose_changed` true.
+
+Saved renders predate a fresh override, so they show
 the old pose and `route`'s renders-wanted arm must force the redraw; the
 *embedding* re-keys on its own, because the override moves `up_token`. Read
 off the source of the pose actually recorded, never off which method built
@@ -304,10 +305,8 @@ class Poser:
 
     def _fold(self, index: int, pf: ParkedFile) -> Pose | None:
         """Fold one done future: apply the arbiter's answer to the pose
-        resolved without it (apply_arbiter, main:classify_stls.py:508-512 —
-        retired with the deferral it closed) and record the result. A failed
-        call keeps the ensemble's answer (main:classify_stls.py:1233-1235).
-        May raise; the caller is the boundary.
+        resolved without it and record the result. A failed call keeps the
+        ensemble's answer. May raise; the caller is the boundary.
 
         Five outcomes, three records, and the split is the retry rule
         (`pose.pose_is_sufficient`):
@@ -415,7 +414,7 @@ class Poser:
         return Resolved(file, index, pose_changed=source in MOVED_SOURCES)
 
     def _make_pose(self, up, ratio, source, margin, arbitrated=None) -> Pose:
-        # main's fresh-entry shape (main:classify_stls.py:1138-1141): rounded
+        # A fresh entry's shape, matching `Pose.to_cache`: rounded
         # confidence/margin, explicit POSE_CACHE_VERSION (D10)
         return Pose(up=tuple(float(v) for v in up),
                     confidence=round(float(ratio), 4), source=source,

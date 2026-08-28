@@ -21,7 +21,7 @@ Two backends, because they live in different venvs:
 
 Open3D's `render_to_image` is one call covering render *and* readback, so it is
 also split against `np.asarray` / `Image.fromarray` — the line it shares in
-`classify_stls.py:139`. ModernGL splits naturally into draw / finish / read.
+`renderer.Renderer.views`. ModernGL splits naturally into draw / finish / read.
 
 Only the full per-view sequence is trustworthy. Measured in isolation and
 repeated back-to-back, the readback calls give internally inconsistent numbers

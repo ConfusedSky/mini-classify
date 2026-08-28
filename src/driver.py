@@ -95,10 +95,11 @@ liveness checks below run once per pass, so this is only how often they run."""
 STALL_S = 240.0
 """No progress on work the child *owes*, past this, is treated as death
 (M3/N2/O4). The child's unit of work is 3-28 s per model
-(actors_proposal.md:196), so this sits ~8.5x above the documented top of
+(actors_proposal.md §Poser), so this sits ~8.5x above the documented top of
 range: the error is one-sided — a wedge is permanent, so four minutes is paid
 once, while a false positive kills a healthy child. Deliberately not 300 s,
-which is the arbiter's transport deadline (src/pose.py:510) and unrelated."""
+which is the arbiter's HTTP `timeout=300` in `pose`'s VLM calls and
+unrelated."""
 
 FOLD_S = 60.0
 """The abort's wait on in-flight arbiter calls — above the 45 s p95, well
@@ -160,7 +161,8 @@ class DriverState:
 @dataclass
 class DriverConfig:
     """The constructed world. `classify_stls.py` builds every one of these —
-    args, run-params and cache guards are the CLI's (interfaces.md:42) — and
+    args, run-params and cache guards are the CLI's (interfaces.md §"Module
+    map and import constraints") — and
     hands them over; `run` wires nothing itself.
 
     `child` is the already-spawned render child (`spawn_render_child` below):
@@ -224,8 +226,7 @@ def instrumented(call):
     on the worker path so they measure the call and not its queue wait.
 
     `instrument.arbiter_call` is a context manager, so the driver adapts it to
-    the decorator `wrap` expects — structurally today's `timed` closure
-    (main:classify_stls.py:1132-1134). Injected rather than imported by the Arbiter,
+    the decorator `wrap` expects. Injected rather than imported by the Arbiter,
     which owns no metrics and must stay importable without them."""
     def wrapped():
         with arbiter_call():

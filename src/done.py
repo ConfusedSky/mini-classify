@@ -1,11 +1,9 @@
 """Done — scoring, rows, the pose store, retirement, Release, flush
 (interfaces.md §"Done — the only writer, and the owner of retirement").
 
-Extracted from the scoring/writing half of `main:classify_stls.process()` and
-the `finally` epilogue: the cache load (main:classify_stls.py:1179-1182), the
-torn-write guard on the `.npy` save (:1187-1195), the score block
-(:1197-1217), the CSV fields and writer (:1261-1266), and the pose-cache save
-(:1255-1256) — which is where the `save_pose_cache` atomicity fix (temp +
+The scoring and writing half of the pipeline: the cache load, the torn-write
+guard on the `.npy` save, the score block, the CSV fields and writer, and the
+pose-cache save — which is where the `save_pose_cache` atomicity fix (temp +
 `os.replace`) landed, closing the last of the three defects the proposal
 listed (J7; `pose.save_pose_cache` keeps its bare `write_text` for the evals,
 and nothing in the pipeline calls it).
@@ -74,8 +72,7 @@ from src.transport import Transport
 if TYPE_CHECKING:
     from src.driver import Admission
 
-# Main's CSV columns, verbatim (main:classify_stls.py:1261-1262). `index` orders
-# the flush; it is not a column.
+# `index` orders the flush; it is not a column.
 CSV_FIELDS = ["file", "top1", "score1", "top2", "score2", "top3", "score3",
               "up", "pose_conf", "pose_source", "front_view"]
 
@@ -125,7 +122,7 @@ class Done:
                 with stage("cache-load"):
                     img_embeds = torch.from_numpy(np.load(m.cache_file)).to(
                         self.text_embeds.device, dtype=self.text_embeds.dtype
-                    )  # main:classify_stls.py:1181
+                    )
                 self.rows[m.index] = self._score(m.file, m.index, m.pose, img_embeds)
                 if m.retires:
                     self._retire(m.file, m.index)
@@ -152,13 +149,13 @@ class Done:
         self.admission.retired += 1
         self.tasks.send(Release(file=file, index=index))    # K1: unconditional
 
-    # --- Scoring (main:classify_stls.py:1197-1217, extracted faithfully) -----
+    # --- Scoring ------------------------------------------------------------
 
     def _score(self, file: Path, index: int, pose: Pose, img_embeds) -> ResultRow:
-        with stage("score"):        # front_view included, as in main (:1198)
+        with stage("score"):        # front_view resolution is inside the stage
             view_np = img_embeds.float().cpu().numpy()
-            # A forced --up-axis never consults the store (E-R1-1, parity with
-            # main:classify_stls.py:1100-1102): the run's up is the flag, so a warm
+            # A forced --up-axis never consults the store (E-R1-1, the same
+            # rule `cache_checker.route` applies): the run's up is the flag, so a warm
             # auto entry's front_view describes a *different* pose's renders —
             # reading it would report the wrong hero view, and merging into it
             # would poison the auto entry with an index resolved under the
@@ -187,7 +184,7 @@ class Done:
                              pose_conf=pose.confidence, pose_source=pose.source,
                              front_view=fv, top=tuple(top))
 
-    # --- Fresh-embedding cache write (main:classify_stls.py:1187-1195) -------
+    # --- Fresh-embedding cache write -----------------------------------------
 
     def _save_embeds(self, m: Embedded) -> None:
         if self.ctx.embeds_dir is None:
@@ -220,17 +217,17 @@ class Done:
         second call replays them byte-identically. Pose cache first — the
         only artifact whose loss costs money (§Shutdown) — via temp +
         os.replace, the atomicity fix save_pose_cache never got
-        (src/pose.py:200-205); then the rows CSV, partial on abort.
+        (`pose.save_pose_cache`); then the rows CSV, partial on abort.
 
         Each write is attempted even if the other's raises
-        (main:classify_stls.py:1249-1268, the full-disk incident): the nested
+        (the full-disk incident): the nested
         finallys chain rather than swallow, so the last failure re-raises
         after every write has had its try, with the earlier failure kept
         visible as `__context__`. A failed `os.replace` leaves no `.tmp`
         behind."""
         args = self.ctx.args
         try:
-            if args.up_axis == "auto" and args.cache_dir:  # main:classify_stls.py:1255
+            if args.up_axis == "auto" and args.cache_dir:
                 p = Path(args.cache_dir) / "pose-cache.json"
                 p.parent.mkdir(parents=True, exist_ok=True)
                 # cachedir.write_atomic: unique temp name + finally-unlink,

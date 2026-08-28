@@ -5,9 +5,8 @@ Every `on()` arm; J2 double-retirement idempotence; the retires=False
 CachedHit (row, no retirement, no Release); Release exactly once per
 retirement on a fake transport; flush idempotence (two calls, one atomic
 replace each, identical bytes); and byte-shape parity of the CSV and
-pose-cache output with what classify_stls.py writes today — the success-row
-oracle replicates the score block (classify_stls.py:1197-1217) line for line,
-so the numbers and the row dict are pinned against the production original's
+pose-cache output — the success-row oracle replicates `Done._score` line for
+line, so the numbers and the row dict are pinned against that block's
 *shape*: the ordering, the rounding, the field names. Its `pool_sims` is the
 shared one (there is only one now), so what the oracle pins is the block
 around it, not the pooling itself.
@@ -193,9 +192,8 @@ def test_embedded_saves_npy_where_todays_reader_looks(tmp_path):
     f, img, p = stl(rig), img_embeds(11), a_pose(source="siglip")
     rig.done.record_pose(f, 2, p)        # the Poser records before dispatching
     rig.done.on(Embedded(file=f, index=2, pose=p, embeds=img))
-    # The write must land exactly where `cachedir.cache_key` (the production
-    # original, main:classify_stls.py:639-645) derives the hit path from the
-    # store.
+    # The write must land exactly where `cachedir.cache_key` derives the hit
+    # path from the store.
     token = pose.embed_cache_token(rig.ctx.poses[pose.file_identity(f, rig.root)],
                                    rig.ctx.args.up_axis)
     expect = rig.ctx.embeds_dir / \
@@ -436,7 +434,7 @@ def test_flush_pose_cache_byte_parity_with_save_pose_cache(tmp_path):
     rig.done.flush()
     other = tmp_path / "oracle"
     other.mkdir()
-    pose.save_pose_cache(other, rig.ctx.poses)     # today's writer (src/pose.py:200)
+    pose.save_pose_cache(other, rig.ctx.poses)     # the evals' bare writer
     assert (Path(rig.ctx.args.cache_dir) / "pose-cache.json").read_bytes() == \
         (other / "pose-cache.json").read_bytes()
     # and it round-trips through today's loader
@@ -451,8 +449,8 @@ def test_flush_csv_byte_parity_with_today(tmp_path):
     rig.done.record_pose(f, 2, p)
     rig.done.on(CachedHit(file=f, index=2, pose=p, cache_file=save_hit_npy(rig, img)))
     rig.done.flush()
-    # Today's epilogue, verbatim shape (classify_stls.py:1261-1266): the
-    # literal field list, DictWriter filling the error row's holes.
+    # `Done.flush`'s epilogue, verbatim shape: the literal `done.CSV_FIELDS`
+    # list, DictWriter filling the error row's holes.
     buf = io.StringIO()
     fields = ["file", "top1", "score1", "top2", "score2", "top3", "score3",
               "up", "pose_conf", "pose_source", "front_view"]
@@ -471,13 +469,13 @@ def test_flush_skips_pose_cache_when_up_axis_forced(tmp_path):
                   v=pose.POSE_CACHE_VERSION)
     rig.done.on(CachedHit(file=f, index=0, pose=forced,
                           cache_file=save_hit_npy(rig, img)))
-    rig.done.flush()                               # classify_stls.py:1255 guard
+    rig.done.flush()                     # `Done.flush`'s up_axis == "auto" guard
     assert not (Path(rig.ctx.args.cache_dir) / "pose-cache.json").exists()
     assert Path(rig.ctx.args.out).exists()
 
 
 def test_flush_writes_csv_even_when_pose_cache_fails(tmp_path, monkeypatch):
-    """E-R1-2/E-R1-3 (the full-disk incident, classify_stls.py:1249-1268): a
+    """E-R1-2/E-R1-3 (the full-disk incident, `Done.flush`): a
     failing pose-cache write must not also cost the rows, must still
     propagate, and must not strand the .tmp."""
     rig = populated_rig(tmp_path)

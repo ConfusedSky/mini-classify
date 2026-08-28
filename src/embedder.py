@@ -1,14 +1,6 @@
 """The Embedder — synchronous, and the only module that owns torch models
 (docs/actor-refactor/interfaces.md §Embedder, actors_proposal.md §Embedder).
 
-Extracted from main:classify_stls.py with behaviour kept identical: the fp16
-model load (:963-966), `--compile` wrapping the bound `get_image_features`
-and nothing else (:967-974), `embed_raw`/`embed_texts`/`embed_images`
-(:515-550), and the numpy prompt banks (:1040-1046). Same device pick, same
-row-normalisation, same dtypes — so `.float().cpu().numpy()` of an
-`Embedded.embeds` stays byte-compatible with the `.npy` cache main's path
-writes (main:classify_stls.py:1190).
-
 Both public methods block for the forward pass — in v1 that *is* the
 pipeline's pacing, and torch releases the GIL so the render child renders
 on. The uniform return contract (data_structures.md D5): the Embedder
@@ -18,7 +10,7 @@ conversion is the consumer's business (the Poser does the one
 
 `text_embeds` is read-only after `__init__` (interfaces.md); `up_T`/`down_T`
 are handed to the Poser at wiring, `front_T`/`back_T` to Done for
-`front_view` resolution — plain numpy, exactly as in main.
+`front_view` resolution — plain numpy.
 
 The two text passes are also exported unbound (`as_tensor`, `embed_raw`,
 `embed_texts`), because the REPL and the eval harnesses embed one-off text
@@ -48,8 +40,8 @@ from src import pose
 from src.identity import DEFAULT_MODEL
 from src.messages import Embedded, EmbedTilesRequest, EmbedViews, TileEmbeds
 
-# Category prompt templates (main:classify_stls.py:54-58). The one copy: every
-# templated query in the project goes through `embed_texts` below.
+# Category prompt templates. The one copy: every templated query in the
+# project goes through `embed_texts` below.
 PROMPT_TEMPLATES = [
     "a 3D render of a {} miniature",
     "a photo of a {} figurine",
@@ -106,12 +98,11 @@ def load_siglip(model_name: str, device: str, torch_dtype=None):
 
 
 def as_tensor(feat):
-    """Some transformers versions return a pooled-output wrapper
-    (main:classify_stls.py:50)."""
+    """Some transformers versions return a pooled-output wrapper."""
     return feat if isinstance(feat, torch.Tensor) else feat.pooler_output
 
 
-# --- the text passes as free functions (main:classify_stls.py:515-550) --------
+# --- the text passes as free functions ---------------------------------------
 #
 # The Embedder's methods below *are* these, bound to the model it owns. They
 # also exist unbound because the REPL (`test_categories.py`) and four eval
@@ -156,7 +147,7 @@ class Embedder:
     def __init__(self, categories: Sequence[str], model_name: str = DEFAULT_MODEL,
                  device: str | None = None, compile_image_forward: bool = False,
                  embed_batch: int = 0):
-        # Same device pick as main (main:classify_stls.py:960): the 4060 via CUDA.
+        # The 4060 via CUDA; `load_siglip` picks the dtype off this.
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.model, self.processor = load_siglip(model_name, self.device)
         if compile_image_forward:
@@ -166,13 +157,13 @@ class Embedder:
             # embeddings stay eager; they are not cached per-file.
             self.model.get_image_features = torch.compile(self.model.get_image_features)
         # images per SigLIP call on the view path; 0 = whole list at once
-        # (--embed-batch, default 0 — main:classify_stls.py:1185-1186)
+        # (`--embed-batch`, default 0)
         self.embed_batch = embed_batch
 
         with stage("text-embed"):   # the startup stage, exclusive of the model
             self._text_embeds = self._embed_texts(categories)
-            # numpy prompt banks (main:classify_stls.py:1040-1046): row-normalised
-            # text features pulled off the GPU once, at startup.
+            # numpy prompt banks: row-normalised text features pulled off the
+            # GPU once, at startup.
             self.up_T = self._embed_raw(pose.UPRIGHT_PROMPTS).float().cpu().numpy()
             self.down_T = self._embed_raw(pose.TOPPLED_PROMPTS).float().cpu().numpy()
             self.front_T = self._embed_raw(pose.FRONT_PROMPTS).float().cpu().numpy()
@@ -188,9 +179,9 @@ class Embedder:
     def embed_tiles(self, m: EmbedTilesRequest) -> TileEmbeds:
         """Embed the stacked up-candidate tiles, order-preserving.
 
-        Whole stack in one forward, like main's tile path (the score_upright
-        closure at main:classify_stls.py:1049 never passed --embed-batch); the
-        tensor stays on device — the Poser pulls it off the GPU.
+        Whole stack in one forward — the tile path ignores `--embed-batch`,
+        which is the view path's knob. The tensor stays on device; the Poser
+        pulls it off the GPU.
         """
         return TileEmbeds(file=m.file, index=m.index,
                           embeds=self.embed_images(list(m.tiles)))
@@ -199,14 +190,14 @@ class Embedder:
         """Embed the classification views; the pose rides through untouched.
 
         The tensor stays on device for Done's scoring matmul; Done's
-        `.float().cpu().numpy()` of it is the .npy cache write, byte-compatible
-        with main's (main:classify_stls.py:1190).
+        `.float().cpu().numpy()` of it is the `.npy` cache write, which is
+        why the cache is fp32 whatever dtype the model ran in.
         """
         return Embedded(file=m.file, index=m.index, pose=m.pose,
                         embeds=self.embed_images(m.views, batch=self.embed_batch))
 
     # --- the forwards: the text pair bound to this model, and the image pass
-    #     the evals call directly (main:classify_stls.py:515-550) ------------
+    #     the evals call directly ------------------------------------------
 
     def _embed_raw(self, texts: Sequence[str]) -> torch.Tensor:
         """`embed_raw` bound to this Embedder's model, processor and device."""

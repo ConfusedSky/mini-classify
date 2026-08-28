@@ -153,8 +153,7 @@ class Failure:                     # any stage → Done; becomes a RENDER_ERROR 
     error: str
 
     def to_csv(self) -> dict:
-        # Parity with main's error rows (main:classify_stls.py:1127, :1169):
-        # DictWriter fills the missing columns.
+        # An error row names only these two columns; DictWriter fills the rest.
         return {"file": str(self.file), "top1": f"RENDER_ERROR: {self.error}"}
 
 
@@ -232,8 +231,7 @@ class ResultRow:
     top: tuple[tuple[str, float], ...]     # up to 3 of (category, score)
 
     def to_csv(self) -> dict:
-        # Main's CSV columns (main:classify_stls.py:1261-1262); `index` orders the
-        # flush, it is not a column.
+        # `index` orders the flush, it is not a column.
         d = {"file": self.file, "up": self.up, "pose_conf": self.pose_conf,
              "pose_source": self.pose_source, "front_view": self.front_view}
         for rank, (category, score) in enumerate(self.top[:3], start=1):

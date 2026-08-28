@@ -1,7 +1,7 @@
 """Does the fp16 scoring matmul actually flip any classification?
 
 The production scorer casts cached fp32 embeddings *down* to fp16 to multiply
-against the text embeddings on the GPU (`classify_stls.py:1078,1104`), while
+against the text embeddings on the GPU (`done.Done._score`), while
 the pose ensemble runs the same kind of matmul in fp32 numpy. torch.compile
 was disqualified because its embedding drift (max 7.3-9.8e-04) matched the
 closest observed top-1 margin (9e-04, 128 renders, 0 flips) — but that was a

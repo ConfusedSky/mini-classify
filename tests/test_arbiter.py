@@ -40,7 +40,7 @@ def test_windowing_caps_concurrent_calls():
 
 
 def test_shutdown_cancels_queued_but_not_running():
-    """Today's comment's distinction (classify_stls.py:1238-1241): queued
+    """The distinction `Arbiter.shutdown` draws: queued
     futures die, the in-flight call is not cancellable and its (billed)
     answer still lands. wait=False: shutdown returns without joining it."""
     a = Arbiter(workers=1)

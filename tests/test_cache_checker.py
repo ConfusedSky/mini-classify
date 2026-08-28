@@ -122,8 +122,8 @@ CASES = [
          save_renders=True, elevations=[20.0, -10.0], renders="last-ring",
          needs_embed=False, retires=False),
     # --- pose_changed: the driver's re-route after a fresh resolution --------
-    # renders wanted + complete: forced anyway, exactly today's
-    # `pose_changed or not renders_ok` (classify_stls.py:1157) — the saved
+    # renders wanted + complete: forced anyway, exactly `route`'s
+    # `pose_changed or not renders_ok` — the saved
     # renders show the old pose, while the embedding re-keyed itself
     Case("pose-changed-forces-redraw-despite-complete-renders", Redraw,
          embed_cached=True, save_renders=True, renders="all",

@@ -104,6 +104,20 @@ against a scratch cache, not the project's entry point.
   `stamp_cache_version`, a real `run-params.json`) — production guards have
   twice caught a fixture the tests could not. Assert I/O as a syscall
   *budget*, not a blocklist of named walk functions.
+- **Cite code by symbol, never by line number.** `pose.save_pose_cache`, not
+  `src/pose.py:200`. A line number is right until the next edit above it and
+  says nothing when it is wrong; a symbol survives moves and greps. This is
+  not hypothetical: 43 citations of the form `main:classify_stls.py:1190`
+  were correct on the refactor branch — `main:` is git revision syntax — and
+  every one dangled the moment the refactor merged and `main` became the
+  425-line CLI, pointing readers at argparse help and import blocks. They were
+  deleted on 2026-08-28. Four more citing live files had drifted onto
+  unrelated functions and were re-anchored to symbols.
+- **A comment earns its place by saying what the code cannot.** The
+  constraint, the measurement, the failure it prevents — not a restatement of
+  the line below it, and not provenance for a migration that has landed
+  ("extracted from X, behaviour identical" stops being true and starts being
+  noise once X is gone).
 
 ## Hard-won constraints (measured; don't relitigate without new numbers)
 

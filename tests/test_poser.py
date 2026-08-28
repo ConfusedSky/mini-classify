@@ -143,7 +143,7 @@ def test_confident_geometry_records_and_resolves():
     poser, done, arb = make_poser()
     out = feed(poser, win=0)
     # the driver re-routes this; geometry did not move the pose, so the saved
-    # renders still show it and no redraw is forced (classify_stls.py:1146)
+    # renders still show it and no redraw is forced (`poser.MOVED_SOURCES`)
     assert out == Resolved(F, 7, pose_changed=False)
     (_, _, p) = done.poses[0]
     assert p.source == "geometry" and p.up == (0.0, 0.0, 1.0)

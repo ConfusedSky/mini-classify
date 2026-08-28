@@ -31,7 +31,8 @@ Two modes run per invocation over the same models:
 
     A/A   the same loader in both arms — the noise floor. One shared
           OffscreenRenderer carries scene state from render to render
-          (LEARNINGS.md:505-524), so *zero* variables changed still moves
+          (LEARNINGS, "the eval rig's tiles are not the old tiles"), so
+          *zero* variables changed still moves
           margins: a reviewer measured 0.0169 mean / 0.0411 max that way,
           larger than the parser's own 0.0095. No margin-level claim here is
           attributable without this number printed beside it.

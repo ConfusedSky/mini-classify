@@ -595,8 +595,8 @@ def test_the_walk_cache_is_written_atomically(tmp_path):
 
 
 def test_an_old_key_scheme_is_named_with_the_right_fix(tmp_path):
-    """The guard every other cache consumer calls (classify_stls.py:255,
-    test_categories.py:104) and this module did not. Without it a cache from
+    """The guard every other cache consumer calls
+    (`cachedir.require_cache_version`) and this module did not. Without it a cache from
     an older key scheme misses on every lookup and reports "run
     classify_stls.py first", when the actionable line is migrate_cache_keys —
     the exact wrong-advice shape VolumeUnavailable exists to prevent."""
