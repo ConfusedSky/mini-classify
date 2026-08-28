@@ -19,8 +19,10 @@ matmul and costs nothing extra): top-1 flips, top-3 set and order changes, the
 margin (top1-top2) distribution, and how many models sit with a margin inside
 the drift band — the population a compile-scale perturbation could flip.
 
-No cache is written. Needs the GPU for the text embeddings and the production
-path.
+No cache is written. Needs the GPU, and exits without one: the fp16 arm *is*
+the production path, and since 2026-08-28 `load_siglip` picks fp32 for a cpu
+device (LEARNINGS, "fp16 on a CPU"), so on a GPU-less host both arms would be
+fp32 and this would report 0 flips as a measurement rather than as an absence.
 
 Usage:
   .venv/bin/python eval/score_precision.py [--cache-dir embed-cache2]
@@ -49,6 +51,12 @@ def main():
     parser.add_argument("--pool", choices=["mean", "max", "softmax"],
                         default="softmax")   # the production default
     args = apply_run_params(parser)
+    if not torch.cuda.is_available():
+        sys.exit("no CUDA device — this harness compares the fp16 GPU scoring "
+                 "path against fp32, and `load_siglip` picks fp32 on a cpu "
+                 "device, so both arms would be fp32 and every count below "
+                 "would read 0 for want of a GPU rather than for want of a "
+                 "flip. Run it on the 4060.")
     edir = embeds_dir(args.cache_dir)
     files = sorted(edir.glob("*.npy"))
     if not files:
@@ -57,10 +65,10 @@ def main():
     print(f"{len(files)} cached models, {len(categories)} categories, "
           f"run-params pool={args.pool}")
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "cuda"
     model, processor = load_siglip(args.model, device)
     with torch.no_grad():
-        text_embeds = embed_texts(model, processor, categories, device)  # fp16, device
+        text_embeds = embed_texts(model, processor, categories, device)  # fp16, cuda
     t32 = text_embeds.float().cpu().numpy()
 
     modes = ["mean", "max", "softmax"]
