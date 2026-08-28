@@ -183,7 +183,7 @@ Two things remain unresolved and gate on
 
 Single thread, single `OffscreenRenderer`, created on the Renderer's own thread
 rather than lazily on main. An earlier draft called one renderer per process a
-hard limit; the review measured otherwise (`docs/reviews/2026-08-13.md` §3.1):
+hard limit; the review measured otherwise (`docs/reviews/archive/2026-08-13.md` §3.1):
 four renderers at four sizes were created and used correctly in one process,
 and the abort is **teardown only** — Filament throws from a destructor when a
 renderer is destroyed, which is why `eval/tile_and_vlm.py` keeps its four

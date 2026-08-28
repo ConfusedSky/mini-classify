@@ -5,7 +5,7 @@ argues the boundaries, [data_structures.md](data_structures.md) fixes the
 shapes, this one fixes the **calling conventions** — who calls whom, with
 what signature, what blocks, and who converts errors into `Failure`. Revised
 across eight review passes against
-[docs/reviews/2026-08-14-interfaces.md](../reviews/2026-08-14-interfaces.md)
+[docs/reviews/archive/2026-08-14-interfaces.md](../reviews/archive/2026-08-14-interfaces.md)
 (findings I1–I16, pass 2's J1–J8, pass 3's K1–K7, pass 4's L1–L4, pass 5's
 M1–M5, pass 6's N1–N7, pass 7's O1–O6, pass 8's P1–P5); the review's gating
 questions are answered inline — **Q1: the parent owns admission, and
@@ -19,7 +19,7 @@ here are data_structures.md's, including the driver-side shapes it now
 carries (`RenderConfig`, `CacheContext`, `Redraw`, `Retired`, `EndOfInput`).
 Implementation-round findings (2026-08-17: `B-R1-*`, `C-R1-*`, `D-R1-*`,
 and the pending `A-R1-*`/`E-R1-*`) resolve through
-[docs/reviews/2026-08-17-wave1-implementation.md](../reviews/2026-08-17-wave1-implementation.md).
+[docs/reviews/archive/2026-08-17-wave1-implementation.md](../reviews/archive/2026-08-17-wave1-implementation.md).
 
 Everything below is the v1 form: sequential driver, one renderer subprocess.
 Where a signature exists only so the threaded successor can slot a queue in

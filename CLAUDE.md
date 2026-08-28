@@ -27,9 +27,12 @@ proposal.
   before adding a module or an import), `data_structures.md` the message and
   driver shapes, `actors_proposal.md` the argument and what the spikes
   measured, `renderer_alternatives.md` renderer research. Findings cited as
-  `I3`/`K6`/`C-R1-4`/`F-7` resolve through `docs/reviews/`.
-- `docs/reviews/` — dated review notes, including the implementation reviews
-  every finding ID resolves to.
+  `I3`/`K6`/`C-R1-4`/`F-7` resolve through `docs/reviews/archive/`.
+- `docs/reviews/` — dated review notes for work still in flight.
+  `docs/reviews/archive/` holds the ones whose work has shipped: not
+  maintained, and read only to resolve a finding ID or an argument — its
+  README says which file defines which ID family. Line numbers inside an
+  archived review are as-of-then; don't repair them.
 - `docs/api/surface.md` — the query API's **spec**: the REPL's querying as an
   HTTP surface for `~/Documents/model-browser` to search against, reviewed by
   both sides against their own code. Built 2026-08-19 as `src/query.py`,
@@ -123,9 +126,9 @@ against a scratch cache, not the project's entry point.
 
 - **`OffscreenRenderer` teardown aborts; creation does not.** Multiple
   renderers coexist and render correctly in one process (four measured,
-  `docs/reviews/2026-08-13.md` §3.1) — the abort is Filament throwing from a
-  destructor. Keep renderers alive for the process lifetime; never destroy
-  one.
+  `docs/reviews/archive/2026-08-13.md` §3.1) — the abort is Filament throwing
+  from a destructor. Keep renderers alive for the process lifetime; never
+  destroy one.
 - **Rendering runs on the AMD iGPU, SigLIP on the 4060.** They do not
   contend; the split is a measured win — keep it.
 - **`render_to_image` holds the GIL** (~85–92%). Threads cannot overlap

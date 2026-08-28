@@ -818,7 +818,7 @@ tear down `src/renderer.py`'s `OffscreenRenderer`. That is the one thing this
 repo has a hard constraint about: *"`OffscreenRenderer` teardown aborts; creation
 does not … the abort is Filament throwing from a destructor. Keep renderers alive
 for the process lifetime; never destroy one"* (CLAUDE.md, measured in
-`docs/reviews/2026-08-13.md` §3.1).
+`docs/reviews/archive/2026-08-13.md` §3.1).
 
 So the child's **clean** exit is its dangerous one, and `J4` just made the parent
 wait for it with no timeout. `join()` still returns — SIGABRT is process death —
