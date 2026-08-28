@@ -236,7 +236,7 @@ def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False,
 `route` runs twice for a file that needed a fresh pose: once cold
 (→ `PoseRenderTask`), and again on the Poser's `Resolved` — the pose store
 is warm by then, so the same table serves the warm-`.npy` shortcut instead
-of a re-embed (today's post-resolution check, `classify_stls.py:1148-1155`;
+of a re-embed (the post-resolution check, `poser.MOVED_SOURCES`;
 its loss was the regression B's reviewer escalated). `pose_changed` rides
 on `Resolved` — the Poser knows the source it just recorded, so the driver
 never re-derives it from the store (true when the fresh source is
@@ -428,7 +428,7 @@ Rate limiting and windowing live inside `submit`. `shutdown` cancels
 cancellable, and the pool's threads are **non-daemon, joined by
 `concurrent.futures`' atexit hook regardless** — so Ctrl-C's residual wait
 is up to one in-flight call (~24 s mean, 45 s p95) per worker, in parallel
-(I7). Today's comment (`classify_stls.py:1238-1241`) draws exactly this
+(I7). `Arbiter.shutdown` draws exactly this
 queued-vs-running distinction, and anyone building on "Ctrl-C is instant"
 should know it is "instant except the in-flight calls".
 
@@ -585,7 +585,8 @@ def run(cfg) -> None:
                                               # paid answers land before flush —
                                               # bounded by the arbiter's own
                                               # 300 s transport deadline
-                                              # (src/pose.py:510, :433 — O4), not by
+                                              # (`pose._ask_ollama`/`_ask_gemini`
+                                              # timeout=300 — O4), not by
                                               # anything in this loop. A killed
                                               # child plus a just-submitted call
                                               # can mean five quiet minutes
@@ -676,13 +677,14 @@ against `child_owed()`, never `outstanding()` (N1): gated on
 LEARNINGS, where a 7-hour run went) as child silence and fire on a
 healthy run's quiescence tail — the one state this pipeline enters by
 design. `STALL_S` is **~240 s** (N2, O4): the child's unit of work is
-**3–28 s per model** (actors_proposal.md:196 — pass 5's 34 ms figure was
+**3–28 s per model** (actors_proposal.md §Poser — pass 5's 34 ms figure was
 a resident re-show, not a model), and the error is one-sided — a wedge is
 permanent, so a four-minute detection costs four minutes of a multi-hour
 run exactly once, while a false positive kills a healthy child — so the
 deadline sits ~8.5× above the documented top of range, a statement about
 rendering, never about the network. And deliberately **not** 300 s: that
-is the arbiter's transport deadline (src/pose.py:510), an unrelated number
+is the arbiter's transport deadline (`pose._ask_ollama`'s `timeout=300`),
+an unrelated number
 `STALL_S` should not shadow. This repo's renderer has a documented
 history of aborting rather than returning; one timestamp is cheap
 insurance.
@@ -827,11 +829,11 @@ child: daemon, join(timeout) — abandoned renders are debug artifacts
 the in-flight calls — the obvious shape, and today's — pays for up to eight
 VLM answers, waits ~24 s for them at interpreter exit, and then discards
 every one: today a Ctrl-C jumps past the deferred-fold loop
-(`classify_stls.py:1222-1236`) straight into the `finally`, and even
+straight into the `finally`, and even
 futures that were *already resolved* die there. Since the atexit join makes
 the wait unavoidable, the choice is not "wait or don't" but "read the
 results or throw them away". `FOLD_S` sits above the arbiter's 45 s p95 and
-well under its 300 s transport deadline (`src/pose.py:510`) — a straggler past
+well under its 300 s transport deadline (`pose._ask_ollama`) — a straggler past
 it loses its answer either way, and `FOLD_S` is a driver constant beside
 `WINDOW`, `SHORT`, and `STALL_S`.
 

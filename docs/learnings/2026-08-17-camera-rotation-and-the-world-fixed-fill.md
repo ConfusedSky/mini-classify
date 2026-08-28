@@ -40,7 +40,7 @@ difference appears exactly when the rig is rotated relative to the world.
 
 The sun is the only light Filament gives us here; the ambient fill is the
 built-in **indirect light**, an environment map fixed in world space
-(`classify_stls.py:61-69`). Rotating the mesh turns the geometry inside that
+(`renderer.FILL_INTENSITY`). Rotating the mesh turns the geometry inside that
 map; rotating the camera rig instead leaves the geometry where it was and lights
 it from a different side. This Open3D build exposes no
 `set_indirect_light_rotation`, so there is no way to carry the map along.
@@ -70,7 +70,7 @@ removes it. What residency keeps and what it pays:
   34 ms re-show of a hidden geometry.
 * **Not paid, as it turns out**: any revision to the throughput number. The
   roundtrip spike that produced 1.11× held meshes *host-side* and rotated them
-  before rendering (`eval/overlap_spike.py:101-103`) — it never re-showed a
+  before rendering (`overlap_spike.roundtrip_child`) — it never re-showed a
   resident geometry. The measured number was always measured on the design we
   have now adopted; it was the camera-rotation design that was unmeasured.
 

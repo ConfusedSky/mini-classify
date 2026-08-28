@@ -671,7 +671,7 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
 - **Dedup pass over the wave-1 `src/` modules** (2026-08-17, after wave 2
   lands and before the whole-branch review). AST-level scan found one true
   src-internal duplicate: `render_key` byte-identical in
-  `cache_checker.py:65` and `renderer.py:126` (parent and child each grew a
+  `cache_checker.route` and `renderer.rotated_cams` (parent and child each grew a
   copy because neither may import the other). Consolidation: keying helpers
   (`render_key`, `cache_key_from_identity`, `EMBED_CACHE_VERSION`) move to
   `src/identity.py` — the stdlib-only leaf both sides import (E-R1-5's

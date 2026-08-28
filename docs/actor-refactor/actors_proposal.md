@@ -348,7 +348,7 @@ Three defects were listed here; all three are now closed:
 
 * ~~Ctrl-C loses the CSV entirely~~ — **fixed**: the write now runs inside the
   `finally` chain that attempts all three artifacts even when another's write
-  raises (`main:classify_stls.py:1134-1169`, and `Done.flush` on this branch).
+  raises (`Done.flush`).
 * ~~**`save_pose_cache` is a bare `write_text`**, and it runs on every shutdown
   including Ctrl-C. A kill mid-write corrupts the most expensive artifact we
   have — re-resolving it means 24 candidate renders per model plus ~$0.30 of
@@ -359,7 +359,7 @@ Three defects were listed here; all three are now closed:
   still a bare `write_text`; the pipeline no longer goes through it.
 * ~~`np.save` to the embedding cache is non-atomic~~ — **handled**: the write
   unlinks its file on `BaseException`, so a truncated `.npy` cannot pass the
-  `.exists()` check next run (`classify_stls.py:1086-1092`). Temp +
+  `.exists()` check next run. Temp +
   `os.replace` would still be stronger against SIGKILL.
 
 ## Spikes

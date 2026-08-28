@@ -145,7 +145,7 @@ class Rendered:                    # → Done: the needs_embed=False ack. The
 ```
 
 The arbiter path needs the six first-column tiles as PIL Images for
-`make_contact_sheet` (`src/pose.py:376`): **the Poser converts** with
+`pose.make_contact_sheet`: **the Poser converts** with
 `Image.fromarray` at sheet-build time — arrays are what cross the boundary.
 
 ### Poser ↔ Embedder (the ensemble) — D5
@@ -221,14 +221,14 @@ scoring matmul, not forever.
 `admitted − retired` counter only reaches zero if errors *retire* files
 exactly like successes, so an error must be a message that arrives at `Done`,
 not a log line. Today errors are `rows.append({"top1": f"RENDER_ERROR: ..."})`
-(`classify_stls.py:1024`, `:1066`) — a malformed row shape that survives only
+— a malformed row shape that survives only
 because `DictWriter` fills missing keys.
 
 ### The Arbiter is not a queue-fed actor (Q1, D6)
 
 An earlier draft specified `Arbiter → Poser` both as an unbounded back-edge
 queue and as `ParkedFile.future` — incompatibly. The `Future` wins: it is
-today's working mechanism (`ThreadPoolExecutor`, `classify_stls.py:976`), the
+today's working mechanism (`ThreadPoolExecutor`), the
 cheaper build, and the v1 reality. The Arbiter module is a windowed,
 rate-limited pool the Poser holds; the back-edge rule in [Queues](#queues)
 does not apply to it.
@@ -245,7 +245,7 @@ class Resolved:                    # Poser → driver: this file's pose is settl
                                    # second-call rule, interfaces §route). The
                                    # Poser decides poses, never cache admission
     pose_changed: bool             # true when the fresh source is vlm/siglip
-                                   # (classify_stls.py:1146). The Poser knows
+                                   # (`poser.MOVED_SOURCES`). The Poser knows
                                    # the source it just recorded, so it rides
                                    # here and the driver passes it straight to
                                    # route rather than re-deriving it from the
@@ -402,9 +402,9 @@ class Pose:
 * **`from_cache` absorbs legacy shapes, not versions.** The shapes are real on
   disk: `embed-cache3` holds bare-int `front_view: 0` entries beside
   per-config dicts — today merged at the *write* site
-  (`classify_stls.py:1100-1103`, D3) — and `margin` is absent from older
+  (`cache_checker.route`, D3) — and `margin` is absent from older
   entries. Version filtering already has a home and keeps it:
-  `load_pose_cache` drops mismatched `v` before construction (`src/pose.py:182`).
+  `pose.load_pose_cache` drops mismatched `v` before construction.
   `from_cache` therefore carries `v` through rather than defaulting it — a
   field default of `POSE_CACHE_VERSION` would stamp unversioned entries as
   freshly resolved and silently defeat that drop rule (D10).
@@ -423,7 +423,7 @@ class Pose:
   `load_pose_cache` returns and `save_pose_cache` `json.dumps`, and both
   it and `embed_cache_token` subscript entry dicts; a `Pose`-valued store
   would not serialize). It is the miss test, called with a possibly-absent
-  entry (`classify_stls.py:964`, `:1003`), and `None → False` is
+  entry, and `None → False` is
   load-bearing. Absence is the Cache Checker's dict lookup. `Pose` objects
   exist at the edges — `Pose.from_cache(entry)` into messages, `to_cache()`
   back through `record_pose` — never as the store's values.
@@ -471,7 +471,7 @@ Deterministic output order regardless of completion order, and partial flush
 on abort is the same code path.
 
 **`rows` is the output record, not the retirement record**: under
-`--skip-embed` a file retires with no row (`classify_stls.py:1094`), so
+`--skip-embed` a file retires with no row, so
 `rows` legitimately has holes while `admitted == retired` holds — never
 assert `len(rows) == admitted`.
 
@@ -659,12 +659,12 @@ who reads and writes them (Cache Checker reads, Done writes). The embedding
 
 Of the proposal's three atomicity defects, **two have since been fixed in the
 current code** (D2): the CSV now flushes inside the `finally` chain that
-attempts all three artifacts (`classify_stls.py:1134-1169`), and a torn
+attempts all three artifacts (`Done.flush`), and a torn
 `.npy` unlinks itself on `BaseException` so it cannot read as a hit next run
-(`classify_stls.py:1086-1092`) — temp + `os.replace` would still be stronger
+— temp + `os.replace` would still be stronger
 against SIGKILL, but it is a hardening, not an open hole. The third — the one
 whose loss costs money — closed with the refactor: `Done` took the pose cache
 over and writes it temp + `os.replace` (`src/done.py`, `Done.flush`), first of
 its two writes and with the temp unlinked in a `finally`.
-`pose.save_pose_cache` (`src/pose.py:200-205`) is still a bare `write_text`
+`pose.save_pose_cache` is still a bare `write_text`
 and still what the evals call; the pipeline no longer goes through it.

@@ -269,7 +269,7 @@ it. Same spinner method used on `render_to_image` (a background thread counting
 in pure Python; if a call releases the GIL the counter keeps climbing):
 
 Comparing the per-view sequence each actually pays — Open3D's
-`classify_stls.py:139`, ModernGL's draw + `finish` + `read`:
+`renderer.Renderer.views`, ModernGL's draw + `finish` + `read`:
 
 | per view @2048 | wall | GIL held | GIL-held time |
 |---|---|---|---|

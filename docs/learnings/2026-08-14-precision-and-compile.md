@@ -22,7 +22,7 @@ For scale: production top-1 margins are median 0.015, p1 1.75e-04, min
 ### The fp16 scoring cast: 1 flip in 2,943
 
 Production scores by casting cached fp32 embeddings *down* to fp16 for the
-GPU matmul (`classify_stls.py:1078,1104`) while the pose ensemble runs fp32
+GPU matmul (`done.Done._score`) while the pose ensemble runs fp32
 numpy. Scoring every cached model both ways (plus fp64): **one top-1 flip**,
 at a 1.9e-05 margin between 'terrain or scenery piece' and 'building or
 ruin'; fp32 agreed with fp64 on every model, so fp32 is converged and fp16 is

@@ -70,7 +70,7 @@ not.
   and defaults `v` to 0.
 * `pose.RENAMED_SOURCES` maps `heuristic → geometry` and
   `ensemble → siglip` — spellings retired long ago.
-* `done.py:175` handles a legacy int `front_view` on the write side.
+* `Done._score`'s `front_view` merge handles a legacy int on the write side.
 * `load_pose_cache` drops entries below `POSE_CACHE_VERSION`, whose changelog
   (v2 four-view ensemble, v3 geometry attenuation, v4 512 px contact sheet)
   only matters for entries that predate v4. **A bump also wipes all four
@@ -160,7 +160,7 @@ are orphans whose files the walk no longer sees):
 
 **Read that number carefully — an earlier revision of this section read it
 wrong.** `source` becomes `"vlm"` only when the arbiter *moved* the answer
-(`poser.py:258-262`: "a confirmation keeps the label"). So 214 counts
+(`Poser._fold`: "a confirmation keeps the label"). So 214 counts
 arbitrations that *changed* a pose, not calls that succeeded, and the 1243 is
 **refused ∪ confirmed**: models the arbiter declined to answer for, and models
 it answered for by agreeing. Those two are indistinguishable on disk.

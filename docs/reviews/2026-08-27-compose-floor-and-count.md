@@ -16,7 +16,7 @@ were caught by mutating the source and watching the suite stay green.
 ## Findings (fixed, most severe first)
 
 - **C1 — the REPL's floor translation was guarded by nothing.**
-  `test_categories.py:78-79`. `show_query` sends its display ten away when a
+  `show_query`'s `query.rank` call sends its display ten away when a
   floor is in force, which is the whole reason `:min 0.1` still means "every
   model at or above 0.1" now that the bounds compose. Mutating it back to
   `rank(sims_1d, top=top, min_score=min_score)` — the exact regression, in the

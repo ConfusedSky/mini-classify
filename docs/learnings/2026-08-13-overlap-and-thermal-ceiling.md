@@ -36,7 +36,7 @@ card enters SW thermal slowdown within seconds of sustained load and slides
 2250 → ~1400 MHz; effective throughput is ~11.5 TFLOP/s against ~28 of
 throttled fp16 peak, with attention already `sdpa`. `--embed-batch` is
 therefore not a throughput knob (and the pose-tile call at
-`classify_stls.py:888` never took it anyway).
+`poser`'s tile path never took it anyway).
 
 ### `torch.compile` is 1.10× and disqualified
 
