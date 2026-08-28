@@ -115,7 +115,11 @@ notes at the bottom are amended in place. Open work is tracked separately in
   fit the 4060 (**4740 of 8188 MiB**), so the server and a classify run
   coexist — unlike ollama, which is a reload thrash rather than a capacity
   problem. The API's top-10 is identical to `test_categories.py`'s, which is
-  what `src/query.py` was extracted to guarantee.
+  what `src/query.py` was extracted to guarantee. (~~The API's top-10~~ —
+  amended 2026-08-27: the API has no ten-row default any more, and the REPL's
+  is a display default it sends away under a floor. The shared *ranking* is
+  still one copy, which is what the extraction guaranteed; the two defaults
+  were never part of it. See below.)
 
 - [Tri-state pass 2, and the new primary cache](docs/learnings/2026-08-21-tri-state-pass-2-and-embed-cache512.md)
   — the retry split's default flips after three passes each found transient
@@ -138,6 +142,19 @@ notes at the bottom are amended in place. Open work is tracked separately in
   before the model** — a doomed offline attempt otherwise leaves an fp16 copy
   on the 4060 for the whole retry, since the traceback keeps the raising
   frame's locals alive, peaking at two.
+
+- [A default that only became load-bearing later](docs/learnings/2026-08-27-a-default-that-became-load-bearing.md)
+  — making `min_score` and `top` compose turned `QueryRequest.top`'s harmless
+  ten-row default into a silent cut: on embed-cache512, `fantasy character` at
+  floor 0.1 goes **875 rows to 10**, the cut landing in the top 1.4% of a set
+  the caller asked to be exhaustive. The default lived in **four** places and
+  only one was the schema — `rank()`'s own signature, `show_query`'s, and the
+  contract table too. The composition *order* is invisible in the rows (the
+  floor set is always a prefix of the sorted order, so the two orders commute
+  on the result set — 0 divergences in 20000 tie-forced cases) and observable
+  only in `matched`, which is what a contract test has to assert. Both guards
+  written for this change were caught by mutation rather than by reading: a
+  parity oracle that copies the call it guards tests the copy.
 
 ## Evergreen notes
 
