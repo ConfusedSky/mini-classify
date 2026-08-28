@@ -160,6 +160,7 @@ LEARNINGS entry may still name one.
 | `front_first.py` | A recorded negative result: front-first loses 9 of 44, and the chosen front is perpendicular to the true up on only 38/49, so a fifth of the time it excludes the right answer outright. Its 24-tile orbit builder moved to `common.build_orbit_tiles` — three surviving scorers read those pixels. |
 | `load_path.py` | Its finding shipped as `src/loader.py`: `read_triangle_mesh` is ~15–30× slower than a numpy binary-STL parse, welding costs more than the upload it saves, and upload is only 6.6% of the path. |
 | `light_probe2.py`, `light_probe3.py` | Shipped as `FILL_INTENSITY`; already marked superseded here before they were deleted. |
+| `cpu_dtype.py` | Which dtype SigLIP should load in on a **CPU**, for model-browser's GPU-less demo host, through the production path (`Collection`, `embed_texts`, `query.score`/`rank`): fp16 as shipped, fp32, int8 dynamic on the text tower, and text-tower-only — one variant per process (`--dtype`), so `ru_maxrss` is honest, then `--report`. On embed-cache-test: fp16 is **3.7× slower** than fp32 and **peaks at 7.7 GB** converting the fp32 checkpoint (fp32: 2.8 GB) for identical rankings; int8 is 3× faster again but reshuffles the top-60 and moves `best_z` by ±1; text-only saves nothing, the checkpoint is mmapped. Why `load_siglip` now picks the dtype by device — LEARNINGS, "fp16 on a CPU". |
 
 ## Watch out
 

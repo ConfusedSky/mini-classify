@@ -57,9 +57,18 @@ PROMPT_TEMPLATES = [
 ]
 
 
-def load_siglip(model_name: str, device: str, torch_dtype=torch.float16):
+def load_siglip(model_name: str, device: str, torch_dtype=None):
     """`(model, processor)` for `model_name`, off the local HF cache when it
-    holds a complete snapshot.
+    holds a complete snapshot, in the device's dtype unless one is given.
+
+    fp16 is the 4060's dtype and the one every cache was embedded under. On a
+    CPU it is the wrong one twice over: PyTorch has no fast half-precision
+    kernels there, so a so400m text query takes 1.14 s against 0.31 s in
+    fp32, and the checkpoint is fp32 on disk, so asking for fp16 converts it
+    and peaks at **7.7 GB** resident against fp32's 2.8 — enough to OOM an
+    8 GB host before its first query. fp32 returns the same rankings to four
+    decimals. Measured on embed-cache-test, `eval/cpu_dtype.py`; LEARNINGS,
+    "fp16 on a CPU".
 
     `from_pretrained` on a repo id revalidates every file's etag against the
     hub, so a fully cached model still needs the network to load — the server,
@@ -74,6 +83,9 @@ def load_siglip(model_name: str, device: str, torch_dtype=torch.float16):
     module is imported by tools that never load a model.
     """
     from transformers import AutoModel, AutoProcessor
+
+    if torch_dtype is None:
+        torch_dtype = torch.float16 if device.startswith("cuda") else torch.float32
 
     def load(local_only):
         # Processor first: it is the cheap CPU-side half, and on a partial
@@ -134,8 +146,9 @@ class Embedder:
     """Owns SigLIP, the category text embeddings, and the prompt banks.
 
     Attributes (all computed once in __init__, read-only thereafter):
-        text_embeds: (n_categories, dim) fp16 tensor on device — Done's
-            scoring matmul runs against it.
+        text_embeds: (n_categories, dim) tensor on device, in the model's
+            dtype (fp16 on cuda, fp32 on cpu) — Done's scoring matmul runs
+            against it.
         up_T, down_T: numpy float32 banks for the Poser's upright ensemble.
         front_T, back_T: numpy float32 banks for Done's front_view resolution.
     """

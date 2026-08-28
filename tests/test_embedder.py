@@ -209,6 +209,30 @@ def test_load_siglip_tries_the_local_cache_first(monkeypatch, cached, expected):
     assert isinstance(model, FakeModel) and processor is proc
 
 
+@pytest.mark.parametrize("device, expected", [
+    ("cpu", torch.float32), ("cuda", torch.float16), ("cuda:0", torch.float16),
+])
+def test_load_siglip_picks_the_dtype_by_device(monkeypatch, device, expected):
+    """fp16 is the 4060's dtype; on a CPU it runs 3.7x slower and peaks at
+    7.7 GB converting the fp32 checkpoint (LEARNINGS, "fp16 on a CPU"). An
+    explicit dtype still wins, which is how the harness reproduces both."""
+    seen = []
+
+    def model_from_pretrained(name, torch_dtype=None, local_files_only=False):
+        seen.append(torch_dtype)
+        return FakeModel()
+
+    mod = types.ModuleType("transformers")
+    mod.AutoModel = types.SimpleNamespace(from_pretrained=model_from_pretrained)
+    mod.AutoProcessor = types.SimpleNamespace(
+        from_pretrained=lambda name, local_files_only=False: FakeProcessor())
+    monkeypatch.setitem(sys.modules, "transformers", mod)
+
+    load_siglip(DEFAULT_MODEL, device)
+    load_siglip(DEFAULT_MODEL, device, torch_dtype=torch.bfloat16)
+    assert seen == [expected, torch.bfloat16]
+
+
 def test_views_batching_matches_whole_and_tiles_ignore_it(monkeypatch):
     proc = FakeProcessor()
     mod = types.ModuleType("transformers")

@@ -156,6 +156,18 @@ notes at the bottom are amended in place. Open work is tracked separately in
   written for this change were caught by mutation rather than by reading: a
   parity oracle that copies the call it guards tests the copy.
 
+- [fp16 on a CPU](docs/learnings/2026-08-28-fp16-on-a-cpu.md)
+  — `load_siglip` asked for fp16 on every device; on a CPU that is **3.7×
+  slower** than fp32 (1.14 s vs 0.31 s per so400m text query) and **peaks at
+  7.7 GB** converting the fp32 checkpoint, against fp32's 2.8 — enough to OOM
+  an 8 GB host before its first query, which model-browser would show as
+  `wedged`. fp32 returns identical rankings. The dtype now follows the device.
+  Two CPU optimisations measured and declined: int8 dynamic quantisation is
+  3× faster again but changes top-1 on 3 of 16 queries and moves `best_z` by
+  ±1; loading only the text tower saves nothing, because `from_pretrained`
+  mmaps the checkpoint and the vision pages are never touched. embed-cache-test
+  (2165 models), 7940HS, `eval/cpu_dtype.py`.
+
 ## Evergreen notes
 
 - [Queries and filters](docs/learnings/queries-and-filters.md) — open-set

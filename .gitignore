@@ -19,6 +19,7 @@ eval/out/
 # default. Hundreds of MB each, regenerable, and never content to track: 1.4 GB
 # of them were committed by accident on 2026-08-18.
 log/
+logs/
 
 # git worktrees created for parallel branches — a full second checkout of
 # this repo, never content to track
