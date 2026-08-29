@@ -61,7 +61,7 @@ def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False,
 
     `arbiter_available` — the driver's `cfg.poser.can_arbitrate()`, and
     **keyword-only with no default** so every caller breaks loudly
-    (docs/tri-state-pass-2.md, 2026-08-21). It is what makes a marked entry a
+    (docs/archive/tri-state-pass-2.md, 2026-08-21). It is what makes a marked entry a
     miss only in a run that can actually escalate it: without it an
     arbiterless run re-rendered the marked model, re-resolved it with no gate
     and erased the marker — and production runs `--pose-vlm off`. At the
@@ -83,7 +83,7 @@ def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False,
         # entry — margin None, written by some older pass — always reads
         # insufficient and is upgraded in place. The availability flag
         # `pose_is_sufficient` takes is a different one: the *arbiter's*, plus
-        # this run's gate (docs/tri-state-pass-2.md, 2026-08-21).
+        # this run's gate (docs/archive/tri-state-pass-2.md, 2026-08-21).
         if entry is None or not (settled or pose.pose_is_sufficient(
                 entry, arbiter_available, args.up_margin)):
             return PoseRenderTask(file=f, index=index)

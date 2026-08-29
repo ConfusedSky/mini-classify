@@ -291,7 +291,7 @@ def test_arbitrated_separates_a_confirmation_from_a_refusal():
     # a request the API rejects on its merits cannot succeed on a retry, so it
     # is settled permanently — and only its own type buys that now
     assert fold(exc=pose.VLMRejected("HTTP 400")) == ("geometry", "rejected")
-    # the flipped default (C1, docs/tri-state-pass-2.md, 2026-08-21): an
+    # the flipped default (C1, docs/archive/tri-state-pass-2.md, 2026-08-21): an
     # unknown failure type retries loudly instead of pinning silently. Three
     # passes each found a transient failure sitting on the permanent side,
     # because permanent was the open-ended fallthrough
@@ -349,7 +349,7 @@ def test_the_real_call_path_maps_each_failure_to_its_own_record(monkeypatch):
 
 def test_arbitrated_round_trips_as_four_states_on_disk(tmp_path):
     """true / "rejected" / false / absent, asserted **on disk** and through
-    the production writers (B1, docs/tri-state-pass-2.md, 2026-08-21).
+    the production writers (B1, docs/archive/tri-state-pass-2.md, 2026-08-21).
 
     The Pose-level assertion alone passes with the bug this pins: `to_cache`
     coerced `bool(self.arbitrated)`, and `bool("rejected") is True` — the

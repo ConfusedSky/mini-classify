@@ -339,7 +339,7 @@ class Pose:
                                    # explicitly (D10)
     margin: float | None = None
     arbitrated: bool | str | None = None
-                                   # FOUR-state (docs/tri-state-pass-2.md,
+                                   # FOUR-state (docs/archive/tri-state-pass-2.md,
                                    # 2026-08-21; tri-state before that, and
                                    # this doc said `bool = False` while the
                                    # code shipped the tri-state — review,
@@ -416,7 +416,7 @@ class Pose:
   one, the *arbiter's*, plus this run's gate. Neither new parameter has a
   default, deliberately: the `Resolved.pose_changed` precedent, since a
   default silently un-pins the W1 regression test and every caller breaking
-  loudly is the point. See docs/tri-state-pass-2.md §C4, 2026-08-21.)
+  loudly is the point. See docs/archive/tri-state-pass-2.md §C4, 2026-08-21.)
 * **`pose_is_sufficient` stays a module function over the raw entry
   `dict | None`** (D11, corrected 2026-08-17 — B's review proved the
   earlier `Pose | None` wording wrong: the store holds what

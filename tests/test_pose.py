@@ -249,7 +249,7 @@ def test_gemini_maps_each_transport_failure_to_the_retry_split(monkeypatch):
     # auth/entitlement (401/403/404) and the intermediary timeouts
     # (408/409/425) are the environment, not a verdict on the request, and
     # they are discovered only mid-run — the startup probe never makes a
-    # Vertex call (docs/tri-state-pass-2.md, 2026-08-21)
+    # Vertex call (docs/archive/tri-state-pass-2.md, 2026-08-21)
     for code in pose.TRANSIENT_HTTP_STATUS:
         assert with_urlopen(http_error(code)) is pose.VLMUnavailable, code
     # only a request judged on its merits is permanent, and it now has its own
@@ -276,7 +276,7 @@ def test_gcloud_helpers_normalise_their_subprocess_failures(monkeypatch):
     """The helpers promise `RuntimeError`, and a hung or missing gcloud broke
     that promise: `TimeoutExpired` and `FileNotFoundError` escaped into
     `_ask_gemini`, where the generic arm recorded the model permanently
-    (docs/tri-state-pass-2.md, 2026-08-21)."""
+    (docs/archive/tri-state-pass-2.md, 2026-08-21)."""
     import subprocess as sp
 
     monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
@@ -561,7 +561,7 @@ def test_full_run_poses_stay_cached():
 
 
 def test_the_missing_escalation_is_a_miss_only_where_it_could_happen():
-    """C4, the four-state read (docs/tri-state-pass-2.md, 2026-08-21).
+    """C4, the four-state read (docs/archive/tri-state-pass-2.md, 2026-08-21).
 
     `false` and **absent** both mean "the escalation the margin asked for did
     not happen", and both are misses — but only in a run that could actually

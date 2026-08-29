@@ -1,4 +1,4 @@
-"""`resolve_pose_vlm`'s auto-failure prompt (C6, docs/tri-state-pass-2.md,
+"""`resolve_pose_vlm`'s auto-failure prompt (C6, docs/archive/tri-state-pass-2.md,
 2026-08-21), driven as a **subprocess**.
 
 Nothing may import `classify_stls.py` — tests included (CLAUDE.md): `spawn`

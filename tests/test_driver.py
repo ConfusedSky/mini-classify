@@ -352,7 +352,7 @@ def test_resolved_reroutes_as_settled_and_the_cold_call_does_not(monkeypatch):
 
 
 def test_route_is_told_whether_this_run_can_still_arbitrate(monkeypatch):
-    """C4/C5 (docs/tri-state-pass-2.md, 2026-08-21): the flag is the Poser's
+    """C4/C5 (docs/archive/tri-state-pass-2.md, 2026-08-21): the flag is the Poser's
     `can_arbitrate()`, asked at every route call — the resolved backend stays
     owned by `VlmConfig`, so no `CacheContext` field and no message shape
     changed. A run with no arbiter must not re-render the entries it marked,

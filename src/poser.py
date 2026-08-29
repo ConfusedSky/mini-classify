@@ -135,7 +135,7 @@ class Poser:
         # subtractions need membership, hence an exposed dict, not a predicate
         self.parked: dict[int, ParkedFile] = {}
         self._stash: dict[int, tuple[np.ndarray, list[list[np.ndarray]]]] = {}
-        # The breaker (C5, docs/tri-state-pass-2.md, 2026-08-21). Touched only
+        # The breaker (C5, docs/archive/tri-state-pass-2.md, 2026-08-21). Touched only
         # from the parent thread — `poll`/`fold_done`/`settle` and the driver's
         # routing all run there — so no lock, and the count is fold-ordered by
         # construction.
@@ -187,7 +187,7 @@ class Poser:
         gated = pose.needs_arbiter_margin(margin, self.cfg.margin_threshold)
         if gated and self.can_arbitrate():
             # The park-time record is `False`, not absent (C3,
-            # docs/tri-state-pass-2.md, 2026-08-21): every completion path
+            # docs/archive/tri-state-pass-2.md, 2026-08-21): every completion path
             # overwrites it, so the settle-record, the CancelledError
             # re-record and the (defensive) drop-on-parked path all become
             # consequences of the default rather than special cases.
@@ -320,7 +320,7 @@ class Poser:
           auth, 5xx, CLI timeout) or a **cancellation** — `arbitrated=False`,
           because both mean "asked and not answered *yet*";
         * any other failure — `False` as well. The default is the transient
-          side (C1, docs/tri-state-pass-2.md, 2026-08-21): permanent was the
+          side (C1, docs/archive/tri-state-pass-2.md, 2026-08-21): permanent was the
           open-ended fallthrough, and three passes each found a transient
           failure sitting on it. An unknown type now retries loudly rather
           than pinning silently.

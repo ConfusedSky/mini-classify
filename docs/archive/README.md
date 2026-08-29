@@ -27,3 +27,9 @@ Two rules follow, and they are the whole reason this directory exists:
   the actor refactor. Its "Modify: `classify_stls.py:50-71`" lines were
   instructions for work that has since landed, not references; the pipeline
   they planned is described by `docs/actor-refactor/interfaces.md` now.
+- **`tri-state-pass-2.md`** — the 2026-08-21 design for the `arbiter` retry
+  contract, shipped as C1–C6. Same deal as the reviews: `C1`–`C6` are cited
+  from `pose`, `poser`, `cache_checker`, `driver`, the CLI and six test
+  modules, and are defined only here. What the contract *is* now lives in
+  `pose.pose_is_sufficient`'s docstring and in LEARNINGS, "Tri-state pass 2,
+  and the new primary cache".

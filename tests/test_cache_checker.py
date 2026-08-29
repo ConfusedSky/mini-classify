@@ -36,7 +36,7 @@ ENTRIES = {
                "margin": 0.61, "v": pose.POSE_CACHE_VERSION},
     # the same entry from *under* the gate: margin 0.61 clears MARGIN_THRESHOLD,
     # so it is the wrong fixture for anything about the escalation-owed states
-    # (docs/tri-state-pass-2.md, review 2 S1)
+    # (docs/archive/tri-state-pass-2.md, review 2 S1)
     "siglip-gated": {"up": [0.0, 1.0, 0.0], "confidence": 0.83,
                      "source": "siglip", "margin": 0.2,
                      "v": pose.POSE_CACHE_VERSION},
@@ -64,7 +64,7 @@ def make_args(**over):
              compile=False, up_axis="auto", skip_embed=False,
              save_renders=False, cache_dir="embed-cache",
              # this run's escalation gate: route reads it for the four-state
-             # sufficiency check (docs/tri-state-pass-2.md, 2026-08-21)
+             # sufficiency check (docs/archive/tri-state-pass-2.md, 2026-08-21)
              up_margin=pose.MARGIN_THRESHOLD)
     d.update(over)
     return argparse.Namespace(**d)
@@ -281,7 +281,7 @@ def test_settled_reroute_accepts_the_pose_a_cold_call_would_re_escalate(tmp_path
     C4 a marked entry whose margin clears this run's gate is a hit anyway, so
     the pin on the old `ENTRIES["siglip"]` (margin 0.61 against a 0.45 gate)
     would pass without `settled` doing anything at all — asserting nothing
-    (docs/tri-state-pass-2.md, review 2 S1). `arbiter_available=True` on both
+    (docs/archive/tri-state-pass-2.md, review 2 S1). `arbiter_available=True` on both
     calls for the same reason: an arbiterless run takes the same entry as a
     hit cold."""
     case = Case("s", PoseRenderTask, pose_state="siglip-gated")
@@ -313,7 +313,7 @@ def marked(tmp_path, state, **entry_over):
 
 
 def test_an_owed_escalation_is_a_miss_only_where_it_could_happen(tmp_path):
-    """C4 (docs/tri-state-pass-2.md, 2026-08-21). `false` and an absent key
+    """C4 (docs/archive/tri-state-pass-2.md, 2026-08-21). `false` and an absent key
     both say the escalation the margin asked for did not happen, and both are
     re-rendered — but only by a run that could do something about it.
 

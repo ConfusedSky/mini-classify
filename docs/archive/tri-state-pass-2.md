@@ -1,6 +1,15 @@
 # Tri-state pass 2 — design (2026-08-21)
 
-**Status: confirmed for implementation (Masa, 2026-08-21).** All three
+**Shipped. Archived 2026-08-28.** C1–C6 are all in the code
+(`pose.VLMRejected`, the widened `arbitrated: bool | str | None`,
+`poser.BREAKER_N`/`BREAKER_WINDOW_S`, `gate_fired_no_call`,
+`pose_is_sufficient`'s four-state read, `_confirm_degraded`). The durable
+findings are in LEARNINGS, "Tri-state pass 2, and the new primary cache";
+the contract as it stands is `pose_is_sufficient`'s docstring. This file is
+kept because `C1`–`C6` are cited from live code and defined nowhere else —
+read it to resolve one, not to learn what the code does.
+
+**Status at the time: confirmed for implementation (Masa, 2026-08-21).** All three
 review-2 judgment calls confirmed: the breaker's ≥ 60 s window rides with
 N = 5; the bill's full magnitude (an overnight first arbiter-on run) is
 accepted; both Accepted edges stand as accepted.

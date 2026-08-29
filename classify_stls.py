@@ -99,7 +99,7 @@ def profile_dir(argv=None):
 
 def _confirm_degraded(why):
     """`--pose-vlm auto` probed and found no arbiter: ask, default No
-    (docs/tri-state-pass-2.md, 2026-08-21).
+    (docs/archive/tri-state-pass-2.md, 2026-08-21).
 
     A silent degrade is what made an `auto` run indistinguishable from an
     `off` one, and every pose it resolves is marked `arbitrated: false` — a
@@ -392,7 +392,7 @@ def main():
           + (f", {errors} of them render errors" if errors else "") + ")")
     # The run's product is reportability: a breaker-tripped or arbiterless run
     # must not read like a healthy one in the log tail
-    # (docs/tri-state-pass-2.md, 2026-08-21).
+    # (docs/archive/tri-state-pass-2.md, 2026-08-21).
     if poser.gate_fired_no_call:
         print(f"{poser.gate_fired_no_call} ambiguous poses kept the ensemble's "
               f"answer with no arbiter call, marked `arbitrated: false` — the "

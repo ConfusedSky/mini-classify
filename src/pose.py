@@ -70,7 +70,7 @@ class Pose:
                                     # None = no claim (never asked, or legacy);
                                     # False = the escalation did not happen;
                                     # True = answered; "rejected" = the API
-                                    # judged the request (docs/tri-state-pass-2.md,
+                                    # judged the request (docs/archive/tri-state-pass-2.md,
                                     # 2026-08-21). `str` is deliberate: a clean
                                     # string enum would force load-time mapping
                                     # of every true/false written since
@@ -105,7 +105,7 @@ class Pose:
         matching entries that predate front-view caching.
 
         `arbitrated` is four-state, and **absence reads as `false`**
-        (docs/tri-state-pass-2.md, 2026-08-21):
+        (docs/archive/tri-state-pass-2.md, 2026-08-21):
 
         * **true** — asked and answered, whether or not the answer moved the
           pose.
@@ -274,7 +274,7 @@ def pose_is_sufficient(entry, arbiter_available, margin_threshold):
     it stands regardless of its margin.
 
     The four states of `arbitrated`, read against *this* run
-    (docs/tri-state-pass-2.md, 2026-08-21):
+    (docs/archive/tri-state-pass-2.md, 2026-08-21):
 
     * `true` / `"rejected"` — settled. The call happened and either answered
       or was judged; a retry buys nothing.
@@ -667,7 +667,7 @@ _token_cache = {}
 
 def _run_gcloud(argv, timeout):
     """`gcloud`, with its process-level failures normalised to the RuntimeError
-    the two helpers below already promise (docs/tri-state-pass-2.md,
+    the two helpers below already promise (docs/archive/tri-state-pass-2.md,
     2026-08-21). A hung or missing binary raised `TimeoutExpired`/`OSError`
     out of helpers whose callers catch `RuntimeError`, and inside `_ask_gemini`
     that leak took `_fold`'s permanent arm — the mid-run ADC-expiry case, since
@@ -725,7 +725,7 @@ class VLMRejected(RuntimeError):
     """The API judged the request; a retry cannot succeed.
 
     The permanent side of the retry split, and the side that is **enumerated**
-    (docs/tri-state-pass-2.md, 2026-08-21): a judged verdict can only arrive
+    (docs/archive/tri-state-pass-2.md, 2026-08-21): a judged verdict can only arrive
     as a non-auth 4xx or a coherent 200 refusal, where the transient side is
     open-ended. Three review passes found transient failures pinned as
     permanent while permanent was the fallthrough — so `_fold`'s default is
@@ -774,7 +774,7 @@ def _ask_gemini(png_bytes, n_tiles, model, project=None):
     # The environment being broken is not the request being judged: a missing
     # project or an expired ADC token is transient, and the token cache's
     # 1800 s TTL guarantees a collection run re-mints mid-run, where the
-    # startup probe cannot see it (docs/tri-state-pass-2.md, 2026-08-21).
+    # startup probe cannot see it (docs/archive/tri-state-pass-2.md, 2026-08-21).
     # `gcloud_project()` is unreachable from the pipeline — resolve_pose_vlm
     # always populates args.gemini_project — so the live path is the token
     # half; both are wrapped anyway.
@@ -812,7 +812,7 @@ def _ask_gemini(png_bytes, n_tiles, model, project=None):
         # Auth/entitlement and intermediary-timeout statuses are the
         # environment, not a verdict on the request, and both are discovered
         # only mid-run — the startup probe never makes a Vertex call
-        # (docs/tri-state-pass-2.md, 2026-08-21). Any 5xx is the server
+        # (docs/archive/tri-state-pass-2.md, 2026-08-21). Any 5xx is the server
         # failing, transient like a network drop, without 429/503's backoff.
         if e.code in TRANSIENT_HTTP_STATUS or e.code >= 500:
             raise VLMUnavailable(detail) from e
@@ -867,7 +867,7 @@ def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None
       retry and would pay a call per run forever. It gets no arm of its own
       here: the generic arm below already retries once and re-raises under
       `raise_failures`, and a judged rejection rarely differs on attempt 2
-      (docs/tri-state-pass-2.md, 2026-08-21);
+      (docs/archive/tri-state-pass-2.md, 2026-08-21);
     * anything else — an unknown failure, which `_fold` records retryable
       since three passes found transient failures on the permanent side.
 

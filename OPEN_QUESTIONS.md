@@ -74,7 +74,7 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   below.
 
 - **Which side of the arbiter retry split gets enumerated** — decided
-  2026-08-21, and it is the *permanent* side (`docs/tri-state-pass-2.md`).
+  2026-08-21, and it is the *permanent* side (`docs/archive/tri-state-pass-2.md`).
   `arbitrated` used to default to permanent: a failure the code did not
   recognise left the key absent and the model was never asked again. The
   evidence against that is three passes each finding a transient failure
@@ -243,7 +243,7 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   unanimous) is the only evidence in the other direction, and it was a different
   model on a different backend.
 - **Should an attempt counter bound cross-run re-asks?** Filed 2026-08-21 with
-  the four-state `arbitrated` (`docs/tri-state-pass-2.md`, out of scope
+  the four-state `arbitrated` (`docs/archive/tri-state-pass-2.md`, out of scope
   there). `false` means "ask again on a later run", with no memory of how many
   runs have already asked — so a failure that is *deterministic for one model*
   and never returns a judged verdict is re-asked, and re-billed, once per

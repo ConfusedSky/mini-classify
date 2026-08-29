@@ -253,7 +253,7 @@ cold call never passes it; that check is what admits a file to posing.
 
 `arbiter_available` is the driver's `cfg.poser.can_arbitrate()`, and it is
 **keyword-only with no default** so every caller breaks loudly
-(docs/tri-state-pass-2.md, 2026-08-21) — the `Resolved.pose_changed`
+(docs/archive/tri-state-pass-2.md, 2026-08-21) — the `Resolved.pose_changed`
 precedent, since a default silently un-pins the W1 regression test. It is what
 makes a marked entry a miss only in a run that can actually escalate it:
 without it an arbiterless run (`--pose-vlm off`, a degraded `auto`, a tripped

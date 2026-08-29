@@ -2,7 +2,7 @@
 one MAX_TOKENS body and one safety block. Two paid calls (authorized
 2026-08-21).
 
-Pass 2's C2 split (docs/tri-state-pass-2.md) maps a 200 whose body *states*
+Pass 2's C2 split (docs/archive/tri-state-pass-2.md) maps a 200 whose body *states*
 a verdict — `pose.REJECTED_FINISH_REASONS` or a `promptFeedback.blockReason`
 — to `"rejected"`, and any other answerless 200 to transient. Until this
 ran, the enumeration matched the *documented* Gemini shapes, not a captured

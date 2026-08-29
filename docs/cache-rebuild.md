@@ -77,7 +77,7 @@ not.
   `arbitrated` states** (§8): the dropped entries take every `"rejected"`
   with them, and the whole gated population is re-billed at the arbiter on
   the next run. Price a v5 with §8's overnight figure in hand
-  (docs/tri-state-pass-2.md, 2026-08-21).
+  (docs/archive/tri-state-pass-2.md, 2026-08-21).
 
 **At a rebuild:** every entry is written fresh at the current version, so all
 four can go. `from_cache` becomes a plain constructor.
@@ -204,7 +204,7 @@ re-escalates exactly those entries with nothing deleted by hand (below).
 2026-08-19 a pose records `arbitrated` — the arbiter *ran and answered* —
 which is a different fact from `source == "vlm"`, the arbiter *moved the
 answer*. Since 2026-08-21 the flag is **four-state**
-(`docs/tri-state-pass-2.md`):
+(`docs/archive/tri-state-pass-2.md`):
 
 | `source` | `arbitrated` | meaning |
 |---|---|---|
@@ -246,7 +246,7 @@ time:
 * `arbiter_available` — a run with no arbiter (`--pose-vlm off`, a degraded
   `auto`, or the tripped `Poser` breaker) must not re-render a marked entry
   it cannot escalate. It would re-resolve the pose with no gate and erase the
-  marker, and **production runs `off`** (docs/tri-state-pass-2.md,
+  marker, and **production runs `off`** (docs/archive/tri-state-pass-2.md,
   2026-08-21).
 
 **So this section's debt is payable without a rebuild — by one run.** Absence
@@ -272,7 +272,7 @@ entry, so `front_view` is dropped: on the normal path `Done._score` recomputes
 and merges it back, and under `--skip-embed` nothing does. The backfill
 re-resolves the entire gated population, so `--skip-embed` would strip
 `front_view` — a published API field — from all ~1227 of them (accepted edge,
-docs/tri-state-pass-2.md, 2026-08-21).
+docs/archive/tri-state-pass-2.md, 2026-08-21).
 
 **The marked set is stable only to ~1e-2.** Filament's draw-history dependence
 (CLAUDE.md's hard constraint) moves an ensemble margin by that much between

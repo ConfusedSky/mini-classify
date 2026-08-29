@@ -294,7 +294,7 @@ def run(cfg: DriverConfig) -> None:
                                # short-circuits), passed because the parameter
                                # has no default — the breaker cannot flip a
                                # settled re-route into a re-render
-                               # (docs/tri-state-pass-2.md, 2026-08-21)
+                               # (docs/archive/tri-state-pass-2.md, 2026-08-21)
                                arbiter_available=cfg.poser.can_arbitrate()))
             case Redraw():
                 done.on(out.hit)             # the row (retires=False) ...

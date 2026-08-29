@@ -18,7 +18,7 @@ repaired, and nothing here is evidence about today's code. See `../README.md`.
 
 `2026-08-13.md` defines no IDs but is cited by section — §3.1 is the
 four-coexisting-renderers measurement behind the teardown constraint in
-CLAUDE.md. `2026-08-20-past-week.md` is a retrospective; `docs/tri-state-pass-2.md`
+CLAUDE.md. `2026-08-20-past-week.md` is a retrospective; `docs/archive/tri-state-pass-2.md`
 reads its "Not acted on" list.
 
 The live spec these reviews produced is `docs/actor-refactor/interfaces.md`,
