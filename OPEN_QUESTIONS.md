@@ -165,7 +165,7 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   or adopt `patch16-512`, which is invariant across 384–2048; the fixed size is
   much the cheaper of the two.
 - ~~**Rename `source: "heuristic"` to `"confirmed"`.**~~ Resolved 2026-08-14,
-  differently on both counts (`docs/reviews/archive/2026-08-14-data-structures.md`
+  differently on both counts (`docs/archive/reviews/2026-08-14-data-structures.md`
   §P2.3-A): the vocabulary is now `geometry`/`siglip` — one axis, *whose
   answer prevailed*, where "confirmed" mixes a state with two mechanisms and
   is actively false for a `--no-up-ensemble` run. And no pose-cache migration
@@ -396,7 +396,7 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   pass at 384 is ~27 minutes, which counts how many models change answer.
   ~~Note this decoupling is currently blocked anyway~~ — it is not: the
   one-renderer-per-process limit was refuted (four coexisted in one process;
-  the abort is teardown-only, `docs/reviews/archive/2026-08-13.md` §3.1), so the
+  the abort is teardown-only, `docs/archive/reviews/2026-08-13.md` §3.1), so the
   decoupling needs only a second renderer kept alive for the process lifetime.
 - **Which duplicate wins a tied query is now decided, but it was never
   chosen.** `rank`'s sort is stable as of `0f524e7`, so exact ties break by
@@ -626,7 +626,7 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   for speed (LEARNINGS says neither tower gains above a 384 source), tiles at
   ≥512 so the Gemini arbiter is not starved, and classification views at 2048
   for detail. ~~Any two of those need two live renderers, which aborts the
-  interpreter~~ — refuted by the review (`docs/reviews/archive/2026-08-13.md` §3.1:
+  interpreter~~ — refuted by the review (`docs/archive/reviews/2026-08-13.md` §3.1:
   four renderers coexisted; only teardown aborts), so decoupling needs only a
   second renderer kept alive for the process lifetime. `--render-size` is
   still one knob serving three consumers with different optima.

@@ -16,7 +16,7 @@
 
 **Tech Stack:** Python (`.venv`), Open3D offscreen rendering, SigLIP via transformers, requests (already installed via transformers), ollama HTTP API, `claude` CLI, pytest.
 
-**Spec:** `docs/superpowers/specs/2026-08-10-pose-pipeline-design.md`
+**Spec:** `docs/archive/superpowers/specs/2026-08-10-pose-pipeline-design.md`
 
 ## Global Constraints
 

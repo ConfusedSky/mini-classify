@@ -4,8 +4,8 @@ Two arcs from the actor-refactor design session that the 08-14 write-ups
 (ipc-transport, precision-and-compile) did not cover: the cache-key migration
 that shipped mid-review, and what fourteen adversarial review passes over two
 design notes taught about designing protocols on paper. The full finding
-trail is `docs/reviews/archive/2026-08-14-data-structures.md` (six passes) and
-`docs/reviews/archive/2026-08-14-interfaces.md` (eight).
+trail is `docs/archive/reviews/2026-08-14-data-structures.md` (six passes) and
+`docs/archive/reviews/2026-08-14-interfaces.md` (eight).
 
 ### The cache schema migration (shipped, both live caches)
 

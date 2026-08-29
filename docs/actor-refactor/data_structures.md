@@ -4,12 +4,12 @@ Design note, 2026-08-14. Companion to [actors_proposal.md](actors_proposal.md):
 that document argues for the boundaries and records what the spikes measured;
 this one fixes the shapes, and [interfaces.md](interfaces.md) fixes the
 calling conventions between the modules that hold them. Revised the same day against
-[docs/reviews/archive/2026-08-14-data-structures.md](../reviews/archive/2026-08-14-data-structures.md)
+[docs/archive/reviews/2026-08-14-data-structures.md](../archive/reviews/2026-08-14-data-structures.md)
 (findings D1–D15); the review's two gating questions are answered inline —
 **Q1: the Arbiter stays a `Future` the Poser holds; Q2: the render child saves
 renders itself.** Implementation-round findings (2026-08-17, e.g. the D11
 correction from `B-R1-4`) resolve through
-[docs/reviews/archive/2026-08-17-wave1-implementation.md](../reviews/archive/2026-08-17-wave1-implementation.md).
+[docs/archive/reviews/2026-08-17-wave1-implementation.md](../archive/reviews/2026-08-17-wave1-implementation.md).
 
 It describes the form the proposal's own postscript converged on — modules
 under `src/`, frozen per-edge message types, a **sequential driver**, and

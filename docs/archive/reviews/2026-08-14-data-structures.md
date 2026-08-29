@@ -413,7 +413,7 @@ column. Also affected:
 * `eval/siglip_up.py:142,148` — prints `cached['source'][:4]`; that column
   silently becomes `geom`.
 
-Historical specs under `docs/superpowers/` also quote the old value; leave
+Historical specs under `docs/archive/superpowers/` also quote the old value; leave
 them, they are records.
 
 ### R4. `Pose` frozen with a `dict` field — LOW
@@ -511,7 +511,7 @@ is seeded (`pose.py:54`) — and the file's identity is already in the key, so
 its up vector is *redundant* and elides to the legacy `--up-axis` string.
 SigLIP and VLM answers are not reproducible from the file, so they splice the
 vector in. The elision existed to keep a populated pre-pose-pipeline cache
-valid (`docs/superpowers/plans/2026-08-10-pose-pipeline.md:194`,
+valid (`docs/archive/superpowers/plans/2026-08-10-pose-pipeline.md:194`,
 `docs/learnings/2026-08-11-canonical-pose.md:15-16`).
 
 **Decision: drop the elision.** The token becomes the render identity for

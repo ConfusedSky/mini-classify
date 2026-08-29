@@ -6,7 +6,7 @@ N = 5; the bill's full magnitude (an overnight first arbiter-on run) is
 accepted; both Accepted edges stand as accepted.
 
 The second pass over the `arbitrated` retry contract. Designed against the
-findings in `docs/reviews/archive/2026-08-20-past-week.md` ("Not acted on"), one
+findings in `docs/archive/reviews/2026-08-20-past-week.md` ("Not acted on"), one
 opus design review, and three decisions made by Masa in session. This file
 is the implementation spec; the review record will carry the outcome.
 

@@ -91,7 +91,7 @@ def rig(size, views=1, elevations=(UP_TILE_ELEVATION,), collection_root=None,
 
     Calling this twice with the same config returns the same renderer; calling
     it with a different one builds a second, which is fine (four coexisting
-    renderers measured correct, docs/reviews/archive/2026-08-13.md §3.1). What is not
+    renderers measured correct, docs/archive/reviews/2026-08-13.md §3.1). What is not
     fine is destroying either, so nothing here ever does. The cache key is
     (size, views, elevations) only — a later call's `budget_bytes` or
     `collection_root` does not rebuild an existing renderer.
