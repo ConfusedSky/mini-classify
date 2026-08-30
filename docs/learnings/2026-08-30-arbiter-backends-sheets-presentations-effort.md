@@ -200,6 +200,15 @@ should be checked on a model whose genre is not the library's mode.
 - f3d cannot load four STLs across today's sets (`Psyflayer_Body`,
   `75_Benoit_BodyNoMask`, and the pilot's two DM Stash bodies) that Open3D
   reads fine — a reason on its own not to make f3d load-bearing.
-- gemini tokenises a contact sheet by tile count (1,168 for six tiles at
-  any size) and separate images per image; GLM tokenises by pixels
-  (589/2,092/6,836 for grid 256/512/1024). Cost tables must say which.
+- **Gemini 3.x bills every image at a fixed budget and downscales to it**
+  (Masa's hunch, measured on gemini-3.5-flash the same afternoon): a 96×64
+  image, our 768×512, 1536×1024 and 3072×2048 sheets all cost **1,080 image
+  tokens** — the `MEDIA_RESOLUTION_HIGH` default; `MEDIUM` is 532, `LOW` 260,
+  `ULTRA_HIGH` is rejected. gemini-2.5-flash still scales with size (258 →
+  1,806 → 3,354, capped). GLM bills by pixels (589/2,092/6,836 for grid
+  256/512/1024). Consequences: a contact sheet shares one budget across its
+  six (or sixteen) tiles, so the 512 and 1024 sheets arrive as the *same*
+  pixels and solo's 6,646 tokens are six times the effective resolution,
+  not a pricing quirk — which is why solo made gemini size-robust and why
+  1024 sheets could not help it. For Gemini, send separate images, not
+  composites, whenever the tiles matter.

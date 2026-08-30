@@ -58,8 +58,13 @@ Two gotchas from the runs:
   cause, but it was a confound; the 512 px run never used it.
 - **Image tokens differ 3× by model family**: the 3.x models billed ~1130
   prompt tokens for the 16-tile sheet, the 2.5 models ~3430 — identical at
-  384 (3072×768) and 512 (4096×1024), so the sheet is tokenised by tile count
-  and a higher-resolution sheet costs nothing extra. Thinking tokens
+  384 (3072×768) and 512 (4096×1024). Read at the time as "tokenised by
+  tile count"; the next day's measurement (LEARNINGS 2026-08-30) shows the
+  real rule: Gemini 3.x downscales *every* image to a fixed ~1,080-token
+  budget, so both sheets reached the model as the same pixels, with sixteen
+  tiles sharing one budget. The 1024 px f3d views of the next section were
+  four *separate* images — four budgets — which is a large part of why they
+  worked. Per-image budget, not just render resolution, is the lever. Thinking tokens
   (800–1600 per answer) dominate cost either way; the pro models spent 3× the
   time and 6–7× the money of the flashes and were not more accurate.
 
