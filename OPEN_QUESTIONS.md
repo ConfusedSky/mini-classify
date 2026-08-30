@@ -770,3 +770,21 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   sharpens specific failures but cannot substitute — it is chosen, not sampled,
   so it can only ever answer "which method survives this", never "how often".
   Everything else here is downstream of this.
+
+- **Six of the 49 up-axis label paths are stale (2026-08-30).** Loot's
+  Orconspiracy set was reorganised into `Enemies_Part1/2/4_V2`; `load_labels`
+  still returns the old `Enemies/...` paths, so `build_sheets` for a new sheet
+  size crashes on the first missing file. `eval/f3d_arbiter.resolve` finds
+  them again by filename under the set's folder — a workaround, not a fix.
+  The fix is either re-anchoring the six entries in `up_axis_labels.json` or
+  teaching `load_labels` to resolve by name; the pose cache keys for that set
+  are path-relative too, so a rescan re-renders them as new files either way.
+- **Arbiter backend, decided for now (2026-08-30):** primary stays
+  gemini-3.5-flash on production tiles, grid, 512 (43/44, +4 → 42/44,
+  ~$2.7/run). The measured fallback is GLM-5.3-Flash **low** effort, production
+  tiles, **solo** presentation, 512, pinned to DeepInfra with a hard per-call
+  deadline (+3 → 41/44, $0.06/run, 3 s median) — better than the gemma/ollama
+  fallback (+0/+1, evicts SigLIP) and no GPU. Not yet wired into
+  `src/pose.py`; LEARNINGS, "Arbiter backends, sheet sizes, presentations and
+  effort" has every number, including the ones that rule out GLM max, 1024
+  sheets, f3d tiles and gpt-5.6-luna.

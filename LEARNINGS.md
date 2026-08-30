@@ -187,6 +187,21 @@ notes at the bottom are amended in place. Open work is tracked separately in
   judge for GLM-5.3-Flash (kappa 0.80 with Gemini at 1/20th the cost;
   every arm still beats production, Spearman 0.71). `eval/renderer_pilot/`.
 
+- [Arbiter backends, sheet sizes, presentations and effort](docs/learnings/2026-08-30-arbiter-backends-sheets-presentations-effort.md)
+  — could GLM-5.3-Flash replace gemini-3.5-flash as the pose arbiter? On the
+  44 labels: gemini at 512 stays unbeaten (43/44, **+4 → 42/44**); GLM low
+  is +2 on the sheet and **+3 → 41/44 when shown six captioned images**
+  instead of one sheet, at $0.06/run and 3 s median against gemini's $2.7 —
+  the measured fallback. Ruled out with numbers: 1024 sheets (both models
+  lose), f3d tiles (every model loses 3–7), GLM `max` (loops without
+  terminus on flat slabs — 17k-token generations, 2/44 unanswered, tier
+  +0), gpt-5.6-luna (net −2, and 56/56 descriptions call the Osteotron a
+  dragonborn). Also: temperature 0 through OpenRouter is a distribution and
+  pinning the provider does not change it; auto-routed max-effort requests
+  hung for 46 min behind OpenRouter's keep-alive heartbeats, so the
+  harnesses now pin, cap wall-clock per call, and log provider per call; a
+  3-describer panel cannot rescue a model with a systematic prior.
+
 
 ## Evergreen notes
 
