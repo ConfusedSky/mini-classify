@@ -244,6 +244,22 @@ The judge itself read sensibly on a spot check — a cyclops rated 2 for
 for "knight in plate armor" — and the Osteotron was 0 for both queries it
 surfaced under, correctly.
 
+**The result survives a change of judge.** The same 388 pairs re-judged by
+GLM-5.3-Flash (OpenRouter, effort low, same views and prompt,
+`judge_glm.py`): exact agreement with Gemini 0.78, within one level 0.99,
+quadratic kappa 0.80, agreement on "clearly relevant" 0.92 — right in the
+band two human assessors land in. GLM is the slightly softer grader
+(marginals 144/162/82 vs Gemini's 169/128/91), which lifts every nDCG by
+~0.02 and drops every P@10 by ~0.03, uniformly. Under GLM the ordering
+keeps its shape — every alternative still beats the production renders
+(0.876 → 0.890–0.917), the three.js arms edge ahead of f3d, and Spearman
+between the judges' twelve arm×prompt means is 0.71. The five two-level
+disagreements are genuine judgment calls (is a hunched Dwarven "Mask"
+sculpt a troll; is a troll's fist a golem component). Cross-judging cost
+$0.18 (1.13 M tokens, 308 s, 0 errors) against the Gemini judge's ~$3.50 —
+the next pilot should judge with GLM and spot-check with Gemini, not the
+reverse.
+
 What this does **not** settle: the effect of a better renderer on the
 *coverage* of a query (recall past 20) and on `robust_z`'s weak-query
 verdict, neither of which a top-20 judgement pool can see; and whether the

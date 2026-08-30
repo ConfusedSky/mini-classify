@@ -183,7 +183,9 @@ notes at the bottom are amended in place. Open work is tracked separately in
   0.867–0.878), uniformly and insignificantly** — 6–9 of 12 queries better,
   2–4 worse, one or two rank swaps each; AO on/off, rim colour and
   render-describing prompt templates are all within 0.01. The renderer is
-  not where search quality is. `eval/renderer_pilot/`.
+  not where search quality is — and the verdict survives swapping the
+  judge for GLM-5.3-Flash (kappa 0.80 with Gemini at 1/20th the cost;
+  every arm still beats production, Spearman 0.71). `eval/renderer_pilot/`.
 
 
 ## Evergreen notes
