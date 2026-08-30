@@ -376,6 +376,12 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   columns is not worth doing at all. The harness for it mostly exists:
   `test_categories.py` already produces those ranked lists from cached
   embeddings.
+
+  Being measured (2026-08-29): a 301-model pilot scores 12 queries over six
+  render arms and two prompt arms with a VLM judge (P@10, nDCG@20) — the
+  precision@k variant, with gemini-3.6-flash on 1024 px views standing in
+  for the ~600 human judgements. LEARNINGS, "What a VLM sees in our renders,
+  and the renderer pilot".
 - **Category classification is render-size sensitive; pose is not.** First data
   on the asymmetry the entry above predicts. Same 8 models, cold, `--views 8
   --elevations 20,-20`, 2048px against 384px:

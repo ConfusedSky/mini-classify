@@ -167,6 +167,19 @@ notes at the bottom are amended in place. Open work is tracked separately in
   ±1; loading only the text tower saves nothing, because `from_pretrained`
   mmaps the checkpoint and the vision pages are never touched. embed-cache-test
   (2165 models), 7940HS, `eval/cpu_dtype.py`.
+- [What a VLM sees in our renders, and the renderer pilot](docs/learnings/2026-08-29-what-a-vlm-sees-and-the-renderer-pilot.md)
+  — asked five Gemini models what one STL is from the production 512 px
+  tiles (and the retired 384 px ones — same result): **0/5** got the concept (a crew member with an alien bursting from
+  the head); from four 1024 px f3d views, **4/5**, and a camera tool the
+  models could call added detail but not identity. GLM-5.3-Flash via
+  OpenRouter got it 6/6 across effort levels at a tenth of the price.
+  Resolution cannot help SigLIP (512 in, 512 rendered), so a pilot for
+  *search* quality was built instead: six render arms (production, tight
+  framing, f3d AO, model-browser's three.js chain with AO on/off and white
+  rims), two prompt arms, 301 models, a VLM judge. Gotchas: f3d's system
+  config forces `up: +Z` for `*.stl` over the command line; model-browser's
+  spindle axis is the STL up rotated by `rotateX(−π/2)`. Results pending.
+
 
 ## Evergreen notes
 
