@@ -28,6 +28,13 @@ Two things that cost an afternoon, both now in the scripts: f3d must run with
 every STL; model-browser's spindle axis is the STL up vector under
 `rotateX(-π/2)` — `(x, y, z) → (x, z, -y)` — so pose up `(0,-1,0)` is `'z'`.
 
+Try your own queries against all arms side by side (needs the `arm_*.npy`
+files beside the scripts — kept locally, gitignored — and the 4060 for the
+text tower):
+
+    .venv/bin/python eval/renderer_pilot/query_arms.py            # REPL
+    .venv/bin/python eval/renderer_pilot/query_arms.py "wizard with a staff"
+
 `out/` holds this run's sample, rankings, candidate pool, judgments, and the
 Osteotron across the five rendered arms. The renders and `.npy` files are not
 kept (≈25k PNGs); the scripts regenerate them in ~30 minutes.
