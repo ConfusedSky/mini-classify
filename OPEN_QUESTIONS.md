@@ -377,11 +377,15 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   `test_categories.py` already produces those ranked lists from cached
   embeddings.
 
-  Being measured (2026-08-29): a 301-model pilot scores 12 queries over six
-  render arms and two prompt arms with a VLM judge (P@10, nDCG@20) — the
-  precision@k variant, with gemini-3.6-flash on 1024 px views standing in
-  for the ~600 human judgements. LEARNINGS, "What a VLM sees in our renders,
-  and the renderer pilot".
+  Measured (2026-08-29), the precision@k variant with gemini-3.6-flash on
+  1024 px views standing in for ~400 human judgements: production ranking
+  scores **nDCG@20 0.852 / P@10 0.525** over 12 queries on a 301-model
+  sample, and no renderer, framing, AO, rim-colour or prompt-template change
+  moves it by more than +0.026 — so the ranking is decent and the pixels are
+  not its ceiling. The harness is `eval/renderer_pilot/`, reusable for any
+  other change to the embedding side; the recall/coverage half and a larger
+  sample remain open. LEARNINGS, "What a VLM sees in our renders, and the
+  renderer pilot".
 - **Category classification is render-size sensitive; pose is not.** First data
   on the asymmetry the entry above predicts. Same 8 models, cold, `--views 8
   --elevations 20,-20`, 2048px against 384px:

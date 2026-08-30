@@ -1,0 +1,1942 @@
+{
+"dragon|56": {
+"relevance": 1,
+"reason": "The model features a dragon tail wrapped around carved stones, representing a component or base accessory related to a dragon rather than a full dragon miniature.",
+"tok": 2535
+},
+"dragon|22": {
+"relevance": 1,
+"reason": "The model depicts a saddled reptilian creature or drake perched on a branch, which is closely related to fantasy dragons/drakes, though it lacks wings.",
+"tok": 2618
+},
+"dragon|12": {
+"relevance": 0,
+"reason": "The model depicts a monstrous quadrupedal beast with horns and fur/spikes (resembling a demon hound or behemoth), not a dragon.",
+"tok": 2694
+},
+"dragon|14": {
+"relevance": 0,
+"reason": "The model represents a horned monstrous beast or dire wolf creature, not a dragon.",
+"tok": 2699
+},
+"dragon|8": {
+"relevance": 1,
+"reason": "The model is a spiky, horned fantasy beast/drake, which shares reptilian and monstrous features with dragons, but lacks iconic elements like wings or a traditional dragon silhouette.",
+"tok": 2670
+},
+"dragon|13": {
+"relevance": 1,
+"reason": "The model depicts a monstrous, horned quadrupedal beast with some dragon-like facial features and horns, but it lacks wings and resembles a beast/mount or dragon-hound rather than a traditional dragon",
+"tok": 2676
+},
+"dragon|101": {
+"relevance": 2,
+"reason": "The 3D model depicts a winged reptilian creature, clearly fitting the description of a dragon.",
+"tok": 2462
+},
+"dragon|105": {
+"relevance": 0,
+"reason": "The model is a mutated tentacle or clawed arm bit for a miniature, not a dragon or recognizable dragon part.",
+"tok": 2597
+},
+"dragon|90": {
+"relevance": 0,
+"reason": "The model represents a stylized flame orb or spell effect, not a dragon.",
+"tok": 2777
+},
+"dragon|115": {
+"relevance": 0,
+"reason": "The model is a fantasy sword miniature bit featuring a small bat or gargoyle-like creature, not a dragon.",
+"tok": 2785
+},
+"dragon|59": {
+"relevance": 1,
+"reason": "The model depicts an armored, wingless reptilian beast or drake mount, which is related to dragons but lacks traditional dragon features such as wings and prominent horns.",
+"tok": 2746
+},
+"dragon|118": {
+"relevance": 1,
+"reason": "The model appears to be a head component or bit for a monstrous dragon or demon-like creature, making it a partial match/component.",
+"tok": 2841
+},
+"dragon|142": {
+"relevance": 0,
+"reason": "The model appears to be an abstract or organic miniature part/cloak with assembly sockets, showing no dragon features such as reptilian scales, wings, or a dragon head.",
+"tok": 2532
+},
+"dragon|163": {
+"relevance": 1,
+"reason": "The model is a bust of a horned monster or demon that shares reptilian and dragon-like features, making it partially relevant to a search for dragons.",
+"tok": 2762
+},
+"dragon|171": {
+"relevance": 0,
+"reason": "The model represents a gnoll/hyena-like beastman warrior miniature, not a dragon.",
+"tok": 2472
+},
+"dragon|156": {
+"relevance": 1,
+"reason": "The model is a fantasy sword or weapon (possibly dragon-scaled/themed), which is an accessory/weapon rather than a dragon itself.",
+"tok": 2729
+},
+"dragon|182": {
+"relevance": 0,
+"reason": "The model is a piece of tabletop terrain depicting a broken tree stump with thick roots, not a dragon.",
+"tok": 2485
+},
+"dragon|166": {
+"relevance": 0,
+"reason": "The model appears to be a scenic base or ship piece with stylized waves/flames, not a dragon or dragon-like creature.",
+"tok": 2785
+},
+"dragon|183": {
+"relevance": 0,
+"reason": "The model represents a bat or giant bat creature, which is distinct from a dragon.",
+"tok": 2530
+},
+"dragon|151": {
+"relevance": 0,
+"reason": "The model appears to be a generic fire, smoke, or magical spell effect component for a miniature, rather than a dragon or a specifically recognizable dragon accessory.",
+"tok": 3053
+},
+"dragon|205": {
+"relevance": 0,
+"reason": "The model depicts an aquatic, tentacled aberration monster (resembling an Aboleth or Lovecraftian sea creature) with multiple eyes, not a dragon.",
+"tok": 2545
+},
+"dragon|242": {
+"relevance": 2,
+"reason": "The model depicts a detailed winged dragon miniature, perfectly matching the search query 'dragon'.",
+"tok": 2439
+},
+"dragon|209": {
+"relevance": 1,
+"reason": "This model represents a single feathered wing component for a miniature figure, which could be part of a fantasy creature, griffin, or feathered dragon.",
+"tok": 2757
+},
+"dragon|223": {
+"relevance": 0,
+"reason": "The model depicts a winged demon or fiend rising from smoke, with a humanoid torso, horns, and arms, rather than a dragon.",
+"tok": 2697
+},
+"dragon|234": {
+"relevance": 1,
+"reason": "The model represents a component/part of a 3D-printable dragon miniature, featuring reptilian legs, claws, and scale details with a socket joint for assembly.",
+"tok": 2704
+},
+"dragon|207": {
+"relevance": 1,
+"reason": "The model is a modular head and neck component for a dragon miniature, featuring a mounting peg at the base.",
+"tok": 2979
+},
+"dragon|250": {
+"relevance": 0,
+"reason": "The model represents an aquatic/triton humanoid pirate figure with fins and a finned tail, not a dragon.",
+"tok": 2759
+},
+"dragon|291": {
+"relevance": 0,
+"reason": "The model depicts an alien, insectoid creature with exposed brain structures (resembling a Tyranid unit from Warhammer 40k), not a dragon.",
+"tok": 2493
+},
+"dragon|290": {
+"relevance": 0,
+"reason": "The model represents an isolated sci-fi alien or Tyranid-style limb bit, not a dragon or dragon component.",
+"tok": 2699
+},
+"dragon|295": {
+"relevance": 1,
+"reason": "The model appears to be a component/part (a spiked tail or horn) for a dragon miniature rather than a complete dragon.",
+"tok": 2607
+},
+"wizard casting a spell|1": {
+"relevance": 1,
+"reason": "The model depicts a wizard's staff held in a hand, which is an accessory/component related to a wizard rather than a full miniature of a wizard casting a spell.",
+"tok": 2528
+},
+"wizard casting a spell|0": {
+"relevance": 1,
+"reason": "The model depicts a magic spell effect or swirling energy rather than a wizard figure itself, making it a related accessory/component rather than a direct match.",
+"tok": 2646
+},
+"wizard casting a spell|16": {
+"relevance": 0,
+"reason": "The model is a miniature accessory consisting of a hand holding a lute or mandolin, which is not a wizard casting a spell.",
+"tok": 2606
+},
+"wizard casting a spell|62": {
+"relevance": 1,
+"reason": "The model is a miniature component (a magic staff emitting a spell effect held in a hand) rather than a complete figure of a wizard casting a spell.",
+"tok": 2600
+},
+"wizard casting a spell|60": {
+"relevance": 2,
+"reason": "The model is a dwarf wizard wearing robes, a tall pointed wizard hat, and holding a spellbook, posing with a raised arm suitable for casting a spell.",
+"tok": 2633
+},
+"wizard casting a spell|57": {
+"relevance": 1,
+"reason": "The model shows a dwarf fantasy character torso with a monocle and braided beard, suitable for a tabletop RPG miniature, but it lacks hands or spell effects to clearly indicate a wizard casting a spel",
+"tok": 2775
+},
+"wizard casting a spell|68": {
+"relevance": 2,
+"reason": "The model depicts a fantasy gnome or dwarf spellcaster wearing a pointed hat and robes in a dynamic spell-casting pose, which matches the user's search for 'wizard casting a spell'.",
+"tok": 2498
+},
+"wizard casting a spell|64": {
+"relevance": 1,
+"reason": "The model appears to be a gnome or dwarf spellcaster/artificer wearing a pointy hat, but it lacks hands (it is a modular miniature) and does not display any visible spell-casting pose or magic effects",
+"tok": 2757
+},
+"wizard casting a spell|66": {
+"relevance": 1,
+"reason": "The model depicts a gnome or dwarf spellcaster/wizard with a pointed hat in a spellcasting pose, but it is a modular component missing its hands/weapons.",
+"tok": 2783
+},
+"wizard casting a spell|72": {
+"relevance": 1,
+"reason": "The model is a female fantasy mage/wizard wearing a pointed hat and robes in a dynamic pose. However, it is a modular miniature base with missing hand attachments, so no spell effect or hands are curr",
+"tok": 2917
+},
+"wizard casting a spell|83": {
+"relevance": 2,
+"reason": "The model shows a female fantasy wizard/spellcaster figure in a coat with spellcasting pouches and a dynamic casting pose.",
+"tok": 2738
+},
+"wizard casting a spell|86": {
+"relevance": 0,
+"reason": "The model represents a pirate or artificer/alchemist character with a tricorn hat and arm-mounted canisters/cannons, not a wizard casting a spell.",
+"tok": 2843
+},
+"wizard casting a spell|82": {
+"relevance": 2,
+"reason": "The model depicts a fantasy character in a long coat with potion vials on his chest, extending his hand forward in a spellcasting pose, fitting the description of a wizard or alchemist casting a spell",
+"tok": 2760
+},
+"wizard casting a spell|88": {
+"relevance": 1,
+"reason": "The model depicts an Illithid/Mind Flayer-style creature in robes with floating runic scrolls in a dynamic spellcasting pose, serving as an alien/monstrous wizard or spellcaster.",
+"tok": 3019
+},
+"wizard casting a spell|81": {
+"relevance": 1,
+"reason": "The model depicts a fantasy character in a wide-brimmed hat and long coat (resembling a witch hunter or alchemist/mage), which could fit a wizard, but it lacks clear spellcasting poses, a staff, or ma",
+"tok": 2866
+},
+"wizard casting a spell|105": {
+"relevance": 1,
+"reason": "The model appears to be a component or accessory part representing a hand casting a magical spell or energy trail, which is a key element/accessory for a wizard casting a spell miniature.",
+"tok": 2640
+},
+"wizard casting a spell|112": {
+"relevance": 0,
+"reason": "The miniature depicts a vampiric warrior or gunslinger in bat-winged armor with pistols/wrist weapons, which does not match a wizard casting a spell.",
+"tok": 2547
+},
+"wizard casting a spell|110": {
+"relevance": 0,
+"reason": "The model depicts a demon hunter or martial rogue/vampire hunter in heavy spiked armor with a gauntlet weapon, not a wizard casting a spell.",
+"tok": 2917
+},
+"wizard casting a spell|139": {
+"relevance": 0,
+"reason": "The model features a skeleton ribcage buried in rocks on a miniature base, which does not depict a wizard casting a spell.",
+"tok": 2474
+},
+"wizard casting a spell|114": {
+"relevance": 0,
+"reason": "The model depicts an armored vampire warrior or dark elf knight in a combat pose, rather than a wizard casting a spell.",
+"tok": 2706
+},
+"wizard casting a spell|113": {
+"relevance": 1,
+"reason": "The model depicts a fantasy character (possibly a dark elf or vampire sorceress/warrior) in a dynamic, aggressive pose with flowing cape and flame-like hair. While it could represent a sorceress or sp",
+"tok": 2881
+},
+"wizard casting a spell|116": {
+"relevance": 1,
+"reason": "The miniature depicts an elf figure (possibly a sorcerer, battle mage, or warlock) in a spellcasting pose with arms outstretched, though it is heavily armored and features modular hand sockets.",
+"tok": 2841
+},
+"wizard casting a spell|156": {
+"relevance": 0,
+"reason": "The model is a fantasy sword or blade weapon, not a wizard casting a spell.",
+"tok": 2484
+},
+"wizard casting a spell|142": {
+"relevance": 1,
+"reason": "The model is an incomplete 3D miniature component (a torso/body with flowing robes and assembly keys), which could be part of a wizard or spellcaster miniature, but is only a partial piece rather than",
+"tok": 2725
+},
+"wizard casting a spell|150": {
+"relevance": 1,
+"reason": "The model features a character in a jester/fool costume in an outstretched hand casting pose, which could represent a jester wizard or magic-using bard, making it partially relevant to a search for a ",
+"tok": 2712
+},
+"wizard casting a spell|170": {
+"relevance": 2,
+"reason": "The model represents a hooded wizard in robes holding a magic staff and gesturing with his left hand as if casting a spell.",
+"tok": 2488
+},
+"wizard casting a spell|154": {
+"relevance": 1,
+"reason": "The model depicts a nature-themed spellcaster or druid extending her hand in a spellcasting pose, which matches the theme of casting a spell although she has a more druidic/forest style than a traditi",
+"tok": 2711
+},
+"wizard casting a spell|223": {
+"relevance": 0,
+"reason": "The model represents a winged demon or fiend rising from smoke, not a wizard casting a spell.",
+"tok": 2535
+},
+"wizard casting a spell|198": {
+"relevance": 0,
+"reason": "The model is a terrain piece representing a wooden torch/beacon on a base of rocks, not a wizard or character casting a spell.",
+"tok": 2475
+},
+"wizard casting a spell|166": {
+"relevance": 0,
+"reason": "The model appears to be a base or scenic component depicting waves, flames, or a ship fragment, but does not feature a wizard character.",
+"tok": 2915
+},
+"wizard casting a spell|224": {
+"relevance": 0,
+"reason": "The model depicts a witch hunter or rogue character dual-wielding hand-crossbows, not a wizard casting a spell.",
+"tok": 2555
+},
+"wizard casting a spell|247": {
+"relevance": 2,
+"reason": "The model depicts a fantasy wizard or mage character extending his hand in a spellcasting gesture.",
+"tok": 2496
+},
+"wizard casting a spell|185": {
+"relevance": 1,
+"reason": "The model features a fantasy creature holding a spear with one hand outstretched in a spellcasting gesture, but it represents a tribal shaman or warrior rather than a traditional wizard.",
+"tok": 2829
+},
+"wizard casting a spell|249": {
+"relevance": 0,
+"reason": "The model depicts a pirate captain with a parrot on his shoulder, wearing a tricorn hat and holding a small artifact, rather than a wizard casting wizard.",
+"tok": 2588
+},
+"barbarian warrior with a sword|9": {
+"relevance": 0,
+"reason": "The model represents a hooded tiefling rogue or assassin figure, missing its hands/weapons, and does not match the appearance of a barbarian warrior with a sword.",
+"tok": 2613
+},
+"barbarian warrior with a sword|21": {
+"relevance": 1,
+"reason": "The model is a fantasy sword, which is an accessory/component associated with a barbarian warrior, but it does not include the warrior figure itself.",
+"tok": 2593
+},
+"wizard casting a spell|300": {
+"relevance": 0,
+"reason": "The model represents a sci-fi alien or mutated creature in tactical gear, not a wizard casting a spell.",
+"tok": 2690
+},
+"barbarian warrior with a sword|19": {
+"relevance": 0,
+"reason": "The model is an undead/skeletal warrior figure that is missing its hands/weapons entirely and does not include a sword or resemble a typical barbarian.",
+"tok": 2654
+},
+"barbarian warrior with a sword|23": {
+"relevance": 1,
+"reason": "The model is an accessory/weapon bit (a miniature sword held in a hand) for a miniature figure, rather than a full barbarian warrior.",
+"tok": 2493
+},
+"barbarian warrior with a sword|18": {
+"relevance": 0,
+"reason": "The model depicts a skeletal/undead warrior figure that is missing its hands and does not have a sword.",
+"tok": 2688
+},
+"barbarian warrior with a sword|24": {
+"relevance": 1,
+"reason": "The model is a sword accessory held by a hand intended for a miniature figure, which is a component/accessory of a warrior rather than the full barbarian warrior figure itself.",
+"tok": 2592
+},
+"barbarian warrior with a sword|25": {
+"relevance": 1,
+"reason": "The model represents a sword being held by a hand, which is a weapon accessory/component rather than a full barbarian warrior figure.",
+"tok": 2550
+},
+"barbarian warrior with a sword|27": {
+"relevance": 1,
+"reason": "The model is an individual miniature accessory (a sword being held by a hand), which is a component of a warrior or barbarian figure rather than the full character requested.",
+"tok": 2589
+},
+"barbarian warrior with a sword|29": {
+"relevance": 1,
+"reason": "The model represents a component/accessory (a hand holding a sword for a miniature) rather than a complete barbarian warrior figure.",
+"tok": 2565
+},
+"barbarian warrior with a sword|26": {
+"relevance": 1,
+"reason": "The model depicts a muscular barbarian warrior wearing a horned helmet and fur trim, but he is unarmed and does not feature a sword.",
+"tok": 2782
+},
+"barbarian warrior with a sword|30": {
+"relevance": 1,
+"reason": "The model depicts a horned barbarian warrior, matching the character class, but it does not appear to be holding or wearing a sword.",
+"tok": 2646
+},
+"barbarian warrior with a sword|28": {
+"relevance": 1,
+"reason": "The model is a barbarian warrior in a striking pose, but it is shown without the sword (the hands feature empty sockets for modular weapon assembly).",
+"tok": 2793
+},
+"barbarian warrior with a sword|36": {
+"relevance": 1,
+"reason": "The model depicts a horned barbarian warrior figure, but it is missing hands and does not currently have a sword attached.",
+"tok": 2570
+},
+"barbarian warrior with a sword|31": {
+"relevance": 1,
+"reason": "The model is a component (a hand holding a sword) intended for building or customizing a miniature warrior, making it an accessory rather than a complete barbarian warrior model.",
+"tok": 2576
+},
+"barbarian warrior with a sword|34": {
+"relevance": 1,
+"reason": "The model depicts a barbarian warrior, but it is shown without hands/weapons attached (wrist sockets are empty), so it does not explicitly feature a sword.",
+"tok": 2668
+},
+"barbarian warrior with a sword|38": {
+"relevance": 1,
+"reason": "The model clearly depicts a barbarian warrior in armor and horned helmet, but it does not feature or hold a sword.",
+"tok": 2592
+},
+"barbarian warrior with a sword|43": {
+"relevance": 1,
+"reason": "The model is a stylized sword, which is an accessory/weapon component of a barbarian warrior rather than the complete warrior figure requested.",
+"tok": 2560
+},
+"barbarian warrior with a sword|109": {
+"relevance": 1,
+"reason": "The model depicts only a sword held by a hand (a miniature weapon conversion bit/accessory), rather than a full barbarian warrior figure.",
+"tok": 2507
+},
+"barbarian warrior with a sword|103": {
+"relevance": 0,
+"reason": "The model depicts a spiked fantasy character (resembling a dark elf or chaos warrior) without a sword, which does not match the request for a barbarian warrior holding a sword.",
+"tok": 2778
+},
+"barbarian warrior with a sword|149": {
+"relevance": 1,
+"reason": "The model depicts a monstrous fantasy figure (resembling an ogre or beastman butcher) holding a large blade weapon, which loosely fits the fantasy warrior theme, but it is specifically a butcher carry",
+"tok": 2738
+},
+"barbarian warrior with a sword|155": {
+"relevance": 1,
+"reason": "The model depicts a heavily armored fantasy warrior with horns (resembling a Chaos knight/dark warrior), but it does not clearly show a sword or a traditional barbarian aesthetic.",
+"tok": 2827
+},
+"barbarian warrior with a sword|161": {
+"relevance": 1,
+"reason": "The model depicts a barbarian or gladiator-style warrior, but he is armed with flails (spiked balls on chains) rather than a sword.",
+"tok": 2638
+},
+"barbarian warrior with a sword|171": {
+"relevance": 1,
+"reason": "The model depicts a barbarian warrior, but it is armed with a skull mace/club rather than a sword.",
+"tok": 2606
+},
+"barbarian warrior with a sword|187": {
+"relevance": 1,
+"reason": "The model depicts a goblin warrior holding a sword, featuring a rugged/barbarian aesthetic with a tattered cloak and primitive gear, but it is specifically a goblin rather than a classic human barbari",
+"tok": 2667
+},
+"barbarian warrior with a sword|230": {
+"relevance": 1,
+"reason": "The model is an accessory/component (a sword held by a armored/spiked hand) for a miniature, rather than a full barbarian warrior figure.",
+"tok": 2629
+},
+"barbarian warrior with a sword|222": {
+"relevance": 2,
+"reason": "The model features a fantasy warrior wearing a horned helmet, fur trim, and heavy armor while wielding a large sword, which fits the description of a fantasy barbarian warrior.",
+"tok": 2686
+},
+"barbarian warrior with a sword|252": {
+"relevance": 2,
+"reason": "The model is a skeletal barbarian warrior equipped with a horned helmet, fur cape, and holding a large sword.",
+"tok": 2751
+},
+"barbarian warrior with a sword|281": {
+"relevance": 0,
+"reason": "The model depicts a futuristic/cyberpunk character wearing high-tech clothing and holding a helmet, not a fantasy barbarian warrior, despite having a sword.",
+"tok": 2724
+},
+"troll|14": {
+"relevance": 0,
+"reason": "The model represents a quadrupedal horned beast or monster, whereas a troll is typically a bipedal humanoid creature.",
+"tok": 3007
+},
+"troll|2": {
+"relevance": 1,
+"reason": "The model depicts a stone golem or earth elemental construct with carved runes, but its rocky humanoid appearance could arguably serve as a stone troll or rock troll in tabletop gaming.",
+"tok": 2699
+},
+"troll|49": {
+"relevance": 0,
+"reason": "The model depicts a fantasy dwarf miniature (featuring a dwarf helmet with knotwork, braided beard, skull belt, and curl-toed boots), not a troll.",
+"tok": 2926
+},
+"troll|57": {
+"relevance": 0,
+"reason": "The model represents a dwarf miniature with a braided beard, monocle, and dwarf-style armor, not a troll.",
+"tok": 2515
+},
+"troll|63": {
+"relevance": 2,
+"reason": "The model features a fantasy troll character designed in a classic tabletop miniature style, complete with distinctive pointed ears, braided hair, and muscular build.",
+"tok": 2628
+},
+"troll|51": {
+"relevance": 2,
+"reason": "The model depicts a stylized fantasy/Norse troll miniature featuring a large nose, prominent teeth, turned-up boots, and muscular build.",
+"tok": 2874
+},
+"troll|66": {
+"relevance": 0,
+"reason": "The model depicts a short fantasy gnome or dwarf figure with a braided beard and pointed hat, not a troll.",
+"tok": 2667
+},
+"troll|65": {
+"relevance": 0,
+"reason": "The model depicts a fantasy dwarf or gnome artificer with a long braided beard and monocle, not a troll.",
+"tok": 2617
+},
+"troll|52": {
+"relevance": 0,
+"reason": "The model depicts a dwarf or gnome fantasy miniature with arm cannons and ornate armor, not a troll.",
+"tok": 2835
+},
+"troll|92": {
+"relevance": 2,
+"reason": "The model depicts a large, muscular fantasy troll figure with tusks and wild hair, clearly matching the search query.",
+"tok": 2529
+},
+"troll|98": {
+"relevance": 2,
+"reason": "The model clearly depicts a fantasy troll miniature, complete with iconic troll traits such as prominent tusks, long ears/nose, braided hair, hunched posture, and tribal attire.",
+"tok": 2580
+},
+"troll|124": {
+"relevance": 2,
+"reason": "The model depicts a classic fantasy creature with prominent troll-like features, including a large nose, long tusks, long hair, a hunched posture, carrying a wooden shield and a large battleaxe.",
+"tok": 2571
+},
+"troll|138": {
+"relevance": 2,
+"reason": "The model depicts a large, monstrous, hunched fantasy creature with tusks, spikes, and trophies on its back, which clearly represents a troll miniature.",
+"tok": 2549
+},
+"troll|123": {
+"relevance": 2,
+"reason": "The image shows a 3D model of a fantasy troll body, making it a clear match for the search term 'troll'.",
+"tok": 2598
+},
+"troll|122": {
+"relevance": 2,
+"reason": "The model depicts a muscular, clawed fantasy troll playing an electric guitar, making it a clear match for the search term 'troll'.",
+"tok": 2623
+},
+"troll|149": {
+"relevance": 2,
+"reason": "The model depicts a large fantasy monstrous figure (such as a troll or ogre butcher) carrying a carcass over its shoulder and holding a large cleaver, which matches the requested 'troll' fantasy minia",
+"tok": 2747
+},
+"troll|157": {
+"relevance": 0,
+"reason": "The model depicts an extremely muscular warrior or berserker character with a mohawk flexing, rather than a troll.",
+"tok": 2998
+},
+"troll|178": {
+"relevance": 2,
+"reason": "The model depicts a classic fantasy troll miniature, perfectly matching the search query.",
+"tok": 2458
+},
+"troll|171": {
+"relevance": 0,
+"reason": "The model depicts a gnoll or hyena-like beastman warrior, which is a distinctly different creature from a troll.",
+"tok": 2788
+},
+"troll|190": {
+"relevance": 2,
+"reason": "The model depicts a monstrous, deformed fantasy creature with warts, pointed ears, and a loincloth, which directly fits the concept of a fantasy troll or cave troll.",
+"tok": 2616
+},
+"troll|186": {
+"relevance": 1,
+"reason": "The model depicts a goblin or small fantasy creature riding in a cart, which is a related fantasy miniature concept, though not specifically a troll.",
+"tok": 2910
+},
+"troll|187": {
+"relevance": 0,
+"reason": "The model depicts a goblin warrior with a sword and shield rather than a troll, which is a distinctly different fantasy monster type.",
+"tok": 2811
+},
+"troll|191": {
+"relevance": 0,
+"reason": "The model depicts a bat-like creature or gargoyle with large wings and pointed ears, which does not match a troll.",
+"tok": 2580
+},
+"bust of a character|15": {
+"relevance": 0,
+"reason": "The model is a miniature hand holding a hooked dagger weapon accessory, not a bust of a character.",
+"tok": 2443
+},
+"bust of a character|24": {
+"relevance": 0,
+"reason": "The model is a sword weapon component held by a hand, not a bust of a character.",
+"tok": 2449
+},
+"troll|228": {
+"relevance": 2,
+"reason": "The model depicts a large sci-fi/post-apocalyptic brute monster with a smaller rider on its shoulders, which strongly matches the troll/ogre archetype commonly used in miniature tabletop games.",
+"tok": 2905
+},
+"bust of a character|58": {
+"relevance": 0,
+"reason": "The model is an accessory piece consisting of a backpack with equipment, not a bust of a character.",
+"tok": 2476
+},
+"bust of a character|60": {
+"relevance": 0,
+"reason": "The model shows a full-body miniature of a dwarf character, not a bust (which would only include the head, shoulders, and chest).",
+"tok": 2546
+},
+"troll|268": {
+"relevance": 2,
+"reason": "The 3D model depicts a large, monstrous fantasy brute with horns, tusks, chains, and crude netting, perfectly matching a classic fantasy troll miniature.",
+"tok": 2671
+},
+"bust of a character|61": {
+"relevance": 0,
+"reason": "The model is a mechanical or armored gauntlet/hand accessory, not a bust of a character.",
+"tok": 2552
+},
+"bust of a character|82": {
+"relevance": 0,
+"reason": "The model is a full-body miniature figure rather than a bust sculpture of a character.",
+"tok": 2481
+},
+"bust of a character|83": {
+"relevance": 0,
+"reason": "The model is a full-body miniature figurine, whereas the user explicitly searched for a bust (head and upper chest sculpture).",
+"tok": 2474
+},
+"bust of a character|75": {
+"relevance": 0,
+"reason": "The model is a stylized mechanical gauntlet or hand piece, not a bust of a character.",
+"tok": 2719
+},
+"bust of a character|63": {
+"relevance": 0,
+"reason": "The model is a full-body character miniature (including the torso, waist, and legs), rather than a bust which depicts only the head, neck, and upper chest.",
+"tok": 2802
+},
+"bust of a character|73": {
+"relevance": 1,
+"reason": "The model features a carved stone dwarven head/face with a braided beard and runes, designed as scatter terrain or a fallen statue head rather than a traditional upright character bust.",
+"tok": 2809
+},
+"bust of a character|90": {
+"relevance": 0,
+"reason": "The model is a stylized flame or magical orb effect piece, not a bust of a character.",
+"tok": 2471
+},
+"bust of a character|86": {
+"relevance": 0,
+"reason": "The user searched for a 'bust' (a sculpture of the head and upper torso), but this model is a full-body 3D miniature.",
+"tok": 2677
+},
+"bust of a character|118": {
+"relevance": 1,
+"reason": "The model represents a detailed monster/character head component or helmet rather than a complete bust with a torso or display base, making it a partial match.",
+"tok": 2652
+},
+"bust of a character|129": {
+"relevance": 0,
+"reason": "The model is a piece of terrain or debris/wall fragment and does not represent a bust of a character.",
+"tok": 2445
+},
+"bust of a character|125": {
+"relevance": 0,
+"reason": "The model is a miniature accessory showing a hand holding a lantern, not a bust depicting the head and shoulders of a character.",
+"tok": 2530
+},
+"bust of a character|139": {
+"relevance": 0,
+"reason": "The model shows a skeletal ribcage/torso buried in rocky terrain on a base, not a character bust (head and shoulders sculpt).",
+"tok": 2616
+},
+"bust of a character|130": {
+"relevance": 0,
+"reason": "The model consists of abstract stylized terrain/foliage or miniature parts with 3D print supports, not a bust of a character.",
+"tok": 2509
+},
+"bust of a character|141": {
+"relevance": 0,
+"reason": "The model is a individual miniature part/bit (a waist/belt armor piece with accessories) intended for assembly, not a full character bust.",
+"tok": 2567
+},
+"bust of a character|143": {
+"relevance": 0,
+"reason": "The model is a small component or armor piece with a mounting peg, not a bust of a character.",
+"tok": 2513
+},
+"bust of a character|146": {
+"relevance": 2,
+"reason": "The model is a 3D bust of a character wearing a plague doctor mask, hat, and carrying a raven on his shoulder.",
+"tok": 2479
+},
+"bust of a character|142": {
+"relevance": 1,
+"reason": "The model appears to be a draped torso/cape component for a multi-part character miniature rather than a complete, standalone bust.",
+"tok": 2792
+},
+"bust of a character|163": {
+"relevance": 2,
+"reason": "The model is a 3D bust sculpture of a horned monster/demon character, which directly matches the request for a bust of a character.",
+"tok": 2463
+},
+"bust of a character|147": {
+"relevance": 2,
+"reason": "The 3D model depicts a character bust mounted on a decorative pedestal, directly matching the search for 'bust of a character'.",
+"tok": 2496
+},
+"bust of a character|176": {
+"relevance": 0,
+"reason": "The user searched for a bust of a character, but the model is a full-body miniature figure.",
+"tok": 2571
+},
+"bust of a character|166": {
+"relevance": 0,
+"reason": "The model shows a ship's bow crashing through waves or a scenic base element, not a bust of a character.",
+"tok": 2471
+},
+"bust of a character|175": {
+"relevance": 0,
+"reason": "The model is an eldritch-style throne or seat accessory designed for a miniature figure, not a bust of a character.",
+"tok": 2547
+},
+"bust of a character|207": {
+"relevance": 1,
+"reason": "The model is a dragon head and neck component meant to be assembled onto a larger body (evidenced by the connection peg at the base), making it a component of a character rather than a standalone disp",
+"tok": 2906
+},
+"bust of a character|221": {
+"relevance": 1,
+"reason": "The model is a full-body character miniature rather than a bust (head/chest sculpture), but it features the same character theme.",
+"tok": 2694
+},
+"bust of a character|247": {
+"relevance": 2,
+"reason": "The model is a 3D printable bust sculpture depicting a fantasy character, perfectly matching the search query.",
+"tok": 2505
+},
+"bust of a character|236": {
+"relevance": 2,
+"reason": "The model is a 3D bust depicting a sci-fi/cyberpunk character holding a gun, which directly matches the user's search query for 'bust of a character'.",
+"tok": 2503
+},
+"bust of a character|219": {
+"relevance": 0,
+"reason": "The model represents a 3D model of a brain mounted on a small base/peg, which is an anatomical object rather than a bust depicting a character's head and upper torso.",
+"tok": 2832
+},
+"bust of a character|249": {
+"relevance": 2,
+"reason": "The model is a 3D bust of a pirate character, perfectly matching the user's search query for a 'bust of a character'.",
+"tok": 2509
+},
+"bust of a character|250": {
+"relevance": 0,
+"reason": "The model shows a full-body figurine of a character rather than a bust (which is limited to the head, neck, and upper chest).",
+"tok": 2482
+},
+"bust of a character|267": {
+"relevance": 2,
+"reason": "The model is a 3D printable bust of an armored fantasy character, which perfectly matches the user's search query.",
+"tok": 2460
+},
+"bust of a character|281": {
+"relevance": 0,
+"reason": "The model is a full-body character miniature, not a bust (head/shoulders sculpture).",
+"tok": 2637
+},
+"bust of a character|293": {
+"relevance": 0,
+"reason": "The model is an isolated alien/monster leg component for miniature assembly, not a bust of a character.",
+"tok": 2449
+},
+"bust of a character|297": {
+"relevance": 0,
+"reason": "The model is a tentacle or monster limb component for a miniature, not a bust of a character.",
+"tok": 2495
+},
+"bust of a character|291": {
+"relevance": 0,
+"reason": "The model is a miniature of a monstrous alien creature rather than a character bust.",
+"tok": 2657
+},
+"bust of a character|300": {
+"relevance": 0,
+"reason": "The model is a full-body miniature figure rather than a bust (which would only feature the head, neck, and upper chest).",
+"tok": 2472
+},
+"rider mounted on a horse or beast|7": {
+"relevance": 0,
+"reason": "The model shows an unmounted female character with horns and a tail, not a rider on a horse or beast.",
+"tok": 2479
+},
+"bust of a character|269": {
+"relevance": 0,
+"reason": "The model is a chained fantasy treasure chest/mimic prop, not a bust sculpture of a character.",
+"tok": 2494
+},
+"rider mounted on a horse or beast|9": {
+"relevance": 0,
+"reason": "The model depicts a hooded tiefling/demon miniature standing on foot rather than a rider mounted on a horse or beast.",
+"tok": 2506
+},
+"rider mounted on a horse or beast|8": {
+"relevance": 1,
+"reason": "The model features a monster beast, which could serve as a mount, but it is missing the rider requested in the query.",
+"tok": 2655
+},
+"rider mounted on a horse or beast|11": {
+"relevance": 0,
+"reason": "The model depicts an unmounted horned humanoid character on foot, not a rider mounted on a horse or beast.",
+"tok": 2476
+},
+"rider mounted on a horse or beast|10": {
+"relevance": 0,
+"reason": "The model depicts an unmounted female tiefling character without any horse, beast, or mount.",
+"tok": 2779
+},
+"rider mounted on a horse or beast|13": {
+"relevance": 1,
+"reason": "The model represents a saddled beast/mount, but there is no rider mounted on top of it.",
+"tok": 2553
+},
+"rider mounted on a horse or beast|12": {
+"relevance": 1,
+"reason": "The model shows a monstrous beast, which matches the 'beast' component of the query, but it does not include a rider mounted on it.",
+"tok": 2695
+},
+"rider mounted on a horse or beast|14": {
+"relevance": 1,
+"reason": "The model shows a monstrous beast suitable as a mount, but it does not include a rider as requested in the query.",
+"tok": 2738
+},
+"rider mounted on a horse or beast|38": {
+"relevance": 0,
+"reason": "The model depicts an unmounted female barbarian warrior standing on foot, with no horse or beast present.",
+"tok": 2467
+},
+"rider mounted on a horse or beast|22": {
+"relevance": 1,
+"reason": "The model features a saddled beast/mount, but there is no rider on top, making it a partial match for a mounted rider search.",
+"tok": 2660
+},
+"rider mounted on a horse or beast|59": {
+"relevance": 1,
+"reason": "The model is a saddled beast mount, which is directly related to a mounted rider, but it lacks the rider figure itself.",
+"tok": 2652
+},
+"rider mounted on a horse or beast|79": {
+"relevance": 1,
+"reason": "The model features an armored horse/mount, which is a key component of a mounted rider, but it lacks the rider specified in the search query.",
+"tok": 2550
+},
+"rider mounted on a horse or beast|88": {
+"relevance": 0,
+"reason": "The model depicts an unmounted squid-headed/Cthulhu-like humanoid figure standing on a runic arch base, not a rider mounted on a horse or beast.",
+"tok": 2474
+},
+"rider mounted on a horse or beast|92": {
+"relevance": 0,
+"reason": "The model depicts a standalone monstrous humanoid/troll figure walking on foot, not a rider mounted on a horse or beast.",
+"tok": 2512
+},
+"rider mounted on a horse or beast|74": {
+"relevance": 1,
+"reason": "The model is a beast mount with a socket on its back intended for a rider, but the rider itself is not included in this figure.",
+"tok": 2731
+},
+"rider mounted on a horse or beast|101": {
+"relevance": 0,
+"reason": "The model shows a winged creature/beast, but there is no rider mounted on it.",
+"tok": 2550
+},
+"rider mounted on a horse or beast|120": {
+"relevance": 0,
+"reason": "The model is an unmounted character standing/leaping on a small rock base; it does not feature a rider or any mount/beast.",
+"tok": 2477
+},
+"rider mounted on a horse or beast|110": {
+"relevance": 0,
+"reason": "The model depicts a standalone fantasy warrior character on foot with no mount, horse, or beast present.",
+"tok": 2474
+},
+"rider mounted on a horse or beast|122": {
+"relevance": 0,
+"reason": "The model depicts a headless monster/creature playing a guitar, with no rider, horse, or beast mount present.",
+"tok": 2477
+},
+"rider mounted on a horse or beast|123": {
+"relevance": 0,
+"reason": "The model depicts an unmounted monster/troll creature carrying a log on its shoulder, not a rider mounted on a horse or beast.",
+"tok": 2518
+},
+"rider mounted on a horse or beast|137": {
+"relevance": 0,
+"reason": "The model shows a single horned demonic creature crouching, with no rider or mount present.",
+"tok": 2445
+},
+"rider mounted on a horse or beast|156": {
+"relevance": 0,
+"reason": "The model is a fantasy sword/weapon miniature piece, not a rider mounted on a horse or beast.",
+"tok": 2452
+},
+"rider mounted on a horse or beast|138": {
+"relevance": 0,
+"reason": "The model is a standalone monster/creature with spears on its back, but it does not feature any rider mounted on it.",
+"tok": 2740
+},
+"rider mounted on a horse or beast|171": {
+"relevance": 0,
+"reason": "The model is an unmounted anthropomorphic beast/monster warrior standing on its own, not a rider mounted on a horse or beast.",
+"tok": 2516
+},
+"rider mounted on a horse or beast|158": {
+"relevance": 1,
+"reason": "The model shows a mechanical beast/mount, but it lacks a rider mounted on top of it.",
+"tok": 2647
+},
+"rider mounted on a horse or beast|141": {
+"relevance": 0,
+"reason": "The model is a waist/torso armor bit featuring a trophy beast head and dagger sheath, not a full miniature of a rider mounted on a horse or beast.",
+"tok": 2724
+},
+"rider mounted on a horse or beast|174": {
+"relevance": 2,
+"reason": "The model features a small humanoid character riding on a beast (a dog/corgi), which perfectly matches the search query for 'rider mounted on a horse or beast'.",
+"tok": 2465
+},
+"rider mounted on a horse or beast|166": {
+"relevance": 0,
+"reason": "The model depicts a decorative terrain base or vessel piece with water effects, not a rider mounted on a horse or beast.",
+"tok": 2584
+},
+"rider mounted on a horse or beast|232": {
+"relevance": 2,
+"reason": "The model clearly depicts an armored rider holding a banner mounted on a horse, matching the user's search query.",
+"tok": 2447
+},
+"demon|7": {
+"relevance": 2,
+"reason": "The 3D miniature depicts a female demon or tiefling character complete with horns and a spaded tail, making it a clear match for the search term.",
+"tok": 2479
+},
+"rider mounted on a horse or beast|180": {
+"relevance": 1,
+"reason": "The model features a pack beast carrying cargo on its shell, but it does not include a rider.",
+"tok": 2711
+},
+"rider mounted on a horse or beast|252": {
+"relevance": 0,
+"reason": "The model is a standing/crouching skeleton warrior with a sword and is not a rider mounted on a horse or beast.",
+"tok": 2481
+},
+"rider mounted on a horse or beast|250": {
+"relevance": 0,
+"reason": "The model depicts an aquatic humanoid pirate standing/climbing on a wooden post or mast, not a rider mounted on a horse or beast.",
+"tok": 2510
+},
+"rider mounted on a horse or beast|228": {
+"relevance": 1,
+"reason": "The model depicts a small rider mounted on the shoulders of a large monstrous brute/mutant rather than a traditional horse or quadrupedal beast.",
+"tok": 2924
+},
+"demon|9": {
+"relevance": 2,
+"reason": "The model features a horned, tailed female humanoid character (such as a Tiefling, demon, or succubus rogue) commonly associated with demon-themed miniatures for tabletop gaming.",
+"tok": 2514
+},
+"demon|8": {
+"relevance": 2,
+"reason": "The model depicts a monstrous, horned fiend/hellhound creature, which directly fits the concept of a demon in tabletop miniatures.",
+"tok": 2543
+},
+"demon|10": {
+"relevance": 2,
+"reason": "The model represents a demonic character with horns, pointed ears, and a pointed tail, clearly matching the user's search for a 'demon'.",
+"tok": 2453
+},
+"demon|11": {
+"relevance": 2,
+"reason": "The miniature depicts a horned figure with a tail and a sinister grin, which strongly fits the description of a demon or tiefling character.",
+"tok": 2534
+},
+"demon|12": {
+"relevance": 2,
+"reason": "The miniature depicts a horned, monstrous beast with classic demonic features, making it a clear match for the search term 'demon'.",
+"tok": 2536
+},
+"demon|14": {
+"relevance": 2,
+"reason": "The model depicts a monstrous, horned demonic beast (like a hellhound or demon hound), making it a clear match for the search term 'demon'.",
+"tok": 2528
+},
+"demon|13": {
+"relevance": 2,
+"reason": "The model depicts a ferocious, horned monstrous beast that matches a demon/demon hound concept well.",
+"tok": 2653
+},
+"demon|80": {
+"relevance": 1,
+"reason": "The model depicts a horned, hooved monster/minotaur warrior with armor, which fits well within fantasy demon or fiend categories, though it specifically leans towards a minotaur archetype.",
+"tok": 2741
+},
+"demon|101": {
+"relevance": 2,
+"reason": "The model depicts a monstrous winged beast resembling a fantasy demon or gargoyle, which directly matches the user's search query.",
+"tok": 2809
+},
+"demon|88": {
+"relevance": 1,
+"reason": "The model represents a Cthulhu-like eldritch horror or mind flayer (illithid) figure with facial tentacles. While technically an aberration/eldritch creature rather than a classical fiendish demon, it",
+"tok": 2757
+},
+"demon|74": {
+"relevance": 1,
+"reason": "The model represents a monstrous, horned bull-like creature with a humanoid face, similar to a mythological Lamassu or a fantasy bull demon, making it a partial/arguable match for 'demon'.",
+"tok": 2848
+},
+"demon|103": {
+"relevance": 2,
+"reason": "The 3D miniature depicts a spiky, aggressive fantasy warrior featuring demonic traits such as bat-like wing shoulder pads, horn-like hair/helmet spikes, and skull accessories on the hip belt.",
+"tok": 2658
+},
+"demon|92": {
+"relevance": 1,
+"reason": "The model depicts a monstrous, aggressive fantasy creature with tusks and horns (possibly a two-headed giant, troll, or fiend), which is closely related to or arguable as a demon.",
+"tok": 2746
+},
+"demon|120": {
+"relevance": 2,
+"reason": "The 3D model depicts a female character featuring demon-like traits such as horns, a pointed tail, and demonic armor.",
+"tok": 2558
+},
+"demon|111": {
+"relevance": 1,
+"reason": "The model depicts a fantasy warrior with bat-winged armor elements and demonic/vampiric aesthetics, which partially matches the search for a demon.",
+"tok": 2694
+},
+"demon|123": {
+"relevance": 1,
+"reason": "The model is an unassembled body component of a fantasy monster/troll creature, which shares many physical traits with a demon miniature, making it partially relevant.",
+"tok": 2696
+},
+"demon|108": {
+"relevance": 1,
+"reason": "The miniature features monstrous and vampiric traits, such as bat-like wing structures, fangs, and wild hair, making it an arguable match for a demon search in fantasy tabletop gaming.",
+"tok": 2807
+},
+"demon|124": {
+"relevance": 0,
+"reason": "The model depicts a troll or swamp monster figure with tusks, a wooden shield, and a stone axe, which is a different fantasy creature type than a demon.",
+"tok": 2952
+},
+"demon|137": {
+"relevance": 2,
+"reason": "The model depicts a horned, monstrous demonic creature with claws, chains, and a tail, which directly matches the search term 'demon'.",
+"tok": 2466
+},
+"demon|114": {
+"relevance": 1,
+"reason": "The model depicts a fantasy warrior with bat-like armor, winged elements, and a menacing helmet/face, which strongly aligns with vampiric or demonic character designs.",
+"tok": 2776
+},
+"demon|142": {
+"relevance": 1,
+"reason": "The model is a component/torso part for a fantasy miniature, depicting a grotesque or spectral creature, which matches the demon theme as a component/part.",
+"tok": 2612
+},
+"demon|163": {
+"relevance": 2,
+"reason": "The model is a detailed 3D bust of a horned demonic creature, which directly matches the search term 'demon'.",
+"tok": 2466
+},
+"demon|144": {
+"relevance": 1,
+"reason": "The model is a demonic horned head/skull component rather than a full demon figure, making it a component/accessory related to the search term.",
+"tok": 2602
+},
+"demon|155": {
+"relevance": 2,
+"reason": "The miniature depicts a heavily armored demonic knight featuring prominent horns, skull motifs, and clawed gauntlets, which directly aligns with a demon-themed miniature search.",
+"tok": 2681
+},
+"demon|190": {
+"relevance": 2,
+"reason": "The model represents a monstrous, demonic creature with grotesque features, chains, and pointed ears, perfectly matching the search for 'demon' in a tabletop/miniature context.",
+"tok": 2470
+},
+"demon|171": {
+"relevance": 1,
+"reason": "The model depicts a monstrous hyena-like beastman/gnoll warrior in spiked armor with a bone mace. While gnolls are associated with demon lords in fantasy tabletop games like D&D, it is more specifical",
+"tok": 2680
+},
+"demon|185": {
+"relevance": 2,
+"reason": "The miniature depicts a horned, fanged fantasy humanoid warrior with demonic features, making it a clear match for the search query 'demon'.",
+"tok": 2654
+},
+"demon|191": {
+"relevance": 2,
+"reason": "The model depicts a bat-winged monstrous creature with sharp teeth and fiendish features, which closely matches the concept of a demon or fiend in fantasy miniature libraries.",
+"tok": 2760
+},
+"demon|178": {
+"relevance": 1,
+"reason": "The model depicts a troll or ogre-like fantasy monster rather than a classic demon, though it shares generic monstrous features.",
+"tok": 2859
+},
+"demon|222": {
+"relevance": 1,
+"reason": "The model depicts a heavily armored horned warrior or death knight with demonic aesthetic elements, rather than a monstrous demon creature itself.",
+"tok": 2661
+},
+"demon|223": {
+"relevance": 2,
+"reason": "The miniature clearly depicts a horned, winged demon figure rising from swirls of smoke or fire, perfectly matching the search term 'demon'.",
+"tok": 2467
+},
+"demon|268": {
+"relevance": 2,
+"reason": "The model clearly depicts a large, horned monster that fits the description of a demon.",
+"tok": 2493
+},
+"stone golem|2": {
+"relevance": 2,
+"reason": "The model depicts a muscular stone golem covered in carved magical runes, which directly matches the search query.",
+"tok": 2525
+},
+"demon|252": {
+"relevance": 1,
+"reason": "The model represents a skeletal undead/viking warrior rather than a traditional demon, though its horned helmet, shoulder pad, and monstrous appearance give it arguable demonic tropes.",
+"tok": 2683
+},
+"stone golem|16": {
+"relevance": 0,
+"reason": "The model is a musical instrument (a lute) held by a hand, which is completely unrelated to a stone golem.",
+"tok": 2474
+},
+"stone golem|15": {
+"relevance": 0,
+"reason": "The model is a miniature part showing a hand holding a curved dagger/blade, not a stone golem.",
+"tok": 2597
+},
+"stone golem|18": {
+"relevance": 1,
+"reason": "The model represents a skeletal undead warrior with carved stone armor/decorations rather than a traditional stone golem made of rock/stone construct, making it only partially matching.",
+"tok": 2919
+},
+"stone golem|19": {
+"relevance": 0,
+"reason": "The model represents a skeletal or undead warrior miniature, not a stone golem.",
+"tok": 2567
+},
+"stone golem|34": {
+"relevance": 0,
+"reason": "The model depicts a muscular humanoid barbarian warrior, not a stone golem.",
+"tok": 2481
+},
+"stone golem|35": {
+"relevance": 1,
+"reason": "The model is an accessory/component (a hand holding a stone axe/weapon) for a tabletop miniature rather than a full stone golem figure.",
+"tok": 2706
+},
+"stone golem|22": {
+"relevance": 0,
+"reason": "The model depicts a rocky/stony reptilian creature or beast mount perched on a branch, which is not a stone golem (typically a humanoid rock construct).",
+"tok": 2956
+},
+"stone golem|59": {
+"relevance": 1,
+"reason": "The model depicts a quadrupedal beast with a rocky, armored stone-like texture and a saddle/pack, making it a stone creature or earth elemental beast rather than a traditional humanoid stone golem.",
+"tok": 2637
+},
+"stone golem|61": {
+"relevance": 1,
+"reason": "The model appears to be an individual hand/gauntlet component or accessory for a stone golem or miniature rather than a complete stone golem model.",
+"tok": 2665
+},
+"stone golem|78": {
+"relevance": 0,
+"reason": "The model depicts a minotaur (bull-headed humanoid monster), not a stone golem.",
+"tok": 2486
+},
+"stone golem|73": {
+"relevance": 1,
+"reason": "The model is a carved stone dwarven head/ruin, which could serve as a head of a stone golem or related terrain, but it is not a complete stone golem figure.",
+"tok": 2696
+},
+"stone golem|75": {
+"relevance": 1,
+"reason": "The model appears to be a component or part (such as a hand/gauntlet or torso piece) of a stone golem or mechanical construct, rather than a full, complete stone golem figure.",
+"tok": 2775
+},
+"stone golem|80": {
+"relevance": 0,
+"reason": "The model depicts a minotaur/bull-headed fantasy warrior rather than a stone golem.",
+"tok": 2665
+},
+"stone golem|95": {
+"relevance": 1,
+"reason": "The model is an individual hand/fist component meant for a miniature rather than a complete stone golem figure.",
+"tok": 2601
+},
+"stone golem|94": {
+"relevance": 2,
+"reason": "The model depicts a stylized, stone-like creature with carved spiral patterns, which clearly represents a stone golem or elemental monster.",
+"tok": 2633
+},
+"stone golem|96": {
+"relevance": 1,
+"reason": "The model is a individual hand component/part with carved stone spiral motifs, suitable as a piece for a stone golem miniature rather than a complete golem.",
+"tok": 2584
+},
+"stone golem|99": {
+"relevance": 1,
+"reason": "The model is a component/part (a clenched stone fist) designed for a stone golem miniature rather than a complete golem.",
+"tok": 2561
+},
+"stone golem|125": {
+"relevance": 0,
+"reason": "The model depicts a miniature hand holding a lantern, which is an accessory/bit for a custom miniature rather than a stone golem.",
+"tok": 2492
+},
+"stone golem|97": {
+"relevance": 0,
+"reason": "The model appears to be a skull-and-feather totem or staff accessory rather than a stone golem.",
+"tok": 2536
+},
+"stone golem|123": {
+"relevance": 0,
+"reason": "The model depicts a monstrous, flesh-and-blood creature or troll carrying a wooden log, rather than a stone golem made of rock or stone.",
+"tok": 2604
+},
+"stone golem|126": {
+"relevance": 0,
+"reason": "The model is a rock spire or rock pillar terrain piece, not a stone golem creature.",
+"tok": 2537
+},
+"stone golem|127": {
+"relevance": 0,
+"reason": "The model is a piece of cracked concrete or stone rubble with rebar, serving as miniature terrain or a scenic base, not a stone golem.",
+"tok": 2583
+},
+"stone golem|128": {
+"relevance": 0,
+"reason": "The model is a piece of rocky trench or stone channel terrain, not a stone golem creature.",
+"tok": 2500
+},
+"stone golem|130": {
+"relevance": 0,
+"reason": "The model depicts stylized terrain or plant structures on 3D printing supports, not a stone golem.",
+"tok": 2514
+},
+"stone golem|139": {
+"relevance": 0,
+"reason": "The model depicts a skeletal ribcage slumped on a rocky base, which is a terrain/objective marker or corpse detail, not a stone golem.",
+"tok": 2651
+},
+"stone golem|142": {
+"relevance": 0,
+"reason": "The model appears to be an organic or draped cloth miniature torso/component, which does not resemble a stone golem.",
+"tok": 2575
+},
+"stone golem|129": {
+"relevance": 0,
+"reason": "The model is a piece of damaged terrain or ruined wall, not a stone golem miniature.",
+"tok": 2688
+},
+"stone golem|157": {
+"relevance": 0,
+"reason": "The model depicts a muscular humanoid warrior/barbarian with a mohawk holding a hammer, not a stone golem.",
+"tok": 2512
+},
+"stone golem|161": {
+"relevance": 0,
+"reason": "The model depicts a muscular chained warrior or gladiator figure holding spiked flails, not a stone golem.",
+"tok": 2651
+},
+"stone golem|166": {
+"relevance": 0,
+"reason": "The model appears to be a scenic base or decorative component with wave/flame effects and carved architectural details, not a stone golem.",
+"tok": 2572
+},
+"stone golem|177": {
+"relevance": 0,
+"reason": "The model represents a stone shrine or magic orb pedestal, not a stone golem creature.",
+"tok": 2666
+},
+"stone golem|182": {
+"relevance": 0,
+"reason": "The model is a broken tree stump terrain piece, not a stone golem.",
+"tok": 2465
+},
+"stone golem|190": {
+"relevance": 0,
+"reason": "The model depicts a chained ghoul or mutated creature, not a stone golem or construct.",
+"tok": 2524
+},
+"stone golem|178": {
+"relevance": 1,
+"reason": "The model depicts a troll (likely a cave or stone troll) with rocky skin textures and tusks, rather than a traditional magical stone golem construct, making it a partial/arguable match.",
+"tok": 2861
+},
+"stone golem|203": {
+"relevance": 0,
+"reason": "The model is a terrain base featuring a rocky cliff with wooden scaffolding, a ladder, and mining tools, not a stone golem.",
+"tok": 2510
+},
+"stone golem|228": {
+"relevance": 0,
+"reason": "The model represents a post-apocalyptic mutant brute carrying a smaller rider and heavy weaponry, which is not a stone golem.",
+"tok": 2521
+},
+"stone golem|201": {
+"relevance": 0,
+"reason": "The model is a piece of rocky cliff terrain or scenery, not a stone golem creature.",
+"tok": 2634
+},
+"stone golem|204": {
+"relevance": 0,
+"reason": "The model is a piece of rocky terrain or cliff scenery, not a stone golem creature.",
+"tok": 2709
+},
+"stone golem|268": {
+"relevance": 0,
+"reason": "The model represents a horned ogre or demon monster with organic fleshy details, loincloth, ropes, and chains, rather than a stone golem construct made of rock.",
+"tok": 2551
+},
+"goblin|11": {
+"relevance": 0,
+"reason": "The model depicts a tiefling or devilish character featuring prominent horns and a tail, which is a different fantasy race from a goblin.",
+"tok": 2850
+},
+"stone golem|292": {
+"relevance": 0,
+"reason": "The model appears to be an alien or monster arm/claw bit (similar to a Warhammer Tyranid part), rather than a stone golem or a component of one.",
+"tok": 2805
+},
+"goblin|51": {
+"relevance": 0,
+"reason": "The model depicts a stocky fantasy dwarf or tribal warrior miniature rather than a goblin.",
+"tok": 2631
+},
+"goblin|52": {
+"relevance": 0,
+"reason": "The model depicts a stocky fantasy dwarf or gnome character with a decorated beard and helmet, not a goblin.",
+"tok": 2775
+},
+"goblin|57": {
+"relevance": 0,
+"reason": "The model depicts a dwarf figure with a braided beard, stout build, and monocle/eyepatch, not a goblin.",
+"tok": 2446
+},
+"goblin|63": {
+"relevance": 2,
+"reason": "The model depicts a goblin tinkerer character with pointed ears and goggles, which directly matches the search query.",
+"tok": 2754
+},
+"goblin|64": {
+"relevance": 0,
+"reason": "The model represents a gnome or dwarf tinkerer with a braided beard and goggles, not a goblin.",
+"tok": 2721
+},
+"goblin|49": {
+"relevance": 1,
+"reason": "The model is a fantasy tabletop miniature character with stocky proportions and ornate gear (possibly a dwarf, gnome, or goblinoid player/warrior). It is related to the requested theme of fantasy gobl",
+"tok": 3025
+},
+"goblin|65": {
+"relevance": 0,
+"reason": "The model depicts a dwarf or gnome character with a braided beard and monocle, which is a different fantasy race from a goblin.",
+"tok": 2797
+},
+"goblin|70": {
+"relevance": 0,
+"reason": "The model depicts a female elf character (specifically styled like a World of Warcraft Night Elf) with long pointed ears and long eyebrows, not a goblin.",
+"tok": 2599
+},
+"goblin|88": {
+"relevance": 0,
+"reason": "The model depicts a squid-headed / Cthulhu-like illithid (mind flayer) creature, which is entirely distinct from a goblin.",
+"tok": 2502
+},
+"goblin|66": {
+"relevance": 1,
+"reason": "The model features a small fantasy humanoid with pointed ears, a long nose, and a pointed hat, which strongly resembles a gnome, redcap, or goblin-like character.",
+"tok": 2801
+},
+"goblin|97": {
+"relevance": 1,
+"reason": "The model is a shamanic totem or accessory bit (featuring skulls, feathers, and a clawed base) often used for fantasy goblin or orc miniature army conversions rather than a full goblin miniature itsel",
+"tok": 2649
+},
+"goblin|72": {
+"relevance": 1,
+"reason": "The model is a fantasy tabletop miniature featuring a character with pointed ears and stout proportions, which resembles a female gnome or goblin character.",
+"tok": 2803
+},
+"goblin|108": {
+"relevance": 0,
+"reason": "The model depicts a slender, tall vampire or dark elf character with bat-like wings on its collar/cape, not a goblin, which typically has short, squat proportions.",
+"tok": 2794
+},
+"goblin|98": {
+"relevance": 1,
+"reason": "The model depicts a large fantasy creature (likely a troll or boar-folk warrior) with tusks and braids. While it is not a traditional goblin, it belongs to a related fantasy monster archetype often as",
+"tok": 2962
+},
+"goblin|114": {
+"relevance": 0,
+"reason": "The model represents a vampire or elf warrior with bat-themed armor and cape, not a goblin.",
+"tok": 2622
+},
+"goblin|111": {
+"relevance": 0,
+"reason": "The model represents a vampire or dark elf character in bat-themed armor rather than a goblin.",
+"tok": 2640
+},
+"goblin|122": {
+"relevance": 2,
+"reason": "The model is a 3D miniature body for a goblin guitarist/bard character, featuring goblinoid proportions and features.",
+"tok": 2690
+},
+"goblin|124": {
+"relevance": 1,
+"reason": "The model appears to be a large monstrous creature such as a troll or fimir/hobgoblin rather than a traditional goblin, but it is closely related as a fantasy creature/monstrous ally from the same gen",
+"tok": 2761
+},
+"goblin|123": {
+"relevance": 1,
+"reason": "The model appears to be a large troll or swamp monster miniature (missing its head piece), which is not a goblin itself, but is a related creature in fantasy tabletop gaming.",
+"tok": 3093
+},
+"goblin|184": {
+"relevance": 2,
+"reason": "The model depicts a female goblin archer miniature, featuring characteristic pointed ears, small frame, and goblinoid facial features.",
+"tok": 2509
+},
+"goblin|149": {
+"relevance": 0,
+"reason": "The model depicts a large ogre or orc butcher character holding a cleaver and carrying a body, which does not match a goblin.",
+"tok": 2858
+},
+"goblin|171": {
+"relevance": 0,
+"reason": "The model represents a gnoll or werewolf/beastman warrior with a hyena/canine head, fur, and heavy club, which is a different fantasy creature species from a goblin.",
+"tok": 2703
+},
+"goblin|186": {
+"relevance": 2,
+"reason": "The model depicts a goblin character sitting in a mechanical cart/wagon, perfectly matching the search for 'goblin'.",
+"tok": 2470
+},
+"goblin|185": {
+"relevance": 2,
+"reason": "The model depicts a fantasy goblin warrior holding a spear with characteristic pointed ears, fangs, and wild facial features.",
+"tok": 2593
+},
+"goblin|187": {
+"relevance": 2,
+"reason": "The 3D model clearly depicts a goblin warrior with characteristic pointed ears, facial features, and fantasy armor holding a sword and shield.",
+"tok": 2460
+},
+"goblin|188": {
+"relevance": 2,
+"reason": "The model depicts a treasure goblin carrying a massive sack of coins and loot over its shoulder, which clearly matches the search term 'goblin'.",
+"tok": 2502
+},
+"goblin|178": {
+"relevance": 1,
+"reason": "The model depicts a troll rather than a goblin, but it represents a closely related fantasy monster subject commonly featured alongside goblins in tabletop gaming.",
+"tok": 2967
+},
+"goblin|189": {
+"relevance": 2,
+"reason": "The model features a palanquin throne carried by multiple goblins, which directly matches the search query.",
+"tok": 2578
+},
+"knight in plate armor|11": {
+"relevance": 0,
+"reason": "The model depicts a horned tiefling or devil-like character wearing a hood, coat, and leather boots with a tail, which does not match a knight in plate armor.",
+"tok": 2529
+},
+"goblin|190": {
+"relevance": 2,
+"reason": "The model depicts a crouching monster with pointed ears and grotesque features wearing a loincloth, clearly matching a goblin tabletop miniature.",
+"tok": 2576
+},
+"goblin|191": {
+"relevance": 2,
+"reason": "The model depicts a bat-winged goblin creature, which is a recognizable goblin variant commonly used in tabletop gaming.",
+"tok": 2746
+},
+"goblin|268": {
+"relevance": 0,
+"reason": "The model depicts a large, horned ogre or cyclops monster miniature rather than a goblin.",
+"tok": 2600
+},
+"knight in plate armor|18": {
+"relevance": 0,
+"reason": "The model is an undead or skeletal warrior figure wearing minimal decorative armor and loincloth, not a knight in plate armor.",
+"tok": 2524
+},
+"knight in plate armor|82": {
+"relevance": 0,
+"reason": "The model depicts a character wearing a long coat/trench coat and cloth or leather gear, rather than a knight clad in full plate armor.",
+"tok": 2593
+},
+"knight in plate armor|88": {
+"relevance": 0,
+"reason": "The model depicts a mind flayer (tentacle-headed creature) in fantasy attire/gear, not a human or humanoid knight in full plate armor.",
+"tok": 2552
+},
+"knight in plate armor|107": {
+"relevance": 2,
+"reason": "The model depicts a fantasy knight character wearing full plate armor, helmet, and cape.",
+"tok": 2512
+},
+"knight in plate armor|103": {
+"relevance": 1,
+"reason": "The model is a fantasy warrior (likely a Dark Elf or Vampire) wearing spiked plate-like armor, which partially fits the general description of an armored warrior, though it is not a traditional knight",
+"tok": 2686
+},
+"knight in plate armor|108": {
+"relevance": 1,
+"reason": "The model features a fantasy warrior clad in ornate plate armor, but the character is heavily themed as a vampire or dark elf with bat wings, fangs, and wild hair rather than a traditional knight.",
+"tok": 2755
+},
+"knight in plate armor|106": {
+"relevance": 1,
+"reason": "The model depicts a dark fantasy/vampiric warrior wearing stylized, spiky plate armor and a cape rather than a traditional medieval knight in plate armor.",
+"tok": 2763
+},
+"knight in plate armor|110": {
+"relevance": 2,
+"reason": "The model depicts a fantasy warrior wearing detailed spiked plate armor and gauntlets, matching the request for a knight in plate armor.",
+"tok": 2720
+},
+"knight in plate armor|111": {
+"relevance": 2,
+"reason": "The miniature depicts a fantasy knight in ornate, stylized plate armor with a cape and shoulder armor.",
+"tok": 2723
+},
+"knight in plate armor|113": {
+"relevance": 1,
+"reason": "The model features a fantasy warrior wearing stylized plate armor, but its dark fantasy/vampiric aesthetic and aggressive pose make it more of a dark elf or vampire warrior than a classic knight.",
+"tok": 2650
+},
+"knight in plate armor|112": {
+"relevance": 1,
+"reason": "The model features a fantasy warrior wearing ornate plate armor, but the character is a vampire/dark elf with bat-like collar wings and pistols rather than a traditional medieval knight.",
+"tok": 2807
+},
+"knight in plate armor|116": {
+"relevance": 1,
+"reason": "The model features a fantasy warrior wearing ornate, stylized plate armor, but it is a dark elf/vampire-style character rather than a traditional knight.",
+"tok": 2700
+},
+"knight in plate armor|114": {
+"relevance": 2,
+"reason": "The model depicts a fantasy knight character wearing full plate armor with a helmet, cape, and spiky pauldrons/greaves.",
+"tok": 2707
+},
+"knight in plate armor|136": {
+"relevance": 2,
+"reason": "The model depicts a medieval/fantasy knight clad in heavy plate armor, wearing a helmet, and holding a large spiked mace, which directly matches the user's search query.",
+"tok": 2489
+},
+"knight in plate armor|120": {
+"relevance": 1,
+"reason": "The model features a female tiefling/demon fantasy warrior wearing intricate plate armor. While it wears plate armor, the demonic features (horns and tail) and dynamic fantasy style make it a partial/",
+"tok": 2793
+},
+"knight in plate armor|148": {
+"relevance": 0,
+"reason": "The model depicts a 19th-century style military officer wearing a uniform coat and carrying a saber, not a medieval knight in plate armor.",
+"tok": 2534
+},
+"knight in plate armor|155": {
+"relevance": 2,
+"reason": "The model depicts a fantasy horned knight clad in full spiked plate armor, which directly matches the user's search query.",
+"tok": 2473
+},
+"knight in plate armor|161": {
+"relevance": 0,
+"reason": "The model depicts a chain-bound warrior or gladiator with an exposed muscular torso and legs, not a knight wearing plate armor.",
+"tok": 2658
+},
+"knight in plate armor|187": {
+"relevance": 0,
+"reason": "The model depicts a goblin warrior clad in ragged clothing and light/scavenged gear holding a sword and wooden shield, which does not match a knight in plate armor.",
+"tok": 2523
+},
+"knight in plate armor|218": {
+"relevance": 0,
+"reason": "The model represents a futuristic sci-fi or cyberpunk character with a long coat, helmet, and handgun, not a medieval knight in plate armor.",
+"tok": 2518
+},
+"knight in plate armor|221": {
+"relevance": 0,
+"reason": "The model depicts a futuristic/cyberpunk samurai warrior wearing a wide conical hat and carrying a sword, which does not match the search for a Western knight in plate armor.",
+"tok": 2899
+},
+"knight in plate armor|232": {
+"relevance": 2,
+"reason": "The model depicts a mounted knight wearing full plate armor and carrying a banner.",
+"tok": 2551
+},
+"knight in plate armor|267": {
+"relevance": 2,
+"reason": "The model is a 3D bust of a knight wearing detailed plate armor and a helmet, which directly matches the user's search query.",
+"tok": 2616
+},
+"knight in plate armor|222": {
+"relevance": 2,
+"reason": "The 3D model depicts a fantasy warrior wearing full plate armor, a horned helmet, and holding a broadsword, making it a clear match for a knight in plate armor.",
+"tok": 2604
+},
+"robot or mech|0": {
+"relevance": 0,
+"reason": "The model depicts an organic, tentacled alien/creature or shadow spirit, not a robot or mech.",
+"tok": 2456
+},
+"knight in plate armor|282": {
+"relevance": 1,
+"reason": "The model is an armor component (a decorated shoulder pauldron with a tilt shield) for a knight/sci-fi knight miniature, making it an accessory rather than a full knight in plate armor.",
+"tok": 2596
+},
+"knight in plate armor|275": {
+"relevance": 0,
+"reason": "The model is a futuristic/sci-fi soldier in power armor holding a firearm, rather than a traditional medieval knight in plate armor.",
+"tok": 2738
+},
+"robot or mech|16": {
+"relevance": 0,
+"reason": "The model is a fantasy lute/mandolin accessory held by a miniature hand, which is completely unrelated to robots or mechs.",
+"tok": 2494
+},
+"robot or mech|2": {
+"relevance": 0,
+"reason": "The model depicts a fantasy stone golem or elemental construct with carved runes, not a mechanical robot or sci-fi mech.",
+"tok": 2691
+},
+"robot or mech|53": {
+"relevance": 0,
+"reason": "The model depicts a fantasy quiver containing arrows, which is completely unrelated to a robot or mech.",
+"tok": 2448
+},
+"robot or mech|61": {
+"relevance": 1,
+"reason": "The model is a component or accessory (a robotic/mechanical gauntlet or hand piece) rather than a complete robot or mech.",
+"tok": 2627
+},
+"robot or mech|63": {
+"relevance": 0,
+"reason": "The model depicts a fantasy humanoid character (likely a dwarf or goblin engineer with goggles) rather than a robot or mech.",
+"tok": 2601
+},
+"robot or mech|24": {
+"relevance": 1,
+"reason": "The model is a miniature sword weapon bit held in a gauntleted hand, which could serve as a component or accessory for a mech or robotic miniature figure, though it is not a full robot or mech itself.",
+"tok": 2848
+},
+"robot or mech|88": {
+"relevance": 0,
+"reason": "The model represents an organic eldritch or fantasy tentacle creature (mind flayer/Cthulhu-inspired character), not a robot or mech.",
+"tok": 2491
+},
+"robot or mech|97": {
+"relevance": 0,
+"reason": "The model is a fantasy tribal totem/talisman featuring skulls, feathers, and claws, which is completely unrelated to a robot or mech.",
+"tok": 2471
+},
+"robot or mech|100": {
+"relevance": 0,
+"reason": "The model is a fantasy weapon or set of spears/daggers bound together, which has no connection to a robot or mech.",
+"tok": 2501
+},
+"robot or mech|103": {
+"relevance": 0,
+"reason": "The model represents a fantasy/sci-fi armored humanoid character (such as a dark elf or vampire warrior) with skulls and organic features, not a robot or mech.",
+"tok": 2496
+},
+"robot or mech|157": {
+"relevance": 0,
+"reason": "The model represents a muscular organic humanoid warrior/barbarian with a hammer, not a robot or mech.",
+"tok": 2492
+},
+"robot or mech|158": {
+"relevance": 2,
+"reason": "The model is a quadrupedal robotic beast/mech creature with visible mechanical joints and rivets, clearly matching the search query 'robot or mech'.",
+"tok": 2496
+},
+"robot or mech|75": {
+"relevance": 1,
+"reason": "The model appears to be a 3D component or accessory part (a mechanical/robotic gauntlet or hand piece) for a robot or mech rather than a complete model.",
+"tok": 2971
+},
+"robot or mech|172": {
+"relevance": 2,
+"reason": "The model features a sci-fi robotic or cybernetic armored figure with detailed mechanical plating and joints, matching the search for 'robot or mech'.",
+"tok": 2645
+},
+"robot or mech|211": {
+"relevance": 1,
+"reason": "The model is a robotic arm component or accessory, making it a partial match for a robot or mech search.",
+"tok": 2585
+},
+"robot or mech|173": {
+"relevance": 1,
+"reason": "The model is a sci-fi component or accessory (such as a mech power pack, backpack, or specialized seat) rather than a complete robot or mech.",
+"tok": 2815
+},
+"robot or mech|216": {
+"relevance": 1,
+"reason": "The model is a component/accessory (a shoulder pad or armor piece with a weapon mount) designed for a robot or mech miniature rather than a complete model.",
+"tok": 2597
+},
+"robot or mech|212": {
+"relevance": 1,
+"reason": "The model is a sci-fi tracked cart or trailer, which could function as an autonomous utility robot or vehicle accessory, but is not a standard robot or mech.",
+"tok": 2772
+},
+"robot or mech|218": {
+"relevance": 2,
+"reason": "The model features a sci-fi robotic/cybernetic humanoid character with mechanical hands and a robot head, matching the search for 'robot or mech'.",
+"tok": 2705
+},
+"robot or mech|220": {
+"relevance": 0,
+"reason": "The model depicts a human sci-fi soldier/character wearing futuristic gear and a visor, not a robot or mech.",
+"tok": 2662
+},
+"robot or mech|235": {
+"relevance": 1,
+"reason": "This is a mechanical segmented tail or cable accessory, which is a component/part for a robot or mech miniature rather than a complete robot or mech.",
+"tok": 2571
+},
+"robot or mech|236": {
+"relevance": 2,
+"reason": "The 3D model depicts a robotic/mech sci-fi character bust featuring mechanical components, a metallic cybernetic head, and futuristic weaponry.",
+"tok": 2469
+},
+"robot or mech|237": {
+"relevance": 1,
+"reason": "The model is a robotic/cybernetic arm component for a miniature, making it a relevant accessory/part for a robot or mech.",
+"tok": 2487
+},
+"robot or mech|243": {
+"relevance": 2,
+"reason": "The model depicts a mechanical sci-fi robot or mech featuring arms, weapons/tools, and a wheeled leg.",
+"tok": 2476
+},
+"robot or mech|255": {
+"relevance": 1,
+"reason": "The model is a futuristic/sci-fi weapon bit held by a robotic or armored hand, which serves as a component/accessory for a robot, mech, or miniature warrior.",
+"tok": 2598
+},
+"robot or mech|257": {
+"relevance": 2,
+"reason": "The model is a 3D printable sci-fi robot/mech figure, which directly matches the user's search query.",
+"tok": 2457
+},
+"robot or mech|244": {
+"relevance": 1,
+"reason": "The model depicts a sci-fi cyborg or servitor creature with robotic limbs and mechanical gear, making it a partial/arguable match for 'robot or mech' rather than a fully synthetic robot or piloted mec",
+"tok": 2673
+},
+"robot or mech|283": {
+"relevance": 1,
+"reason": "The model appears to be a 3D-printable component or joint designed for a robot, mech, or Bionicle figure rather than a complete model.",
+"tok": 2519
+},
+"robot or mech|258": {
+"relevance": 1,
+"reason": "The model is a sci-fi lander or mechanical pod structure with robotic legs. While it is sci-fi machinery, it resembles a stationary lander/pod rather than a traditional mobile robot or piloted mech.",
+"tok": 2633
+},
+"robot or mech|284": {
+"relevance": 1,
+"reason": "The model is a component or lower body section/legs designed for a mech or robot miniature.",
+"tok": 2594
+},
+"robot or mech|275": {
+"relevance": 2,
+"reason": "The 3D model is a sci-fi robotic or power-armored mech suit character, which directly matches the user's search for a robot or mech.",
+"tok": 2734
+},
+"treasure chest|3": {
+"relevance": 2,
+"reason": "The model is a stylized wooden treasure chest with metal reinforcing bands and a padlock, which directly matches the user's search query.",
+"tok": 2445
+},
+"robot or mech|298": {
+"relevance": 1,
+"reason": "The model represents a bacteriophage (a virus), which visually resembles a nanobot, mechanical spider, or sci-fi lander mech, making it a partial or arguable match for a robot search.",
+"tok": 2784
+},
+"treasure chest|58": {
+"relevance": 0,
+"reason": "The model is an adventurer's backpack with gear such as a shovel, rope, and bedroll attached, not a treasure chest.",
+"tok": 2512
+},
+"treasure chest|6": {
+"relevance": 2,
+"reason": "The model is a 3D printable miniature of an open wooden treasure chest with metal reinforcements and a lock, perfectly matching the search query 'treasure chest'.",
+"tok": 2466
+},
+"treasure chest|5": {
+"relevance": 1,
+"reason": "The model represents a mimic, a fantasy monster disguised as a treasure chest with eyes and sharp teeth, making it a thematic variant rather than a standard, non-monstrous treasure chest.",
+"tok": 2713
+},
+"treasure chest|4": {
+"relevance": 1,
+"reason": "The model is a fantasy 'mimic' monster disguised as a treasure chest, featuring teeth, eyes, and a long tongue coming out of it. While it is shaped like a chest, it is a monster variant rather than a ",
+"tok": 2781
+},
+"treasure chest|121": {
+"relevance": 0,
+"reason": "The model is a tent structure made of wood and canvas, which does not match the search query for a treasure chest.",
+"tok": 2451
+},
+"treasure chest|159": {
+"relevance": 1,
+"reason": "The model appears to be a component or lid of a treasure chest or coin bank chest, making it a relevant part/accessory rather than a complete chest.",
+"tok": 2590
+},
+"treasure chest|162": {
+"relevance": 2,
+"reason": "The model is a stylized fantasy treasure chest featuring a horned skull embellishment, which clearly matches the search term 'treasure chest'.",
+"tok": 2470
+},
+"treasure chest|168": {
+"relevance": 0,
+"reason": "The model represents stone stairs/a dais terrain piece, not a treasure chest.",
+"tok": 2445
+},
+"treasure chest|164": {
+"relevance": 2,
+"reason": "The model is an ornate fantasy treasure chest, directly matching the search query.",
+"tok": 2456
+},
+"treasure chest|186": {
+"relevance": 0,
+"reason": "The model depicts a goblin or creature in a cart carrying barrels and supplies, not a treasure chest.",
+"tok": 2542
+},
+"treasure chest|180": {
+"relevance": 1,
+"reason": "The model features a pack turtle carrying a large wooden crate or chest on its back, making it partially relevant as a component, though it is primarily a pack beast miniature rather than a standalone",
+"tok": 2705
+},
+"treasure chest|199": {
+"relevance": 2,
+"reason": "The 3D model depicts a stylized wooden treasure chest tied with ropes and secured with a padlock, perfectly matching the search query.",
+"tok": 2453
+},
+"treasure chest|204": {
+"relevance": 0,
+"reason": "The model is a piece of rocky terrain/cliff ledge, not a treasure chest.",
+"tok": 2465
+},
+"treasure chest|188": {
+"relevance": 1,
+"reason": "The model depicts a creature carrying a massive sack of loot and coins rather than a traditional wooden or metal treasure chest, making it a closely related alternative for tabletop loot.",
+"tok": 2651
+},
+"treasure chest|217": {
+"relevance": 0,
+"reason": "The model is a sci-fi workbench with tools, a weapon, and a small toolbox on it, not a treasure chest.",
+"tok": 2609
+},
+"treasure chest|225": {
+"relevance": 2,
+"reason": "The model is a 3D miniature of a stylized, fantasy-themed treasure chest featuring spooky elements like a skull and attached limbs.",
+"tok": 2476
+},
+"treasure chest|206": {
+"relevance": 2,
+"reason": "The model clearly represents a 3D miniature of a sea monster/tentacle-themed treasure chest complete with a padlock.",
+"tok": 2492
+},
+"treasure chest|238": {
+"relevance": 0,
+"reason": "The model is a piece of sci-fi terrain/bunker wall with stairs, not a treasure chest.",
+"tok": 2445
+},
+"treasure chest|239": {
+"relevance": 0,
+"reason": "The model is a piece of sci-fi terrain featuring stairs, platforms, and wall sections for tabletop gaming, not a treasure chest.",
+"tok": 2509
+},
+"treasure chest|226": {
+"relevance": 0,
+"reason": "The model is a stone platform or ritual base, not a treasure chest.",
+"tok": 2471
+},
+"treasure chest|240": {
+"relevance": 0,
+"reason": "The model is a piece of sci-fi tabletop terrain featuring stairs and a wall section, not a treasure chest.",
+"tok": 2466
+},
+"treasure chest|251": {
+"relevance": 2,
+"reason": "The 3D model clearly depicts a stylized fantasy treasure chest.",
+"tok": 2432
+},
+"treasure chest|264": {
+"relevance": 0,
+"reason": "The model is a stone ramp or curved pavement terrain piece for tabletop gaming, which is completely unrelated to a treasure chest.",
+"tok": 2495
+},
+"treasure chest|259": {
+"relevance": 2,
+"reason": "The model is a stylized treasure chest with decorative elements like rats and a lock, making it a direct match for the search query.",
+"tok": 2447
+},
+"treasure chest|253": {
+"relevance": 2,
+"reason": "The model is a stylized, fantasy-themed treasure chest featuring ornate geometric patterns and crystalline spikes on top.",
+"tok": 2442
+},
+"treasure chest|269": {
+"relevance": 2,
+"reason": "The model is a stylized fantasy treasure chest wrapped in chains, featuring monster-like details such as teeth and an eye, which fits the user's search for a treasure chest.",
+"tok": 2490
+},
+"treasure chest|245": {
+"relevance": 1,
+"reason": "The model represents a sci-fi crate or loot container, which acts as a sci-fi equivalent to a treasure chest, but it is not a traditional fantasy or pirate-style treasure chest.",
+"tok": 2807
+},
+"treasure chest|276": {
+"relevance": 0,
+"reason": "The model is a sci-fi wall panel or barricade component, not a treasure chest.",
+"tok": 2426
+},
+"treasure chest|280": {
+"relevance": 2,
+"reason": "The model is clearly a stylized treasure chest, which directly matches the user's search query.",
+"tok": 2438
+}
+}

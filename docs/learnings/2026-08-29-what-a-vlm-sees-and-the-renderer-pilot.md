@@ -191,7 +191,64 @@ Harness: `sample.py`, `render_{f3d,open3d_tight}.py`, `render_three.mjs`,
 (`client/src/dev/pilot.ts`, an `opts` parameter on `renderThumbnail`). To land
 under `eval/renderer_pilot/` with the results.
 
-## Results
+## Results: the renderer is not where search quality is
 
-*Pending — the embeddings and judge views were still running when this was
-written. To be amended in place.*
+388 judgments (91 clearly relevant, 128 partial, 169 not), softmax pool,
+`eval/renderer_pilot/out/`. nDCG@20 is the number to read — P@10 is capped
+by prevalence in a 301-model sample (two dragons, two golems, two riders
+exist, so those queries cannot score above 0.2 on any arm).
+
+| arm | prompt | P@10 | nDCG@20 | queries better / worse than control | top-10 overlap with control |
+|---|---|---|---|---|---|
+| open3d (control) | production | 0.525 | 0.852 | — | 1.00 |
+| open3d_tight | production | 0.525 | 0.870 | 7 / 3 | 0.85 |
+| f3d AO | production | **0.550** | 0.877 | 6 / 3 | 0.83 |
+| three_ao | production | 0.533 | 0.867 | 7 / 3 | 0.83 |
+| three_noao | production | 0.533 | 0.872 | 7 / 2 | 0.82 |
+| three_white | production | 0.533 | 0.873 | 6 / 4 | 0.83 |
+| open3d | described | 0.500 | 0.855 | 6 / 5 | 0.88 |
+| f3d AO | described | 0.533 | 0.876 | 9 / 3 | 0.82 |
+| three_ao | described | 0.542 | **0.878** | 7 / 2 | 0.78 |
+| three_white | described | 0.533 | 0.876 | 5 / 6 | 0.78 |
+
+Read it as three findings, in decreasing confidence:
+
+1. **Every alternative beats the production renders, and by about the same
+   small amount.** +0.015 to +0.026 nDCG, 6–9 queries better against 2–4
+   worse, whichever arm — tight framing alone, f3d's AO, or model-browser's
+   chain with AO on, off, or rims neutralised. That the *direction* is
+   uniform across six independent pixel recipes is the strongest signal
+   here; the *size* is one or two rank swaps per query, and a paired sign
+   test on 7/3 is not significant at n=12. A renderer swap is not the lever
+   that would change what a user sees in the top ten.
+2. **AO, rim colour, and background do not matter to SigLIP at this scale.**
+   three_ao / three_noao / three_white sit within 0.006 of each other; the
+   red/blue rims neither help nor hurt on colour-free queries. The concern
+   that the rims inject a spurious colour signal is not supported by this
+   query set — it did not contain colour words, so it is also not refuted.
+3. **Describing the render in the prompt template does nothing
+   consistent.** The three.js arms with "red and blue rim lighting on a
+   dark background" move −0.007 / +0.011 / +0.003; the grey arms with
+   "untextured grey render" move −0.001 / −0.005 / +0.003. The production
+   templates are fine.
+
+What the arms *do* change is the order: top-10 overlap with the control is
+0.78–0.88, so a renderer swap reshuffles one or two of every ten results
+without making them better. The reshuffle is largest on the queries where
+the sample has few clear matches and many partials (stone golem 0.62–0.80
+across arms, dragon 0.77–0.86), which is where a judge's 1-vs-2 calls
+decide the number.
+
+The judge itself read sensibly on a spot check — a cyclops rated 2 for
+"troll", a golem's fist rated 1 as a component, a vampire in plate rated 1
+for "knight in plate armor" — and the Osteotron was 0 for both queries it
+surfaced under, correctly.
+
+What this does **not** settle: the effect of a better renderer on the
+*coverage* of a query (recall past 20) and on `robust_z`'s weak-query
+verdict, neither of which a top-20 judgement pool can see; and whether the
+uniform small gain is real, which a 1000-model sample with ~4× the
+judgements would answer for about $15. The framing arm is the cheap one to
+take if anything is taken: it is inside `Renderer.views` and changes no
+dependency — but it changes every embedding and pose margin, so it is a
+cache-rebuild item (`docs/cache-rebuild.md`), not a patch.

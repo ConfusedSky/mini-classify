@@ -1,0 +1,3858 @@
+{
+ "root": "/run/media/masa/STLLibrary",
+ "views": 8,
+ "elevations": [
+  20.0,
+  -20.0
+ ],
+ "angles": [
+  [
+   0.0,
+   0.3490658503988659
+  ],
+  [
+   0.7853981633974483,
+   0.3490658503988659
+  ],
+  [
+   1.5707963267948966,
+   0.3490658503988659
+  ],
+  [
+   2.356194490192345,
+   0.3490658503988659
+  ],
+  [
+   3.141592653589793,
+   0.3490658503988659
+  ],
+  [
+   3.9269908169872414,
+   0.3490658503988659
+  ],
+  [
+   4.71238898038469,
+   0.3490658503988659
+  ],
+  [
+   5.497787143782138,
+   0.3490658503988659
+  ],
+  [
+   0.0,
+   -0.3490658503988659
+  ],
+  [
+   0.7853981633974483,
+   -0.3490658503988659
+  ],
+  [
+   1.5707963267948966,
+   -0.3490658503988659
+  ],
+  [
+   2.356194490192345,
+   -0.3490658503988659
+  ],
+  [
+   3.141592653589793,
+   -0.3490658503988659
+  ],
+  [
+   3.9269908169872414,
+   -0.3490658503988659
+  ],
+  [
+   4.71238898038469,
+   -0.3490658503988659
+  ],
+  [
+   5.497787143782138,
+   -0.3490658503988659
+  ]
+ ],
+ "queries": {
+  "dragon": [
+   "32mm_DragonSkullManor_I.stl",
+   "Dragonpeak_Smilodon_Rider_D_(f_helmet) (repaired).stl",
+   "Dragonpeak_Smilodon_A_(no_saddle) (repaired).stl",
+   "AlpharioxDragonForebearer_32mm_RightLowerWing.stl",
+   "32mm_DragonSkullManor_Stair_B.stl",
+   "AlpharioxDragonForebearer_32mm_Head.stl",
+   "Dragonpeak_Smilodon_D_(no_saddle) (repaired).stl",
+   "32mm_DragonSkullManor_Platform_B.stl",
+   "32mm_DragonSkullManor_Horn_E.stl",
+   "AlpharioxDragonForebearer_32mm_RightWing2.stl",
+   "32mm_XenowyvernRider_Dragon.stl",
+   "32mm_DragonSkullManor_Horn_C.stl"
+  ],
+  "wizard casting a spell": [
+   "32mm_WallGateDamaged_Wall1.stl",
+   "32mm_DamagedBarricades_R_Complement.stl",
+   "32mm_DamagedBarricades_Corner_L.stl",
+   "32mm_CultistSorcerer.stl",
+   "Damaged_Pressurized_Container.stl",
+   "32mm_WallCornerDamaged_Left.stl",
+   "Damaged Beam (1).stl",
+   "Damaged Roofing Sprue.stl",
+   "32mm_DamagedBarricades_Corner_R.stl",
+   "Damaged Metal Sheet (3).stl",
+   "32mm_WallCornerDamaged_Right.stl",
+   "Damaged Metal Containers Sprue.stl"
+  ],
+  "barbarian warrior with a sword": [
+   "Dragonpeak_Barbarian_A_(m_helmet) (repaired).stl",
+   "32mm_BarbarianSkeleton.stl",
+   "Barbarian_Open_Hand_R (repaired).stl",
+   "Dragonpeak_Barbarian_B_(m) (repaired).stl",
+   "Standalone_Barbarian_Sword_(repaired).stl",
+   "Barbarian_Open_Hand_L (repaired).stl",
+   "Barbarian_Sword_L (repaired).stl",
+   "Barbarian_Sword_R_(f_size) (repaired).stl",
+   "Barbarian_m_Fist_L (repaired).stl",
+   "Dragonpeak_Barbarian_C_(m_helmet) (repaired).stl",
+   "Barbarian_2H_Sword (repaired).stl",
+   "Standalone_Barbarian_2h_Sword (repaired).stl"
+  ],
+  "troll": [
+   "32mm_FesteringTroll.stl",
+   "Zukki_the_Cellist_Troll_War (repaired).stl",
+   "Troll_Fist_L2_(repaired).stl",
+   "Troll_Talisman_L (repaired).stl",
+   "Svart_Troll_Arm_L (repaired).stl",
+   "Troll_Fist_R (repaired).stl",
+   "Svartwood_Troll_Hunter_C_(m) (repaired).stl",
+   "Drungvandel_Troll_King (repaired).stl",
+   "Troll_Hand_L (repaired).stl",
+   "Gunlutt_the_Guitarist_Troll (repaired).stl",
+   "Troll_Quiver_of_Jawelins (repaired).stl",
+   "Gunlutt_the_Troll(Club) (repaired).stl"
+  ],
+  "bust of a character": [
+   "BUST_Unsupported_Arkham_WholeNoMask.stl",
+   "MechGunslinger_Bust.stl",
+   "DK_Bust_Body.STL",
+   "32mm_ Alejandro_Bust.stl",
+   "LeoOfColossus_Bust_Shield.stl",
+   "BUST_Unsupported_Arkham_BodyMask.stl",
+   "MajorWilliams_Arm_Bust.stl",
+   "DK_Bust_Head_part1.stl",
+   "DK_Bust_Head_detail_1.STL",
+   "MysteriousChampion_Bust.stl",
+   "MattJones_Bust.stl",
+   "Eleanore_Hand_Bust.stl"
+  ],
+  "rider mounted on a horse or beast": [
+   "Standalone_Dwarven_Mountaineer__Short_Spear (repaired).stl",
+   "Dragonpeak_Smilodon_Rider_B_(m) (repaired).stl",
+   "Dwarven_Mountaineer_Quiver (repaired).stl",
+   "Baal's_Demonhound_Rider_A.stl",
+   "Dwarven_Mountaineer_Quiver (repaired).stl",
+   "Dragonpeak_Smilodon_Rider_C_(f_helmet) (repaired).stl",
+   "Dwarven_Mountaineer_E_(f_Mask) (repaired).stl",
+   "Gnome_Depth-Digger_Rider_B_(No_Hat).stl",
+   "Dwarven_Mountaineer_Shield_L (repaired).stl",
+   "32mm_SirRichardMounted.stl",
+   "Dwarven_Mountaineer_Quiver (repaired).stl",
+   "UMesh_Dwarven_Mountaineer_Quiver (repaired).stl"
+  ],
+  "demon": [
+   "Baal's_Demonhound_D_(Saddle).stl",
+   "Baal's_Demonhound_Rider_C_(Hood).stl",
+   "Demon hunter.stl",
+   "Requiem_Demon_Hunter_F.stl",
+   "Baal's_Demonhound_D_(No_Saddle).stl",
+   "Baal's_Demonhound_Rider_B_(Hood).stl",
+   "Baal's_Demonhound_A_(no_saddle).stl",
+   "Requiem_Demon_Hunter_C.stl",
+   "32mm_ShadowDemon.stl",
+   "Requiem_Demon_Hunter_C_(No_Hat).stl",
+   "Requiem_Demon_Hunter_D_(No_Hat).stl",
+   "Baal's_Demonhound_Rider_B.stl"
+  ],
+  "stone golem": [
+   "Golem_Control_Staff_&_Focus_Crystal_L.stl",
+   "Golemmar_Gnome_F_(Hat).stl",
+   "Golemmar_Gnome_D_(Hat).stl",
+   "Golemmar_Gnome_C_(Hat).stl",
+   "Golemmar_Gnome_A_(No_Hat) (Suported).stl",
+   "Golemmar_Lamassu_(No_Saddle).stl",
+   "Gilgamesh_Gnome_King_of_Golemmar.stl",
+   "Golemmar_Ruin.stl",
+   "Golemmar_Gnome_B_(No_Hat).stl",
+   "Golemmar_Gnome_A_(Hat).stl",
+   "Golemmar_Gnome_F_(No_Hat).stl",
+   "Giant_Clay_Golem_Activated.stl"
+  ],
+  "goblin": [
+   "32mm_WerebatGoblin.stl",
+   "32mm_LootingGoblin.stl",
+   "32mm_GoblinBrazier.stl",
+   "32mm_GoblinWarrior.stl",
+   "32mm_GoblinHideoutDoor_Door_B.stl",
+   "32mm_GoblinHideoutDoor_B.stl",
+   "32mm_GoblinBatrider_Solo.stl",
+   "32mm_GoblinArcher.stl",
+   "32mm_GoblinHideoutEntrance_Part2.stl",
+   "32mm_GoblinBlacksmith.stl",
+   "32mm_GoblinChest.stl",
+   "32mm_GoblinKing_Throne.stl"
+  ],
+  "knight in plate armor": [
+   "Bloodhunt_Knight_C_(m) (repaired).stl",
+   "Bloodhunt_Knight_D_(f) (repaired).stl",
+   "Bloodhunt_Knight_E_(f helmet) (repaired).stl",
+   "32mm_CyberKnight.stl",
+   "32mm_DeathKnight.stl",
+   "Bloodhunt_Knight_A_(m_helmet) (repaired).stl",
+   "Death_knight_body_32mm_unsupported.stl",
+   "Death_knight_sword_32mm_unsupported.stl",
+   "Bloodhunt_Knight__B_(m_helmet) (repaired).stl",
+   "Bloodhunt_Knight_E_(f) (repaired).stl",
+   "Bloodhunt_Knight_F_(f_helmet) (repaired).stl",
+   "Bloodhunt_Knight_F_(f) (repaired).stl"
+  ],
+  "robot or mech": [
+   "BartholomewRiberdani_Bust_Mech.stl",
+   "32mm_RoboticEnvoy.stl",
+   "MechanicBay_Plug02.stl",
+   "MechanicBay_Table1.stl",
+   "32mm_MechaLasher.stl",
+   "32mm_DamagedSecurityRobot.stl",
+   "MechGunslinger_Bust_Arm.stl",
+   "32mm_MechaZombie.stl",
+   "MechanicBay_HandrailLeftPart02.stl",
+   "Enforcer_Robot_Dog.stl",
+   "MechanicBay_HandrailLeftPart01.stl",
+   "32mm_MaintenanceRobot.stl"
+  ],
+  "treasure chest": [
+   "Treasure_Chest_Closed.stl",
+   "Treasure_Chest_Open_Empty.stl",
+   "NightmareChest_32mm.stl",
+   "32mm_FrostChest.stl",
+   "FN2205AO12_32mm_Chest.stl",
+   "Treasure_Chest_Mimic_C.stl",
+   "32mm_Chest.stl",
+   "Treasure_Chest_Mimic_B.stl",
+   "32mm_ChestColiseum.stl",
+   "32mm_PirateChest.stl",
+   "32mm_SeaChest.stl",
+   "32mm_Chest.stl"
+  ]
+ },
+ "sample": [
+  {
+   "n": 0,
+   "row": 18,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Archanists Guild/Apprentice Arcanists/Apprentice Arcanist C/Kit I (Grimoire and Spell)/Apprentice_Spell_Spark_L.stl",
+   "rel": "Artisan Guild/Archanists Guild/Apprentice Arcanists/Apprentice Arcanist C/Kit I (Grimoire and Spell)/Apprentice_Spell_Spark_L.stl",
+   "key": "Apprentice_Spell_Spark_L_fe7d5c",
+   "up": [
+    0.0,
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "n": 1,
+   "row": 36,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Archanists Guild/Apprentice Arcanists/Apprentice Arcanist F/Kit I (Arcane Sword & Staff)/Apprentice_Staff_L_(angle_2).stl",
+   "rel": "Artisan Guild/Archanists Guild/Apprentice Arcanists/Apprentice Arcanist F/Kit I (Arcane Sword & Staff)/Apprentice_Staff_L_(angle_2).stl",
+   "key": "Apprentice_Staff_L_(angle_2)_ad86db",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 2,
+   "row": 48,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Archanists Guild/Giant Clay Golem/Activated Giant Clay Golem/Giant_Clay_Golem_Activated.stl",
+   "rel": "Artisan Guild/Archanists Guild/Giant Clay Golem/Activated Giant Clay Golem/Giant_Clay_Golem_Activated.stl",
+   "key": "Giant_Clay_Golem_Activated_298074",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 3,
+   "row": 86,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Archanists Guild/Treasures Chests and Mimics/Treasure_Chest_Closed.stl",
+   "rel": "Artisan Guild/Archanists Guild/Treasures Chests and Mimics/Treasure_Chest_Closed.stl",
+   "key": "Treasure_Chest_Closed_4401e9",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 4,
+   "row": 88,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Archanists Guild/Treasures Chests and Mimics/Treasure_Chest_Mimic_B.stl",
+   "rel": "Artisan Guild/Archanists Guild/Treasures Chests and Mimics/Treasure_Chest_Mimic_B.stl",
+   "key": "Treasure_Chest_Mimic_B_3924c2",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 5,
+   "row": 89,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Archanists Guild/Treasures Chests and Mimics/Treasure_Chest_Mimic_C.stl",
+   "rel": "Artisan Guild/Archanists Guild/Treasures Chests and Mimics/Treasure_Chest_Mimic_C.stl",
+   "key": "Treasure_Chest_Mimic_C_b294e9",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 6,
+   "row": 90,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Archanists Guild/Treasures Chests and Mimics/Treasure_Chest_Open_Empty.stl",
+   "rel": "Artisan Guild/Archanists Guild/Treasures Chests and Mimics/Treasure_Chest_Open_Empty.stl",
+   "key": "Treasure_Chest_Open_Empty_53764d",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 7,
+   "row": 114,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider A/Kit II (Archer Rider)/Baal's_Demonhound_Rider_A.stl",
+   "rel": "Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider A/Kit II (Archer Rider)/Baal's_Demonhound_Rider_A.stl",
+   "key": "Baal's_Demonhound_Rider_A_a5f607",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 8,
+   "row": 118,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider A/No Saddle Demonhound/Baal's_Demonhound_A_(no_saddle).stl",
+   "rel": "Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider A/No Saddle Demonhound/Baal's_Demonhound_A_(no_saddle).stl",
+   "key": "Baal's_Demonhound_A_(no_saddle)_f452a4",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 9,
+   "row": 120,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider B/Kit I (Warlok Rider)/Baal's_Demonhound_Rider_B_(Hood).stl",
+   "rel": "Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider B/Kit I (Warlok Rider)/Baal's_Demonhound_Rider_B_(Hood).stl",
+   "key": "Baal's_Demonhound_Rider_B_(Hood)_f07275",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 10,
+   "row": 123,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider B/Kit II (Bard Rider)/Baal's_Demonhound_Rider_B.stl",
+   "rel": "Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider B/Kit II (Bard Rider)/Baal's_Demonhound_Rider_B.stl",
+   "key": "Baal's_Demonhound_Rider_B_8e8b39",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 11,
+   "row": 131,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider C/Kit II (Archer Rider)/Baal's_Demonhound_Rider_C_(Hood).stl",
+   "rel": "Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider C/Kit II (Archer Rider)/Baal's_Demonhound_Rider_C_(Hood).stl",
+   "key": "Baal's_Demonhound_Rider_C_(Hood)_a812bb",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 12,
+   "row": 135,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider C/No Saddle Demonhound/Baal's_Demonhound_C_(no_Saddle).stl",
+   "rel": "Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider C/No Saddle Demonhound/Baal's_Demonhound_C_(no_Saddle).stl",
+   "key": "Baal's_Demonhound_C_(no_Saddle)_4c92cc",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 13,
+   "row": 136,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider D/Baal's_Demonhound_D_(Saddle).stl",
+   "rel": "Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider D/Baal's_Demonhound_D_(Saddle).stl",
+   "key": "Baal's_Demonhound_D_(Saddle)_4093d7",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 14,
+   "row": 143,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider D/No Saddle Demonhound/Baal's_Demonhound_D_(No_Saddle).stl",
+   "rel": "Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider D/No Saddle Demonhound/Baal's_Demonhound_D_(No_Saddle).stl",
+   "key": "Baal's_Demonhound_D_(No_Saddle)_9dc058",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 15,
+   "row": 179,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Mezzalfiend Tricksters/Mezzalfiend Trickster D/Kit II (Assassin)/Trickster_Blade_(lady)_R.stl",
+   "rel": "Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Mezzalfiend Tricksters/Mezzalfiend Trickster D/Kit II (Assassin)/Trickster_Blade_(lady)_R.stl",
+   "key": "Trickster_Blade_(lady)_R_d55c10",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 16,
+   "row": 184,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Mezzalfiend Tricksters/Mezzalfiend Trickster E/Kit II (Bard)/Trickster_Lute_(lady)_L.stl",
+   "rel": "Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Mezzalfiend Tricksters/Mezzalfiend Trickster E/Kit II (Bard)/Trickster_Lute_(lady)_L.stl",
+   "key": "Trickster_Lute_(lady)_L_65091d",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 17,
+   "row": 189,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Mezzalfiend Tricksters/Mezzalfiend Trickster F/Kit II (Ranger)/Mezzalfiend_Open_Hand_(lady)_L_angle2.stl",
+   "rel": "Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Mezzalfiend Tricksters/Mezzalfiend Trickster F/Kit II (Ranger)/Mezzalfiend_Open_Hand_(lady)_L_angle2.stl",
+   "key": "Mezzalfiend_Open_Hand_(lady)_L_angle2_85bc94",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 18,
+   "row": 226,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Darkness of the Lich Lord/37 Darkness of the Lich Lord - May 2022 AG/Skutagaard Draugar/Skutagaard Draugr A/Skutagaard_Draugr_A.stl",
+   "rel": "Artisan Guild/Darkness of the Lich Lord/37 Darkness of the Lich Lord - May 2022 AG/Skutagaard Draugar/Skutagaard Draugr A/Skutagaard_Draugr_A.stl",
+   "key": "Skutagaard_Draugr_A_30e30b",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 19,
+   "row": 242,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Darkness of the Lich Lord/37 Darkness of the Lich Lord - May 2022 AG/Skutagaard Draugar/Skutagaard Draugr E/Skutagaard_Draugr_E.stl",
+   "rel": "Artisan Guild/Darkness of the Lich Lord/37 Darkness of the Lich Lord - May 2022 AG/Skutagaard Draugar/Skutagaard Draugr E/Skutagaard_Draugr_E.stl",
+   "key": "Skutagaard_Draugr_E_b3a931",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 20,
+   "row": 272,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Darkness of the Lich Lord/37 Darkness of the Lich Lord - May 2022 AG/Standalone Weapons & Hands/Standalone_Draugr_Quiver.stl",
+   "rel": "Artisan Guild/Darkness of the Lich Lord/37 Darkness of the Lich Lord - May 2022 AG/Standalone Weapons & Hands/Standalone_Draugr_Quiver.stl",
+   "key": "Standalone_Draugr_Quiver_5ac477",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 21,
+   "row": 277,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Darkness of the Lich Lord/37 Darkness of the Lich Lord - May 2022 AG/Standalone Weapons & Hands/Standalone_Lich_Lord_Sword_(No_Spell_Effect).stl",
+   "rel": "Artisan Guild/Darkness of the Lich Lord/37 Darkness of the Lich Lord - May 2022 AG/Standalone Weapons & Hands/Standalone_Lich_Lord_Sword_(No_Spell_Effect).stl",
+   "key": "Standalone_Lich_Lord_Sword_(No_Spell_Effect)_0af02d",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 22,
+   "row": 293,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Dragonpeak Wyvern/Dragonpeak_wyvern_(saddle) (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Dragonpeak Wyvern/Dragonpeak_wyvern_(saddle) (repaired).stl",
+   "key": "Dragonpeak_wyvern_(saddle) (repaired)_d1aac8",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 23,
+   "row": 295,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Dragonpeak Wyvern/Krommir_Sword_L (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Dragonpeak Wyvern/Krommir_Sword_L (repaired).stl",
+   "key": "Krommir_Sword_L (repaired)_786a28",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 24,
+   "row": 296,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Dragonpeak Wyvern/Krommir_Sword_R (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Dragonpeak Wyvern/Krommir_Sword_R (repaired).stl",
+   "key": "Krommir_Sword_R (repaired)_0eb5e0",
+   "up": [
+    -1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 25,
+   "row": 309,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian A (m)/Barbarian_2H_Sword (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian A (m)/Barbarian_2H_Sword (repaired).stl",
+   "key": "Barbarian_2H_Sword (repaired)_4467e1",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 26,
+   "row": 311,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian A (m)/Dragonpeak_Barbarian_A_(m_helmet) (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian A (m)/Dragonpeak_Barbarian_A_(m_helmet) (repaired).stl",
+   "key": "Dragonpeak_Barbarian_A_(m_helmet) (repaired)_dcb2e4",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 27,
+   "row": 313,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian B (m)/Barbarian_2H_Sword (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian B (m)/Barbarian_2H_Sword (repaired).stl",
+   "key": "Barbarian_2H_Sword (repaired)_0acc4a",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 28,
+   "row": 314,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian B (m)/Dragonpeak_Barbarian_B_(m) (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian B (m)/Dragonpeak_Barbarian_B_(m) (repaired).stl",
+   "key": "Dragonpeak_Barbarian_B_(m) (repaired)_62e40a",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 29,
+   "row": 316,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian C (m)/Barbarian_Sword_L (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian C (m)/Barbarian_Sword_L (repaired).stl",
+   "key": "Barbarian_Sword_L (repaired)_d0fdb7",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 30,
+   "row": 321,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian C (m)/Dragonpeak_Barbarian_C_(m_helmet) (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian C (m)/Dragonpeak_Barbarian_C_(m_helmet) (repaired).stl",
+   "key": "Dragonpeak_Barbarian_C_(m_helmet) (repaired)_7a30d5",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 31,
+   "row": 328,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian E (f)/Barbarian_Sword_R_(f_size) (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian E (f)/Barbarian_Sword_R_(f_size) (repaired).stl",
+   "key": "Barbarian_Sword_R_(f_size) (repaired)_6eb600",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 32,
+   "row": 338,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider A (m)/Barbarian_Open_Hand_R (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider A (m)/Barbarian_Open_Hand_R (repaired).stl",
+   "key": "Barbarian_Open_Hand_R (repaired)_3dc0a6",
+   "up": [
+    0.0,
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "n": 33,
+   "row": 340,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider A (m)/Dragonpeak_Smilodon_A_(no_saddle) (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider A (m)/Dragonpeak_Smilodon_A_(no_saddle) (repaired).stl",
+   "key": "Dragonpeak_Smilodon_A_(no_saddle) (repaired)_c20de0",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 34,
+   "row": 346,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider B (m)/Dragonpeak_Smilodon_Rider_B_(m) (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider B (m)/Dragonpeak_Smilodon_Rider_B_(m) (repaired).stl",
+   "key": "Dragonpeak_Smilodon_Rider_B_(m) (repaired)_7451ed",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 35,
+   "row": 348,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider B (m)/Dragonpeak_Throwing_Axe_L (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider B (m)/Dragonpeak_Throwing_Axe_L (repaired).stl",
+   "key": "Dragonpeak_Throwing_Axe_L (repaired)_b2aadb",
+   "up": [
+    -1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 36,
+   "row": 355,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider C (f)/Dragonpeak_Smilodon_Rider_C_(f_helmet) (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider C (f)/Dragonpeak_Smilodon_Rider_C_(f_helmet) (repaired).stl",
+   "key": "Dragonpeak_Smilodon_Rider_C_(f_helmet) (repaired)_e3ff40",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 37,
+   "row": 358,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider D (f)/Dragonpeak_Smilodon_D_(no_saddle) (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider D (f)/Dragonpeak_Smilodon_D_(no_saddle) (repaired).stl",
+   "key": "Dragonpeak_Smilodon_D_(no_saddle) (repaired)_586261",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 38,
+   "row": 361,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider D (f)/Dragonpeak_Smilodon_Rider_D_(f_helmet) (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider D (f)/Dragonpeak_Smilodon_Rider_D_(f_helmet) (repaired).stl",
+   "key": "Dragonpeak_Smilodon_Rider_D_(f_helmet) (repaired)_4b4841",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 39,
+   "row": 362,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Standalone Barbarian Weapons & Hands/Barbarian_Open_Hand_L (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Standalone Barbarian Weapons & Hands/Barbarian_Open_Hand_L (repaired).stl",
+   "key": "Barbarian_Open_Hand_L (repaired)_5c25ef",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 40,
+   "row": 366,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Standalone Barbarian Weapons & Hands/Barbarian_m_Fist_L (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Standalone Barbarian Weapons & Hands/Barbarian_m_Fist_L (repaired).stl",
+   "key": "Barbarian_m_Fist_L (repaired)_7c081f",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 41,
+   "row": 367,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Standalone Barbarian Weapons & Hands/Barbarian_m_Fist_R (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Standalone Barbarian Weapons & Hands/Barbarian_m_Fist_R (repaired).stl",
+   "key": "Barbarian_m_Fist_R (repaired)_be1c54",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 42,
+   "row": 369,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Standalone Barbarian Weapons & Hands/Standalone_Barbarian_2h_Sword (repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Standalone Barbarian Weapons & Hands/Standalone_Barbarian_2h_Sword (repaired).stl",
+   "key": "Standalone_Barbarian_2h_Sword (repaired)_fe383f",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 43,
+   "row": 370,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Standalone Barbarian Weapons & Hands/Standalone_Barbarian_Sword_(repaired).stl",
+   "rel": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Standalone Barbarian Weapons & Hands/Standalone_Barbarian_Sword_(repaired).stl",
+   "key": "Standalone_Barbarian_Sword_(repaired)_758799",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 44,
+   "row": 385,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Drarven Ram Riders/Dwarven Ram Rider B (m)/Dwarven_Mountaineer_Quiver (repaired).stl",
+   "rel": "Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Drarven Ram Riders/Dwarven Ram Rider B (m)/Dwarven_Mountaineer_Quiver (repaired).stl",
+   "key": "Dwarven_Mountaineer_Quiver (repaired)_b782e6",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 45,
+   "row": 394,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Drarven Ram Riders/Dwarven Ram Rider C (f)/Dwarven_Ram_Rider_C_(f) (repaired).stl",
+   "rel": "Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Drarven Ram Riders/Dwarven Ram Rider C (f)/Dwarven_Ram_Rider_C_(f) (repaired).stl",
+   "key": "Dwarven_Ram_Rider_C_(f) (repaired)_03e75d",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 46,
+   "row": 400,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Drarven Ram Riders/Dwarven Ram Rider D (f)/Dwarven_Mountaineer_Quiver (repaired).stl",
+   "rel": "Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Drarven Ram Riders/Dwarven Ram Rider D (f)/Dwarven_Mountaineer_Quiver (repaired).stl",
+   "key": "Dwarven_Mountaineer_Quiver (repaired)_7aa43a",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 47,
+   "row": 415,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Dwarven Mountaineers/Dwarven Mountaineer B (m)/Dwarven_Mountaineer_Spear_L+R (repaired).stl",
+   "rel": "Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Dwarven Mountaineers/Dwarven Mountaineer B (m)/Dwarven_Mountaineer_Spear_L+R (repaired).stl",
+   "key": "Dwarven_Mountaineer_Spear_L+R (repaired)_c49741",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 48,
+   "row": 422,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Dwarven Mountaineers/Dwarven Mountaineer C (m)/Dwarven_Mountaineer_Shield_R (repaired).stl",
+   "rel": "Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Dwarven Mountaineers/Dwarven Mountaineer C (m)/Dwarven_Mountaineer_Shield_R (repaired).stl",
+   "key": "Dwarven_Mountaineer_Shield_R (repaired)_88705c",
+   "up": [
+    -1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 49,
+   "row": 425,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Dwarven Mountaineers/Dwarven Mountaineer D (f)/Dwarven_Mountaineer_D_(f_Mask) (repaired).stl",
+   "rel": "Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Dwarven Mountaineers/Dwarven Mountaineer D (f)/Dwarven_Mountaineer_D_(f_Mask) (repaired).stl",
+   "key": "Dwarven_Mountaineer_D_(f_Mask) (repaired)_748686",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 50,
+   "row": 427,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Dwarven Mountaineers/Dwarven Mountaineer D (f)/Dwarven_Mountaineer_Shield_L (repaired).stl",
+   "rel": "Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Dwarven Mountaineers/Dwarven Mountaineer D (f)/Dwarven_Mountaineer_Shield_L (repaired).stl",
+   "key": "Dwarven_Mountaineer_Shield_L (repaired)_eb716c",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 51,
+   "row": 430,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Dwarven Mountaineers/Dwarven Mountaineer E (f)/Dwarven_Mountaineer_E_(f_Mask) (repaired).stl",
+   "rel": "Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Dwarven Mountaineers/Dwarven Mountaineer E (f)/Dwarven_Mountaineer_E_(f_Mask) (repaired).stl",
+   "key": "Dwarven_Mountaineer_E_(f_Mask) (repaired)_ec13e7",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 52,
+   "row": 435,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Dwarven Mountaineers/Dwarven Mountaineer F (f)/UMesh_Dwarven_Mountaineer_F_(f_Mask) (repaired).stl",
+   "rel": "Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Dwarven Mountaineers/Dwarven Mountaineer F (f)/UMesh_Dwarven_Mountaineer_F_(f_Mask) (repaired).stl",
+   "key": "UMesh_Dwarven_Mountaineer_F_(f_Mask) (repaired)_b87a1c",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 53,
+   "row": 437,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Dwarven Mountaineers/Dwarven Mountaineer F (f)/UMesh_Dwarven_Mountaineer_Quiver (repaired).stl",
+   "rel": "Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Dwarven Mountaineers/Dwarven Mountaineer F (f)/UMesh_Dwarven_Mountaineer_Quiver (repaired).stl",
+   "key": "UMesh_Dwarven_Mountaineer_Quiver (repaired)_8cba03",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 54,
+   "row": 452,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Standalone Weapons and Hands/Dwarven_Mountaineer_Quiver (repaired).stl",
+   "rel": "Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Standalone Weapons and Hands/Dwarven_Mountaineer_Quiver (repaired).stl",
+   "key": "Dwarven_Mountaineer_Quiver (repaired)_75fd28",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 55,
+   "row": 458,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Standalone Weapons and Hands/Standalone_Dwarven_Mountaineer__Short_Spear (repaired).stl",
+   "rel": "Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Standalone Weapons and Hands/Standalone_Dwarven_Mountaineer__Short_Spear (repaired).stl",
+   "key": "Standalone_Dwarven_Mountaineer__Short_Spear (repaired)_67c467",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 56,
+   "row": 484,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Epic Bosses/Epic Boss 13 - Great Linnorm of Skutagaard/Great_Linnorm_of_Skutagaard_(bottom).stl",
+   "rel": "Artisan Guild/Epic Bosses/Epic Boss 13 - Great Linnorm of Skutagaard/Great_Linnorm_of_Skutagaard_(bottom).stl",
+   "key": "Great_Linnorm_of_Skutagaard_(bottom)_d23344",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 57,
+   "row": 496,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Depth Digger Riders/Depth Digger B/Kit I (Crossbow Rider)/Gnome_Depth-Digger_Rider_B_(No_Hat).stl",
+   "rel": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Depth Digger Riders/Depth Digger B/Kit I (Crossbow Rider)/Gnome_Depth-Digger_Rider_B_(No_Hat).stl",
+   "key": "Gnome_Depth-Digger_Rider_B_(No_Hat)_44846c",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 58,
+   "row": 502,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Depth Digger Riders/Depth Digger B/Kit II (Spear Rider)/Gnomish_Miner_Backpack.stl",
+   "rel": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Depth Digger Riders/Depth Digger B/Kit II (Spear Rider)/Gnomish_Miner_Backpack.stl",
+   "key": "Gnomish_Miner_Backpack_f53327",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 59,
+   "row": 516,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Depth Digger Riders/Depth Digger D/Depth_Digger_D_(Saddle).stl",
+   "rel": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Depth Digger Riders/Depth Digger D/Depth_Digger_D_(Saddle).stl",
+   "key": "Depth_Digger_D_(Saddle)_61da68",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 60,
+   "row": 529,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Gilgamesh - Gnome King of Golemmar/Gilgamesh_Gnome_King_of_Golemmar.stl",
+   "rel": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Gilgamesh - Gnome King of Golemmar/Gilgamesh_Gnome_King_of_Golemmar.stl",
+   "key": "Gilgamesh_Gnome_King_of_Golemmar_de19c0",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 61,
+   "row": 531,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Gilgamesh - Gnome King of Golemmar/Gilgamesh_Steam_Gauntlet_R.stl",
+   "rel": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Gilgamesh - Gnome King of Golemmar/Gilgamesh_Steam_Gauntlet_R.stl",
+   "key": "Gilgamesh_Steam_Gauntlet_R_a19f13",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 62,
+   "row": 532,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Gilgamesh - Gnome King of Golemmar/Golem_Control_Staff_&_Focus_Crystal_L.stl",
+   "rel": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Gilgamesh - Gnome King of Golemmar/Golem_Control_Staff_&_Focus_Crystal_L.stl",
+   "key": "Golem_Control_Staff_&_Focus_Crystal_L_61b6dd",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 63,
+   "row": 537,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome A/Kit I (Steamgauntlet and Pickaxe)/Golemmar_Gnome_A_(No_Hat) (Suported).stl",
+   "rel": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome A/Kit I (Steamgauntlet and Pickaxe)/Golemmar_Gnome_A_(No_Hat) (Suported).stl",
+   "key": "Golemmar_Gnome_A_(No_Hat) (Suported)_5086e7",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 64,
+   "row": 543,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome A/Kit II (Hat, Pickaxe and Lantern)/Golemmar_Gnome_A_(Hat).stl",
+   "rel": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome A/Kit II (Hat, Pickaxe and Lantern)/Golemmar_Gnome_A_(Hat).stl",
+   "key": "Golemmar_Gnome_A_(Hat)_6304a0",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 65,
+   "row": 548,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome B/Kit I (Goggle, Steam Crossbow)/Golemmar_Gnome_B_(No_Hat).stl",
+   "rel": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome B/Kit I (Goggle, Steam Crossbow)/Golemmar_Gnome_B_(No_Hat).stl",
+   "key": "Golemmar_Gnome_B_(No_Hat)_2bec8e",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 66,
+   "row": 559,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome C/Kit II (Hat, Hammer & Shield)/Golemmar_Gnome_C_(Hat).stl",
+   "rel": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome C/Kit II (Hat, Hammer & Shield)/Golemmar_Gnome_C_(Hat).stl",
+   "key": "Golemmar_Gnome_C_(Hat)_044963",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 67,
+   "row": 562,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome D/Kit I (Steamgauntlet and Pickaxe)/Gn.Female_Pickaxe_angle2_R.stl",
+   "rel": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome D/Kit I (Steamgauntlet and Pickaxe)/Gn.Female_Pickaxe_angle2_R.stl",
+   "key": "Gn.Female_Pickaxe_angle2_R_9dc244",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 68,
+   "row": 571,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome D/Kit II (Hat, Pickaxe and Lantern)/Golemmar_Gnome_D_(Hat).stl",
+   "rel": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome D/Kit II (Hat, Pickaxe and Lantern)/Golemmar_Gnome_D_(Hat).stl",
+   "key": "Golemmar_Gnome_D_(Hat)_112dd9",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 69,
+   "row": 573,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome E/Kit I (Goggle, Steam Crossbow)/Female_Steam_Crossbow_L.stl",
+   "rel": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome E/Kit I (Goggle, Steam Crossbow)/Female_Steam_Crossbow_L.stl",
+   "key": "Female_Steam_Crossbow_L_4d4a15",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 70,
+   "row": 590,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome F/Kit I (Steam Fists)/Golemmar_Gnome_F_(No_Hat).stl",
+   "rel": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome F/Kit I (Steam Fists)/Golemmar_Gnome_F_(No_Hat).stl",
+   "key": "Golemmar_Gnome_F_(No_Hat)_b7cd34",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 71,
+   "row": 593,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome F/Kit II (Hat and Dual Hammers)/Gn.Female_Hammer_L.stl",
+   "rel": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome F/Kit II (Hat and Dual Hammers)/Gn.Female_Hammer_L.stl",
+   "key": "Gn.Female_Hammer_L_f10614",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 72,
+   "row": 596,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome F/Kit II (Hat and Dual Hammers)/Golemmar_Gnome_F_(Hat).stl",
+   "rel": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome F/Kit II (Hat and Dual Hammers)/Golemmar_Gnome_F_(Hat).stl",
+   "key": "Golemmar_Gnome_F_(Hat)_26832e",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 73,
+   "row": 597,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Ruin/Golemmar_Ruin.stl",
+   "rel": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Ruin/Golemmar_Ruin.stl",
+   "key": "Golemmar_Ruin_4af01f",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 74,
+   "row": 603,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Ishtara on Golemmar Lamassu/Golemmar Lamassu (No Saddle)/Golemmar_Lamassu_(No_Saddle).stl",
+   "rel": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Ishtara on Golemmar Lamassu/Golemmar Lamassu (No Saddle)/Golemmar_Lamassu_(No_Saddle).stl",
+   "key": "Golemmar_Lamassu_(No_Saddle)_38f89a",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 75,
+   "row": 625,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Standalone Weapons & Hands/Steam_Gauntlet.stl",
+   "rel": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Standalone Weapons & Hands/Steam_Gauntlet.stl",
+   "key": "Steam_Gauntlet_e1fe88",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 76,
+   "row": 668,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Maneaters Nagarots/31 Maneaters Nagarots - November 2021 AG/Nagarot Thralls/Nagarot Thrall F/Sacrifical_Heart_R (repaired).stl",
+   "rel": "Artisan Guild/Maneaters Nagarots/31 Maneaters Nagarots - November 2021 AG/Nagarot Thralls/Nagarot Thrall F/Sacrifical_Heart_R (repaired).stl",
+   "key": "Sacrifical_Heart_R (repaired)_c3ad45",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 77,
+   "row": 688,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Maneaters Nagarots/31 Maneaters Nagarots - November 2021 AG/Standalone Weapons & Hands/Standalone_Naga_Sacrifical_Knife (repaired).stl",
+   "rel": "Artisan Guild/Maneaters Nagarots/31 Maneaters Nagarots - November 2021 AG/Standalone Weapons & Hands/Standalone_Naga_Sacrifical_Knife (repaired).stl",
+   "key": "Standalone_Naga_Sacrifical_Knife (repaired)_405feb",
+   "up": [
+    0.0,
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "n": 78,
+   "row": 703,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Order of the Labyrinth/34 Order of the Labyrinth - February 2022 AG/Minoc Chariots/Minoc Chariot A/Chariot Riders A/Labyrinth Minoc A/Labyrinth_Minoc_A_(m)_(repaired).stl",
+   "rel": "Artisan Guild/Order of the Labyrinth/34 Order of the Labyrinth - February 2022 AG/Minoc Chariots/Minoc Chariot A/Chariot Riders A/Labyrinth Minoc A/Labyrinth_Minoc_A_(m)_(repaired).stl",
+   "key": "Labyrinth_Minoc_A_(m)_(repaired)_244abb",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 79,
+   "row": 716,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Order of the Labyrinth/34 Order of the Labyrinth - February 2022 AG/Minoc Chariots/Minoc Chariot A/Minoc_Horses_A2_(Chariot_Haness) (repaired).stl",
+   "rel": "Artisan Guild/Order of the Labyrinth/34 Order of the Labyrinth - February 2022 AG/Minoc Chariots/Minoc Chariot A/Minoc_Horses_A2_(Chariot_Haness) (repaired).stl",
+   "key": "Minoc_Horses_A2_(Chariot_Haness) (repaired)_84adb0",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 80,
+   "row": 768,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Order of the Labyrinth/34 Order of the Labyrinth - February 2022 AG/Modular Labirynth Minocs/Labyrinth Minoc E/Labyrinth_Minoc_E_(f_helmet) (repaired).stl",
+   "rel": "Artisan Guild/Order of the Labyrinth/34 Order of the Labyrinth - February 2022 AG/Modular Labirynth Minocs/Labyrinth Minoc E/Labyrinth_Minoc_E_(f_helmet) (repaired).stl",
+   "key": "Labyrinth_Minoc_E_(f_helmet) (repaired)_4b2e05",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 81,
+   "row": 810,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Requiem Demon Hunters/41 Requiem Demon Hunters (Complete)/Requiem Demon Hunters/Requiem Demon Hunter C/Kit I (Heavy Crossbow)/Requiem_Demon_Hunter_C.stl",
+   "rel": "Artisan Guild/Requiem Demon Hunters/41 Requiem Demon Hunters (Complete)/Requiem Demon Hunters/Requiem Demon Hunter C/Kit I (Heavy Crossbow)/Requiem_Demon_Hunter_C.stl",
+   "key": "Requiem_Demon_Hunter_C_8828e2",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 82,
+   "row": 814,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Requiem Demon Hunters/41 Requiem Demon Hunters (Complete)/Requiem Demon Hunters/Requiem Demon Hunter C/Kit II (No Hat Gun)/Requiem_Demon_Hunter_C_(No_Hat).stl",
+   "rel": "Artisan Guild/Requiem Demon Hunters/41 Requiem Demon Hunters (Complete)/Requiem Demon Hunters/Requiem Demon Hunter C/Kit II (No Hat Gun)/Requiem_Demon_Hunter_C_(No_Hat).stl",
+   "key": "Requiem_Demon_Hunter_C_(No_Hat)_87fa08",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 83,
+   "row": 821,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Requiem Demon Hunters/41 Requiem Demon Hunters (Complete)/Requiem Demon Hunters/Requiem Demon Hunter D/Kit II (No Hat Whip & Estoc)/Requiem_Demon_Hunter_D_(No_Hat).stl",
+   "rel": "Artisan Guild/Requiem Demon Hunters/41 Requiem Demon Hunters (Complete)/Requiem Demon Hunters/Requiem Demon Hunter D/Kit II (No Hat Whip & Estoc)/Requiem_Demon_Hunter_D_(No_Hat).stl",
+   "key": "Requiem_Demon_Hunter_D_(No_Hat)_9e69c5",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 84,
+   "row": 824,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Requiem Demon Hunters/41 Requiem Demon Hunters (Complete)/Requiem Demon Hunters/Requiem Demon Hunter E/Kit I (Crossbow & Torch)/Requiem_Handcrossbow_R.stl",
+   "rel": "Artisan Guild/Requiem Demon Hunters/41 Requiem Demon Hunters (Complete)/Requiem Demon Hunters/Requiem Demon Hunter E/Kit I (Crossbow & Torch)/Requiem_Handcrossbow_R.stl",
+   "key": "Requiem_Handcrossbow_R_004f21",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 85,
+   "row": 828,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Requiem Demon Hunters/41 Requiem Demon Hunters (Complete)/Requiem Demon Hunters/Requiem Demon Hunter E/Kit II (No Hat Hatchet & Pistol)/Requiem_Hatchet_L.stl",
+   "rel": "Artisan Guild/Requiem Demon Hunters/41 Requiem Demon Hunters (Complete)/Requiem Demon Hunters/Requiem Demon Hunter E/Kit II (No Hat Hatchet & Pistol)/Requiem_Hatchet_L.stl",
+   "key": "Requiem_Hatchet_L_1ea96e",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 86,
+   "row": 830,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Requiem Demon Hunters/41 Requiem Demon Hunters (Complete)/Requiem Demon Hunters/Requiem Demon Hunter F/Kit I (Heavy Crossbow)/Requiem_Demon_Hunter_F.stl",
+   "rel": "Artisan Guild/Requiem Demon Hunters/41 Requiem Demon Hunters (Complete)/Requiem Demon Hunters/Requiem Demon Hunter F/Kit I (Heavy Crossbow)/Requiem_Demon_Hunter_F.stl",
+   "key": "Requiem_Demon_Hunter_F_504d2a",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 87,
+   "row": 912,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Slathaai of House Mora/28 Slathaai of House Mora - June 2022 AG/Chuulzk the Hive Crawler/Oslag_Glaive_R.stl",
+   "rel": "Artisan Guild/Slathaai of House Mora/28 Slathaai of House Mora - June 2022 AG/Chuulzk the Hive Crawler/Oslag_Glaive_R.stl",
+   "key": "Oslag_Glaive_R_8fc255",
+   "up": [
+    -1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 88,
+   "row": 940,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Slathaai of House Mora/28 Slathaai of House Mora - June 2022 AG/Oslag the Zeekmaster/Oslag_the_Zeekmaster.stl",
+   "rel": "Artisan Guild/Slathaai of House Mora/28 Slathaai of House Mora - June 2022 AG/Oslag the Zeekmaster/Oslag_the_Zeekmaster.stl",
+   "key": "Oslag_the_Zeekmaster_3978f3",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 89,
+   "row": 957,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Slathaai of House Mora/28 Slathaai of House Mora - June 2022 AG/Standalone Hands & Weapons & Spells/Standalone_Slathaai_Staff.stl",
+   "rel": "Artisan Guild/Slathaai of House Mora/28 Slathaai of House Mora - June 2022 AG/Standalone Hands & Weapons & Spells/Standalone_Slathaai_Staff.stl",
+   "key": "Standalone_Slathaai_Staff_957ed9",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 90,
+   "row": 958,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Slathaai of House Mora/28 Slathaai of House Mora - June 2022 AG/Standalone Hands & Weapons & Spells/Standalone_Sphere_Spell.stl",
+   "rel": "Artisan Guild/Slathaai of House Mora/28 Slathaai of House Mora - June 2022 AG/Standalone Hands & Weapons & Spells/Standalone_Sphere_Spell.stl",
+   "key": "Standalone_Sphere_Spell_5dfc98",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 91,
+   "row": 964,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Drungvandel the Troll King/Drungvandel_Hand_L (repaired).stl",
+   "rel": "Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Drungvandel the Troll King/Drungvandel_Hand_L (repaired).stl",
+   "key": "Drungvandel_Hand_L (repaired)_b73851",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 92,
+   "row": 967,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Drungvandel the Troll King/Drungvandel_Troll_King (repaired).stl",
+   "rel": "Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Drungvandel the Troll King/Drungvandel_Troll_King (repaired).stl",
+   "key": "Drungvandel_Troll_King (repaired)_9c03c7",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 93,
+   "row": 973,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Giant Svart Troll/Svart_Troll_Arm_L (repaired).stl",
+   "rel": "Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Giant Svart Troll/Svart_Troll_Arm_L (repaired).stl",
+   "key": "Svart_Troll_Arm_L (repaired)_2e4a82",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 94,
+   "row": 987,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Standalone Weapons & Hands/Troll_Fist_L2_(repaired).stl",
+   "rel": "Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Standalone Weapons & Hands/Troll_Fist_L2_(repaired).stl",
+   "key": "Troll_Fist_L2_(repaired)_d6b5b6",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 95,
+   "row": 988,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Standalone Weapons & Hands/Troll_Fist_R (repaired).stl",
+   "rel": "Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Standalone Weapons & Hands/Troll_Fist_R (repaired).stl",
+   "key": "Troll_Fist_R (repaired)_6e603f",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 96,
+   "row": 990,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Standalone Weapons & Hands/Troll_Hand_L (repaired).stl",
+   "rel": "Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Standalone Weapons & Hands/Troll_Hand_L (repaired).stl",
+   "key": "Troll_Hand_L (repaired)_e913f0",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 97,
+   "row": 997,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Svartwood Troll Hags/Svartwood Troll Hag A/Troll_Talisman_L (repaired).stl",
+   "rel": "Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Svartwood Troll Hags/Svartwood Troll Hag A/Troll_Talisman_L (repaired).stl",
+   "key": "Troll_Talisman_L (repaired)_081ff1",
+   "up": [
+    0.0,
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "n": 98,
+   "row": 1010,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Svartwood Troll Hunters/Svartwood Troll Hunter C/Svartwood_Troll_Hunter_C_(m) (repaired).stl",
+   "rel": "Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Svartwood Troll Hunters/Svartwood Troll Hunter C/Svartwood_Troll_Hunter_C_(m) (repaired).stl",
+   "key": "Svartwood_Troll_Hunter_C_(m) (repaired)_af97ec",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 99,
+   "row": 1011,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Svartwood Troll Hunters/Svartwood Troll Hunter C/Troll_Fist_R (repaired).stl",
+   "rel": "Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Svartwood Troll Hunters/Svartwood Troll Hunter C/Troll_Fist_R (repaired).stl",
+   "key": "Troll_Fist_R (repaired)_018f2d",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 100,
+   "row": 1013,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Svartwood Troll Hunters/Svartwood Troll Hunter C/Troll_Quiver_of_Jawelins (repaired).stl",
+   "rel": "Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Svartwood Troll Hunters/Svartwood Troll Hunter C/Troll_Quiver_of_Jawelins (repaired).stl",
+   "key": "Troll_Quiver_of_Jawelins (repaired)_df3268",
+   "up": [
+    -1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 101,
+   "row": 1026,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Bloodfiend Riders/Bloodfiend RIder C/Bloodfiend_C_(no_saddle)_(repaired).stl",
+   "rel": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Bloodfiend Riders/Bloodfiend RIder C/Bloodfiend_C_(no_saddle)_(repaired).stl",
+   "key": "Bloodfiend_C_(no_saddle)_(repaired)_90dc25",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 102,
+   "row": 1053,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Lenora Drakenmiryan/Lenora_Blade_L_(no_Bats)_(repaired).stl",
+   "rel": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Lenora Drakenmiryan/Lenora_Blade_L_(no_Bats)_(repaired).stl",
+   "key": "Lenora_Blade_L_(no_Bats)_(repaired)_179ce5",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 103,
+   "row": 1058,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight A/Bloodhunt_Knight_A_(m_helmet) (repaired).stl",
+   "rel": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight A/Bloodhunt_Knight_A_(m_helmet) (repaired).stl",
+   "key": "Bloodhunt_Knight_A_(m_helmet) (repaired)_1847d7",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 104,
+   "row": 1061,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight A/Vampiric_Halberd_R (repaired).stl",
+   "rel": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight A/Vampiric_Halberd_R (repaired).stl",
+   "key": "Vampiric_Halberd_R (repaired)_95c30d",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 105,
+   "row": 1062,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight A/Vampiric_Hand_(blood_spell)_L (repaired).stl",
+   "rel": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight A/Vampiric_Hand_(blood_spell)_L (repaired).stl",
+   "key": "Vampiric_Hand_(blood_spell)_L (repaired)_637ee0",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 106,
+   "row": 1063,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight B/Bloodhunt_Knight__B_(m) (repaired).stl",
+   "rel": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight B/Bloodhunt_Knight__B_(m) (repaired).stl",
+   "key": "Bloodhunt_Knight__B_(m) (repaired)_4ce34f",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 107,
+   "row": 1064,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight B/Bloodhunt_Knight__B_(m_helmet) (repaired).stl",
+   "rel": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight B/Bloodhunt_Knight__B_(m_helmet) (repaired).stl",
+   "key": "Bloodhunt_Knight__B_(m_helmet) (repaired)_bc5b16",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 108,
+   "row": 1067,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight C/Bloodhunt_Knight_C_(m) (repaired).stl",
+   "rel": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight C/Bloodhunt_Knight_C_(m) (repaired).stl",
+   "key": "Bloodhunt_Knight_C_(m) (repaired)_2973ae",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 109,
+   "row": 1070,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight C/Vampiric_Estoc_R (repaired).stl",
+   "rel": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight C/Vampiric_Estoc_R (repaired).stl",
+   "key": "Vampiric_Estoc_R (repaired)_58a267",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 110,
+   "row": 1073,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight D/Bloodhunt_Knight_D_(f) (repaired).stl",
+   "rel": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight D/Bloodhunt_Knight_D_(f) (repaired).stl",
+   "key": "Bloodhunt_Knight_D_(f) (repaired)_ef9586",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 111,
+   "row": 1078,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight E/Bloodhunt_Knight_E_(f helmet) (repaired).stl",
+   "rel": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight E/Bloodhunt_Knight_E_(f helmet) (repaired).stl",
+   "key": "Bloodhunt_Knight_E_(f helmet) (repaired)_eb3355",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 112,
+   "row": 1079,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight E/Bloodhunt_Knight_E_(f) (repaired).stl",
+   "rel": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight E/Bloodhunt_Knight_E_(f) (repaired).stl",
+   "key": "Bloodhunt_Knight_E_(f) (repaired)_e95b9d",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 113,
+   "row": 1082,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight F/Bloodhunt_Knight_F_(f) (repaired).stl",
+   "rel": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight F/Bloodhunt_Knight_F_(f) (repaired).stl",
+   "key": "Bloodhunt_Knight_F_(f) (repaired)_56f4c3",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 114,
+   "row": 1083,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight F/Bloodhunt_Knight_F_(f_helmet) (repaired).stl",
+   "rel": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight F/Bloodhunt_Knight_F_(f_helmet) (repaired).stl",
+   "key": "Bloodhunt_Knight_F_(f_helmet) (repaired)_0170d9",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 115,
+   "row": 1091,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Standalone Weapons and Hands/Standalone_Lenora_Blade_(Bat) (repaired).stl",
+   "rel": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Standalone Weapons and Hands/Standalone_Lenora_Blade_(Bat) (repaired).stl",
+   "key": "Standalone_Lenora_Blade_(Bat) (repaired)_9396db",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 116,
+   "row": 1116,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Vladkeron Drakenmiryan/Vladkeron_Drakenmiryan_(no_wings) (repaired).stl",
+   "rel": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Vladkeron Drakenmiryan/Vladkeron_Drakenmiryan_(no_wings) (repaired).stl",
+   "key": "Vladkeron_Drakenmiryan_(no_wings) (repaired)_211df4",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 117,
+   "row": 1145,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Demon King Spawn/The Demon King Spawn/Astaroth the Soulforged/Kit I (Fantasy)/Soulforged_DoubleAxe_L.stl",
+   "rel": "Artisan Guild/The Demon King Spawn/The Demon King Spawn/Astaroth the Soulforged/Kit I (Fantasy)/Soulforged_DoubleAxe_L.stl",
+   "key": "Soulforged_DoubleAxe_L_bf9565",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 118,
+   "row": 1150,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Demon King Spawn/The Demon King Spawn/Astaroth the Soulforged/Kit II (SciFi)/Soulforged_Head_(reforged).stl",
+   "rel": "Artisan Guild/The Demon King Spawn/The Demon King Spawn/Astaroth the Soulforged/Kit II (SciFi)/Soulforged_Head_(reforged).stl",
+   "key": "Soulforged_Head_(reforged)_209902",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 119,
+   "row": 1177,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Demon King Spawn/The Demon King Spawn/Lilit the Matriarch/Lilith_Hand_R.stl",
+   "rel": "Artisan Guild/The Demon King Spawn/The Demon King Spawn/Lilit the Matriarch/Lilith_Hand_R.stl",
+   "key": "Lilith_Hand_R_0abb47",
+   "up": [
+    -1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 120,
+   "row": 1219,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/The Demon King Spawn/The Demon King Spawn/Mezzalfiends of the Gorge/Mezzalfiend of the Gorge E/Kit I (Chain & Sword)/Mezzalfiend_of_the_Gorge_E.stl",
+   "rel": "Artisan Guild/The Demon King Spawn/The Demon King Spawn/Mezzalfiends of the Gorge/Mezzalfiend of the Gorge E/Kit I (Chain & Sword)/Mezzalfiend_of_the_Gorge_E.stl",
+   "key": "Mezzalfiend_of_the_Gorge_E_e06919",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 121,
+   "row": 1267,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Adventurer Camp/Modular Tents/Triangular_Tent_C (repaired).stl",
+   "rel": "Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Adventurer Camp/Modular Tents/Triangular_Tent_C (repaired).stl",
+   "key": "Triangular_Tent_C (repaired)_8c3139",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 122,
+   "row": 1279,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Rock & Trolls 3 Heroes/Gunlutt the Troll Guitarist/Gunlutt_the_Guitarist_Troll (repaired).stl",
+   "rel": "Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Rock & Trolls 3 Heroes/Gunlutt the Troll Guitarist/Gunlutt_the_Guitarist_Troll (repaired).stl",
+   "key": "Gunlutt_the_Guitarist_Troll (repaired)_276101",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 123,
+   "row": 1280,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Rock & Trolls 3 Heroes/Gunlutt the Troll Guitarist/Gunlutt_the_Troll(Club) (repaired).stl",
+   "rel": "Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Rock & Trolls 3 Heroes/Gunlutt the Troll Guitarist/Gunlutt_the_Troll(Club) (repaired).stl",
+   "key": "Gunlutt_the_Troll(Club) (repaired)_601c68",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 124,
+   "row": 1284,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Rock & Trolls 3 Heroes/Zukki the Cellist Troll/Zukki_the_Cellist_Troll_War (repaired).stl",
+   "rel": "Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Rock & Trolls 3 Heroes/Zukki the Cellist Troll/Zukki_the_Cellist_Troll_War (repaired).stl",
+   "key": "Zukki_the_Cellist_Troll_War (repaired)_3bf33a",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 125,
+   "row": 1335,
+   "path": "/run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Troubles in Taverns 10 Heroes/Troubles in Taverns 10 Heroes/Merrian Silverfinger/Merrian_Left_Lantern (repaired).stl",
+   "rel": "Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Troubles in Taverns 10 Heroes/Troubles in Taverns 10 Heroes/Merrian Silverfinger/Merrian_Left_Lantern (repaired).stl",
+   "key": "Merrian_Left_Lantern (repaired)_398157",
+   "up": [
+    0.0,
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "n": 126,
+   "row": 1373,
+   "path": "/run/media/masa/STLLibrary/Basing/Bark Trees/Bark Trees Damaged/Broken Trunk Feature (3) Sprue.stl",
+   "rel": "Basing/Bark Trees/Bark Trees Damaged/Broken Trunk Feature (3) Sprue.stl",
+   "key": "Broken Trunk Feature (3) Sprue_4f755b",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 127,
+   "row": 1389,
+   "path": "/run/media/masa/STLLibrary/Basing/Debris Scatter/Concrete Chunk (2).stl",
+   "rel": "Basing/Debris Scatter/Concrete Chunk (2).stl",
+   "key": "Concrete Chunk (2)_ed25c4",
+   "up": [
+    0.0,
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "n": 128,
+   "row": 1399,
+   "path": "/run/media/masa/STLLibrary/Basing/Debris Scatter/Damaged Beam (1).stl",
+   "rel": "Basing/Debris Scatter/Damaged Beam (1).stl",
+   "key": "Damaged Beam (1)_0d9956",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 129,
+   "row": 1407,
+   "path": "/run/media/masa/STLLibrary/Basing/Debris Scatter/Damaged Metal Sheet (3).stl",
+   "rel": "Basing/Debris Scatter/Damaged Metal Sheet (3).stl",
+   "key": "Damaged Metal Sheet (3)_0386e5",
+   "up": [
+    -1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 130,
+   "row": 1416,
+   "path": "/run/media/masa/STLLibrary/Basing/Debris Scatter/Damaged Roofing Sprue.stl",
+   "rel": "Basing/Debris Scatter/Damaged Roofing Sprue.stl",
+   "key": "Damaged Roofing Sprue_dd70c5",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 131,
+   "row": 1429,
+   "path": "/run/media/masa/STLLibrary/Basing/Industrial Drums & Canisters/Damaged Metal Containers Sprue.stl",
+   "rel": "Basing/Industrial Drums & Canisters/Damaged Metal Containers Sprue.stl",
+   "key": "Damaged Metal Containers Sprue_37b75a",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 132,
+   "row": 1430,
+   "path": "/run/media/masa/STLLibrary/Basing/Industrial Drums & Canisters/Damaged_Pressurized_Container.stl",
+   "rel": "Basing/Industrial Drums & Canisters/Damaged_Pressurized_Container.stl",
+   "key": "Damaged_Pressurized_Container_604b33",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 133,
+   "row": 1435,
+   "path": "/run/media/masa/STLLibrary/Basing/Industrial Drums & Canisters/Metal Containers Sprue.stl",
+   "rel": "Basing/Industrial Drums & Canisters/Metal Containers Sprue.stl",
+   "key": "Metal Containers Sprue_601704",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 134,
+   "row": 1442,
+   "path": "/run/media/masa/STLLibrary/Basing/Industrial Pipes (Medium Size)/Medium Pipe  Elbow.stl",
+   "rel": "Basing/Industrial Pipes (Medium Size)/Medium Pipe  Elbow.stl",
+   "key": "Medium Pipe  Elbow_171440",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 135,
+   "row": 1458,
+   "path": "/run/media/masa/STLLibrary/Basing/Industrial Pipes (Medium Size)/Medium Pipe U Wide.stl",
+   "rel": "Basing/Industrial Pipes (Medium Size)/Medium Pipe U Wide.stl",
+   "key": "Medium Pipe U Wide_74c1d7",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 136,
+   "row": 1474,
+   "path": "/run/media/masa/STLLibrary/Bestarium/2022_02_Man Eaters Part 2/Release Files STL/Lone Heroes Vol III/Demon hunter.stl",
+   "rel": "Bestarium/2022_02_Man Eaters Part 2/Release Files STL/Lone Heroes Vol III/Demon hunter.stl",
+   "key": "Demon hunter_d5a86a",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 137,
+   "row": 1476,
+   "path": "/run/media/masa/STLLibrary/Bestarium/2022_02_Man Eaters Part 2/Release Files STL/Lone Heroes Vol III/Demon hunter_enslaved demoness 2.stl",
+   "rel": "Bestarium/2022_02_Man Eaters Part 2/Release Files STL/Lone Heroes Vol III/Demon hunter_enslaved demoness 2.stl",
+   "key": "Demon hunter_enslaved demoness 2_a41b0f",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 138,
+   "row": 1482,
+   "path": "/run/media/masa/STLLibrary/Bestarium/2022_02_Man Eaters Part 2/Release Files STL/Mounted war leader/Mounted_warleader.stl",
+   "rel": "Bestarium/2022_02_Man Eaters Part 2/Release Files STL/Mounted war leader/Mounted_warleader.stl",
+   "key": "Mounted_warleader_447ef1",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 139,
+   "row": 1490,
+   "path": "/run/media/masa/STLLibrary/Bestarium/Tainted Windmill promo/CrimsonSyrene2/CrimsonSyrenePlatform.stl",
+   "rel": "Bestarium/Tainted Windmill promo/CrimsonSyrene2/CrimsonSyrenePlatform.stl",
+   "key": "CrimsonSyrenePlatform_c5cf88",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 140,
+   "row": 1497,
+   "path": "/run/media/masa/STLLibrary/Bestarium/Welcome Pack/Beast Slayer_75 mm scale/STL/Barb_Beast_Blunt.stl",
+   "rel": "Bestarium/Welcome Pack/Beast Slayer_75 mm scale/STL/Barb_Beast_Blunt.stl",
+   "key": "Barb_Beast_Blunt_6e680a",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 141,
+   "row": 1504,
+   "path": "/run/media/masa/STLLibrary/Bestarium/Welcome Pack/Beast Slayer_75 mm scale/STL/Barb_Legs.stl",
+   "rel": "Bestarium/Welcome Pack/Beast Slayer_75 mm scale/STL/Barb_Legs.stl",
+   "key": "Barb_Legs_c735a0",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 142,
+   "row": 1521,
+   "path": "/run/media/masa/STLLibrary/Bestarium/Welcome Pack/UndeadKnight_Bust 150mm_STL_V1/DK_Bust_Body.STL",
+   "rel": "Bestarium/Welcome Pack/UndeadKnight_Bust 150mm_STL_V1/DK_Bust_Body.STL",
+   "key": "DK_Bust_Body_65497a",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 143,
+   "row": 1523,
+   "path": "/run/media/masa/STLLibrary/Bestarium/Welcome Pack/UndeadKnight_Bust 150mm_STL_V1/DK_Bust_Head_detail_1.STL",
+   "rel": "Bestarium/Welcome Pack/UndeadKnight_Bust 150mm_STL_V1/DK_Bust_Head_detail_1.STL",
+   "key": "DK_Bust_Head_detail_1_236242",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 144,
+   "row": 1524,
+   "path": "/run/media/masa/STLLibrary/Bestarium/Welcome Pack/UndeadKnight_Bust 150mm_STL_V1/DK_Bust_Head_part1.stl",
+   "rel": "Bestarium/Welcome Pack/UndeadKnight_Bust 150mm_STL_V1/DK_Bust_Head_part1.stl",
+   "key": "DK_Bust_Head_part1_76d1fd",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 145,
+   "row": 1537,
+   "path": "/run/media/masa/STLLibrary/DM Stash/Crimson Masquerade/Aimar - Unsupported/32_Unsupported_Aimar_BodyMask.stl",
+   "rel": "DM Stash/Crimson Masquerade/Aimar - Unsupported/32_Unsupported_Aimar_BodyMask.stl",
+   "key": "32_Unsupported_Aimar_BodyMask_d835d1",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 146,
+   "row": 1545,
+   "path": "/run/media/masa/STLLibrary/DM Stash/Crimson Masquerade/BUST Arkham - Unsupported/BUST_Unsupported_Arkham_BodyMask.stl",
+   "rel": "DM Stash/Crimson Masquerade/BUST Arkham - Unsupported/BUST_Unsupported_Arkham_BodyMask.stl",
+   "key": "BUST_Unsupported_Arkham_BodyMask_ea5594",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 147,
+   "row": 1548,
+   "path": "/run/media/masa/STLLibrary/DM Stash/Crimson Masquerade/BUST Arkham - Unsupported/BUST_Unsupported_Arkham_WholeNoMask.stl",
+   "rel": "DM Stash/Crimson Masquerade/BUST Arkham - Unsupported/BUST_Unsupported_Arkham_WholeNoMask.stl",
+   "key": "BUST_Unsupported_Arkham_WholeNoMask_533d09",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 148,
+   "row": 1555,
+   "path": "/run/media/masa/STLLibrary/DM Stash/Crimson Masquerade/Benoit - Unsupported/32_Unsupported_Benoit_BodyMask.stl",
+   "rel": "DM Stash/Crimson Masquerade/Benoit - Unsupported/32_Unsupported_Benoit_BodyMask.stl",
+   "key": "32_Unsupported_Benoit_BodyMask_f356b0",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 149,
+   "row": 1569,
+   "path": "/run/media/masa/STLLibrary/DM Stash/Crimson Masquerade/Gunthrak - Unsupported/32_Unsupported_Gunthrak_BodyMask.stl",
+   "rel": "DM Stash/Crimson Masquerade/Gunthrak - Unsupported/32_Unsupported_Gunthrak_BodyMask.stl",
+   "key": "32_Unsupported_Gunthrak_BodyMask_d614a5",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 150,
+   "row": 1576,
+   "path": "/run/media/masa/STLLibrary/DM Stash/Crimson Masquerade/Melancholy - Unsupported/75_Unsupported_Melancholy_BodyNoMask.stl",
+   "rel": "DM Stash/Crimson Masquerade/Melancholy - Unsupported/75_Unsupported_Melancholy_BodyNoMask.stl",
+   "key": "75_Unsupported_Melancholy_BodyNoMask_65c60e",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 151,
+   "row": 1584,
+   "path": "/run/media/masa/STLLibrary/DM Stash/Crimson Masquerade/Renard - Unsupported/32_Unsupported_Renard_MagicB.stl",
+   "rel": "DM Stash/Crimson Masquerade/Renard - Unsupported/32_Unsupported_Renard_MagicB.stl",
+   "key": "32_Unsupported_Renard_MagicB_024f6b",
+   "up": [
+    -1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 152,
+   "row": 1590,
+   "path": "/run/media/masa/STLLibrary/DM Stash/Crimson Masquerade/Sanguine - Unsupported/32_Unsupported_Sanguine_BodyNoMask.stl",
+   "rel": "DM Stash/Crimson Masquerade/Sanguine - Unsupported/32_Unsupported_Sanguine_BodyNoMask.stl",
+   "key": "32_Unsupported_Sanguine_BodyNoMask_e34080",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 153,
+   "row": 1617,
+   "path": "/run/media/masa/STLLibrary/DM Stash/DM Stash Jan '22 Brawn & Brains STLs - Unsupported/Driga - Unsupported/Unsupported/32_Unsupported_Driga_Fire.stl",
+   "rel": "DM Stash/DM Stash Jan '22 Brawn & Brains STLs - Unsupported/Driga - Unsupported/Unsupported/32_Unsupported_Driga_Fire.stl",
+   "key": "32_Unsupported_Driga_Fire_aeb2b2",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 154,
+   "row": 1666,
+   "path": "/run/media/masa/STLLibrary/DM Stash/Singles/Elenil/Unsupported/32mm/Elenil_body_unsupported_32mm.stl",
+   "rel": "DM Stash/Singles/Elenil/Unsupported/32mm/Elenil_body_unsupported_32mm.stl",
+   "key": "Elenil_body_unsupported_32mm_bb8488",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 155,
+   "row": 1668,
+   "path": "/run/media/masa/STLLibrary/DM Stash/Singles/Morian/Unsupported/Death_knight_body_32mm_unsupported.stl",
+   "rel": "DM Stash/Singles/Morian/Unsupported/Death_knight_body_32mm_unsupported.stl",
+   "key": "Death_knight_body_32mm_unsupported_6516fe",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 156,
+   "row": 1669,
+   "path": "/run/media/masa/STLLibrary/DM Stash/Singles/Morian/Unsupported/Death_knight_sword_32mm_unsupported.stl",
+   "rel": "DM Stash/Singles/Morian/Unsupported/Death_knight_sword_32mm_unsupported.stl",
+   "key": "Death_knight_sword_32mm_unsupported_36eac2",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 157,
+   "row": 1676,
+   "path": "/run/media/masa/STLLibrary/Dwarf Slayer free release.stl",
+   "rel": "Dwarf Slayer free release.stl",
+   "key": "Dwarf Slayer free release_032db8",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 158,
+   "row": 1680,
+   "path": "/run/media/masa/STLLibrary/Enforcer_Robot_Dog.stl",
+   "rel": "Enforcer_Robot_Dog.stl",
+   "key": "Enforcer_Robot_Dog_d62f6a",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 159,
+   "row": 1685,
+   "path": "/run/media/masa/STLLibrary/Final STL/tile0.stl",
+   "rel": "Final STL/tile0.stl",
+   "key": "tile0_51ca55",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 160,
+   "row": 1691,
+   "path": "/run/media/masa/STLLibrary/Final STL/tile6.stl",
+   "rel": "Final STL/tile6.stl",
+   "key": "tile6_d967fb",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 161,
+   "row": 1700,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/A Light In the Shadow/All_32mm/Enemies_32mm_NoSupports/ChainDevil_32mm_NoSupport/32mm_ChainDevil.stl",
+   "rel": "Loot Studios/A Light In the Shadow/All_32mm/Enemies_32mm_NoSupports/ChainDevil_32mm_NoSupport/32mm_ChainDevil.stl",
+   "key": "32mm_ChainDevil_7e3468",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 162,
+   "row": 1710,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/A Light In the Shadow/All_32mm/Environments_32mm_NoSupports/DevilChest_32mm_NoSupports/32mm_DevilChest.stl",
+   "rel": "Loot Studios/A Light In the Shadow/All_32mm/Environments_32mm_NoSupports/DevilChest_32mm_NoSupports/32mm_DevilChest.stl",
+   "key": "32mm_DevilChest_63a0a0",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 163,
+   "row": 1732,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/A Light In the Shadow/All_Busts/PitFiendBust_NoSupports/PitFiend_Bust.stl",
+   "rel": "Loot Studios/A Light In the Shadow/All_Busts/PitFiendBust_NoSupports/PitFiend_Bust.stl",
+   "key": "PitFiend_Bust_7f2b90",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 164,
+   "row": 1752,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/City of Portals/All_32mm/Objects_32mm_NoSupports/Objects_32mm_NoSupports/Chest_32mm_NoSupports/FN2205AO12_32mm_Chest.stl",
+   "rel": "Loot Studios/City of Portals/All_32mm/Objects_32mm_NoSupports/Objects_32mm_NoSupports/Chest_32mm_NoSupports/FN2205AO12_32mm_Chest.stl",
+   "key": "FN2205AO12_32mm_Chest_ec7e26",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 165,
+   "row": 1757,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/City of Portals/All_32mm/Objects_32mm_NoSupports/Objects_32mm_NoSupports/ElementalFirePortal_32mm_NoSupports/FN2205AO04_32mm_ElementalFirePortal_A.stl",
+   "rel": "Loot Studios/City of Portals/All_32mm/Objects_32mm_NoSupports/Objects_32mm_NoSupports/ElementalFirePortal_32mm_NoSupports/FN2205AO04_32mm_ElementalFirePortal_A.stl",
+   "key": "FN2205AO04_32mm_ElementalFirePortal_A_854d5f",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 166,
+   "row": 1761,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/City of Portals/All_32mm/Objects_32mm_NoSupports/Objects_32mm_NoSupports/ElementalWaterPortal_32mm_NoSupports/FN2205AO01_32mm_WaterPortal_RightPart.stl",
+   "rel": "Loot Studios/City of Portals/All_32mm/Objects_32mm_NoSupports/Objects_32mm_NoSupports/ElementalWaterPortal_32mm_NoSupports/FN2205AO01_32mm_WaterPortal_RightPart.stl",
+   "key": "FN2205AO01_32mm_WaterPortal_RightPart_226474",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 167,
+   "row": 1779,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/City of Portals/All_32mm/Objects_32mm_NoSupports/Objects_32mm_NoSupports/PropTimePortal_32mm_NoSupports/FN2205AO10_TimePortal_1.stl",
+   "rel": "Loot Studios/City of Portals/All_32mm/Objects_32mm_NoSupports/Objects_32mm_NoSupports/PropTimePortal_32mm_NoSupports/FN2205AO10_TimePortal_1.stl",
+   "key": "FN2205AO10_TimePortal_1_4321ed",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 168,
+   "row": 1781,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/City of Portals/All_32mm/Objects_32mm_NoSupports/Objects_32mm_NoSupports/PropTimePortal_32mm_NoSupports/FN2205AO10_TimePortal_11.stl",
+   "rel": "Loot Studios/City of Portals/All_32mm/Objects_32mm_NoSupports/Objects_32mm_NoSupports/PropTimePortal_32mm_NoSupports/FN2205AO10_TimePortal_11.stl",
+   "key": "FN2205AO10_TimePortal_11_c60a7e",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 169,
+   "row": 1794,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/City of Portals/All_32mm/Objects_32mm_NoSupports/Objects_32mm_NoSupports/PropTimePortal_32mm_NoSupports/FN2205AO10_TimePortal_7.stl",
+   "rel": "Loot Studios/City of Portals/All_32mm/Objects_32mm_NoSupports/Objects_32mm_NoSupports/PropTimePortal_32mm_NoSupports/FN2205AO10_TimePortal_7.stl",
+   "key": "FN2205AO10_TimePortal_7_778f5c",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 170,
+   "row": 1803,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Cult Of Hunger/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/CultistSorcerer_32mm_NoSupports/32mm_CultistSorcerer.stl",
+   "rel": "Loot Studios/Cult Of Hunger/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/CultistSorcerer_32mm_NoSupports/32mm_CultistSorcerer.stl",
+   "key": "32mm_CultistSorcerer_189f64",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 171,
+   "row": 1810,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Cult Of Hunger/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/GnollLordV2_32mm_NoSupports/32mm_GnollPackLord.stl",
+   "rel": "Loot Studios/Cult Of Hunger/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/GnollLordV2_32mm_NoSupports/32mm_GnollPackLord.stl",
+   "key": "32mm_GnollPackLord_8eac0e",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 172,
+   "row": 1858,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Damn Nation/All_32mm/All_32mm/TheAccursed_32mm_NoSupported/MechaLasher_32mm_NoSupports/32mm_MechaLasher.stl",
+   "rel": "Loot Studios/Damn Nation/All_32mm/All_32mm/TheAccursed_32mm_NoSupported/MechaLasher_32mm_NoSupports/32mm_MechaLasher.stl",
+   "key": "32mm_MechaLasher_5ec125",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 173,
+   "row": 1866,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Damn Nation/All_32mm/All_32mm/TheHellRigandDrone'sChain_32mm_NoSupported/HellRig_32mm_NoSupports/HellRig_32mm_Part_02.stl",
+   "rel": "Loot Studios/Damn Nation/All_32mm/All_32mm/TheHellRigandDrone'sChain_32mm_NoSupported/HellRig_32mm_NoSupports/HellRig_32mm_Part_02.stl",
+   "key": "HellRig_32mm_Part_02_88416a",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 174,
+   "row": 1918,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Eye of the Watcher/All_32mm/Heroes_32mm_NoSupports/ScoutMounted_32mm_NoSupports/32mm_ScoutMounted.stl",
+   "rel": "Loot Studios/Eye of the Watcher/All_32mm/Heroes_32mm_NoSupports/ScoutMounted_32mm_NoSupports/32mm_ScoutMounted.stl",
+   "key": "32mm_ScoutMounted_aea255",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 175,
+   "row": 1925,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Eye of the Watcher/All_32mm/Objects_32mm_NoSupports/Throne_32mm_NoSupports/32mm_Throne_Pinned.stl",
+   "rel": "Loot Studios/Eye of the Watcher/All_32mm/Objects_32mm_NoSupports/Throne_32mm_NoSupports/32mm_Throne_Pinned.stl",
+   "key": "32mm_Throne_Pinned_bda24d",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 176,
+   "row": 1940,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Fear the Eternal Embrace/DownloadAll_32mm/1- Heroes/Heroes_32mm_NoSupports/KashglaBuckaroo_32mm_NoSupports/32mm_KashglaBuckaroo.stl",
+   "rel": "Loot Studios/Fear the Eternal Embrace/DownloadAll_32mm/1- Heroes/Heroes_32mm_NoSupports/KashglaBuckaroo_32mm_NoSupports/32mm_KashglaBuckaroo.stl",
+   "key": "32mm_KashglaBuckaroo_16c7f0",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 177,
+   "row": 1962,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Fear the Eternal Embrace/DownloadAll_32mm/3- Environment/Environment_NoSupport/DemonicArtifact_NoSupports/32mm_DemonicArtifact.stl",
+   "rel": "Loot Studios/Fear the Eternal Embrace/DownloadAll_32mm/3- Environment/Environment_NoSupport/DemonicArtifact_NoSupports/32mm_DemonicArtifact.stl",
+   "key": "32mm_DemonicArtifact_5b9673",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 178,
+   "row": 1974,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/FesteringTroll_32mm_NoSupports/32mm_FesteringTroll.stl",
+   "rel": "Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/FesteringTroll_32mm_NoSupports/32mm_FesteringTroll.stl",
+   "key": "32mm_FesteringTroll_76a4b2",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 179,
+   "row": 1981,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/GiantToad_32mm_NoSupports/32mm_GiantToad.stl",
+   "rel": "Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/GiantToad_32mm_NoSupports/32mm_GiantToad.stl",
+   "key": "32mm_GiantToad_e4617b",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 180,
+   "row": 1985,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/SalkaruTurtle_32mm_NoSupports/32mm_SalkaruTurtle.stl",
+   "rel": "Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/SalkaruTurtle_32mm_NoSupports/32mm_SalkaruTurtle.stl",
+   "key": "32mm_SalkaruTurtle_2acb05",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 181,
+   "row": 1989,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/3 - Environment/Objects_32mm_NoSupports/BoardWalk1_32mm_NoSupports/32mm_Boardwalk_1.stl",
+   "rel": "Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/3 - Environment/Objects_32mm_NoSupports/BoardWalk1_32mm_NoSupports/32mm_Boardwalk_1.stl",
+   "key": "32mm_Boardwalk_1_e774cd",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 182,
+   "row": 2002,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/3 - Environment/Objects_32mm_NoSupports/Log_32mm_NoSupports/32mm_Log.stl",
+   "rel": "Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/3 - Environment/Objects_32mm_NoSupports/Log_32mm_NoSupports/32mm_Log.stl",
+   "key": "32mm_Log_c1a75f",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 183,
+   "row": 2029,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/GiantBat_32mm_NoSupports/32mm_GiantBat.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/GiantBat_32mm_NoSupports/32mm_GiantBat.stl",
+   "key": "32mm_GiantBat_f413ca",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 184,
+   "row": 2030,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/GoblinArcher_32mm_NoSupports/32mm_GoblinArcher.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/GoblinArcher_32mm_NoSupports/32mm_GoblinArcher.stl",
+   "key": "32mm_GoblinArcher_de7ea3",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 185,
+   "row": 2034,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/GoblinBatriderSolo_32mm_NoSupports/32mm_GoblinBatrider_Solo.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/GoblinBatriderSolo_32mm_NoSupports/32mm_GoblinBatrider_Solo.stl",
+   "key": "32mm_GoblinBatrider_Solo_b7fb64",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 186,
+   "row": 2035,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/GoblinBlacksmith_32mm_NoSupports/32mm_GoblinBlacksmith.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/GoblinBlacksmith_32mm_NoSupports/32mm_GoblinBlacksmith.stl",
+   "key": "32mm_GoblinBlacksmith_4042bc",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 187,
+   "row": 2038,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/GoblinWarrior_32mm_NoSupports/32mm_GoblinWarrior.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/GoblinWarrior_32mm_NoSupports/32mm_GoblinWarrior.stl",
+   "key": "32mm_GoblinWarrior_fb2fa1",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 188,
+   "row": 2040,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/LootingGoblin_32mm_NoSupports/32mm_LootingGoblin.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/LootingGoblin_32mm_NoSupports/32mm_LootingGoblin.stl",
+   "key": "32mm_LootingGoblin_e77bef",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 189,
+   "row": 2043,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/SlugorGoblinKing_32mm_NoSupports/32mm_GoblinKing_Throne.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/SlugorGoblinKing_32mm_NoSupports/32mm_GoblinKing_Throne.stl",
+   "key": "32mm_GoblinKing_Throne_66637f",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 190,
+   "row": 2044,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/TrollBloodedGoblin_32mm_NoSupports/32mm_TrollBloodedGoblin.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/TrollBloodedGoblin_32mm_NoSupports/32mm_TrollBloodedGoblin.stl",
+   "key": "32mm_TrollBloodedGoblin_bd30c2",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 191,
+   "row": 2045,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/WerebatGoblin_32mm_NoSupports/32mm_WerebatGoblin.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/WerebatGoblin_32mm_NoSupports/32mm_WerebatGoblin.stl",
+   "key": "32mm_WerebatGoblin_461afb",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 192,
+   "row": 2049,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/CaveWallCurved_32mm_NoSupports/32mm_CaveWallCurved.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/CaveWallCurved_32mm_NoSupports/32mm_CaveWallCurved.stl",
+   "key": "32mm_CaveWallCurved_df8c90",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 193,
+   "row": 2062,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/DragonSullManor_32mm_NoSupports/32mm_DragonSkullManor_Horn_C.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/DragonSullManor_32mm_NoSupports/32mm_DragonSkullManor_Horn_C.stl",
+   "key": "32mm_DragonSkullManor_Horn_C_df32fc",
+   "up": [
+    0.0,
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "n": 194,
+   "row": 2064,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/DragonSullManor_32mm_NoSupports/32mm_DragonSkullManor_Horn_E.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/DragonSullManor_32mm_NoSupports/32mm_DragonSkullManor_Horn_E.stl",
+   "key": "32mm_DragonSkullManor_Horn_E_53a2e7",
+   "up": [
+    0.0,
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "n": 195,
+   "row": 2067,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/DragonSullManor_32mm_NoSupports/32mm_DragonSkullManor_I.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/DragonSullManor_32mm_NoSupports/32mm_DragonSkullManor_I.stl",
+   "key": "32mm_DragonSkullManor_I_7a058e",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 196,
+   "row": 2070,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/DragonSullManor_32mm_NoSupports/32mm_DragonSkullManor_Platform_B.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/DragonSullManor_32mm_NoSupports/32mm_DragonSkullManor_Platform_B.stl",
+   "key": "32mm_DragonSkullManor_Platform_B_34ee55",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 197,
+   "row": 2075,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/DragonSullManor_32mm_NoSupports/32mm_DragonSkullManor_Stair_B.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/DragonSullManor_32mm_NoSupports/32mm_DragonSkullManor_Stair_B.stl",
+   "key": "32mm_DragonSkullManor_Stair_B_3d6ed3",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 198,
+   "row": 2080,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/GoblinBrazier_32mm_NoSupports/32mm_GoblinBrazier.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/GoblinBrazier_32mm_NoSupports/32mm_GoblinBrazier.stl",
+   "key": "32mm_GoblinBrazier_2ccc17",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 199,
+   "row": 2081,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/GoblinChest_32mm_NoSupports/32mm_GoblinChest.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/GoblinChest_32mm_NoSupports/32mm_GoblinChest.stl",
+   "key": "32mm_GoblinChest_bd96ec",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 200,
+   "row": 2082,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/GoblinHideoutDoor_32mm_NoSupports/32mm_GoblinHideoutDoor_A.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/GoblinHideoutDoor_32mm_NoSupports/32mm_GoblinHideoutDoor_A.stl",
+   "key": "32mm_GoblinHideoutDoor_A_a6d34c",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 201,
+   "row": 2083,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/GoblinHideoutDoor_32mm_NoSupports/32mm_GoblinHideoutDoor_B.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/GoblinHideoutDoor_32mm_NoSupports/32mm_GoblinHideoutDoor_B.stl",
+   "key": "32mm_GoblinHideoutDoor_B_de34eb",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 202,
+   "row": 2086,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/GoblinHideoutDoor_32mm_NoSupports/32mm_GoblinHideoutDoor_Door_B.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/GoblinHideoutDoor_32mm_NoSupports/32mm_GoblinHideoutDoor_Door_B.stl",
+   "key": "32mm_GoblinHideoutDoor_Door_B_71ad2a",
+   "up": [
+    -1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 203,
+   "row": 2090,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/GoblinHideoutEntrance_32mm_NoSupports/32mm_GoblinHideoutEntrance_Part2.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/GoblinHideoutEntrance_32mm_NoSupports/32mm_GoblinHideoutEntrance_Part2.stl",
+   "key": "32mm_GoblinHideoutEntrance_Part2_6468c0",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 204,
+   "row": 2097,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/StonePath3_32mm_NoSupports/32mm_StonePath_3_B.stl",
+   "rel": "Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/StonePath3_32mm_NoSupports/32mm_StonePath_3_B.stl",
+   "key": "32mm_StonePath_3_B_f52950",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 205,
+   "row": 2107,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Going Down the Drain/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/Aboleth_32mm_NoSupports/32mm_Aboleth.stl",
+   "rel": "Loot Studios/Going Down the Drain/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/Aboleth_32mm_NoSupports/32mm_Aboleth.stl",
+   "key": "32mm_Aboleth_09a1d7",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 206,
+   "row": 2126,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Going Down the Drain/DownloadAll_32mm/3 - Environment/Objects_32mm_NoSupports/Sea Chest_32mm_NoSupport/32mm_SeaChest.stl",
+   "rel": "Loot Studios/Going Down the Drain/DownloadAll_32mm/3 - Environment/Objects_32mm_NoSupports/Sea Chest_32mm_NoSupport/32mm_SeaChest.stl",
+   "key": "32mm_SeaChest_bab651",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 207,
+   "row": 2136,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Loyalty Reward 12 Months/LoyaltFantasy_12Mounths_V3_32mm/LoyaltFantasy_12Mounths_V3_32mm_UnSupported/AlpharioxDragonForebearer_32mm_UnSupported/AlpharioxDragonForebearer_32mm_Head.stl",
+   "rel": "Loot Studios/Loyalty Reward 12 Months/LoyaltFantasy_12Mounths_V3_32mm/LoyaltFantasy_12Mounths_V3_32mm_UnSupported/AlpharioxDragonForebearer_32mm_UnSupported/AlpharioxDragonForebearer_32mm_Head.stl",
+   "key": "AlpharioxDragonForebearer_32mm_Head_b332c7",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 208,
+   "row": 2138,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Loyalty Reward 12 Months/LoyaltFantasy_12Mounths_V3_32mm/LoyaltFantasy_12Mounths_V3_32mm_UnSupported/AlpharioxDragonForebearer_32mm_UnSupported/AlpharioxDragonForebearer_32mm_LeftWing1.stl",
+   "rel": "Loot Studios/Loyalty Reward 12 Months/LoyaltFantasy_12Mounths_V3_32mm/LoyaltFantasy_12Mounths_V3_32mm_UnSupported/AlpharioxDragonForebearer_32mm_UnSupported/AlpharioxDragonForebearer_32mm_LeftWing1.stl",
+   "key": "AlpharioxDragonForebearer_32mm_LeftWing1_4a27ab",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 209,
+   "row": 2141,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Loyalty Reward 12 Months/LoyaltFantasy_12Mounths_V3_32mm/LoyaltFantasy_12Mounths_V3_32mm_UnSupported/AlpharioxDragonForebearer_32mm_UnSupported/AlpharioxDragonForebearer_32mm_RightLowerWing.stl",
+   "rel": "Loot Studios/Loyalty Reward 12 Months/LoyaltFantasy_12Mounths_V3_32mm/LoyaltFantasy_12Mounths_V3_32mm_UnSupported/AlpharioxDragonForebearer_32mm_UnSupported/AlpharioxDragonForebearer_32mm_RightLowerWing.stl",
+   "key": "AlpharioxDragonForebearer_32mm_RightLowerWing_51017d",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 210,
+   "row": 2143,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Loyalty Reward 12 Months/LoyaltFantasy_12Mounths_V3_32mm/LoyaltFantasy_12Mounths_V3_32mm_UnSupported/AlpharioxDragonForebearer_32mm_UnSupported/AlpharioxDragonForebearer_32mm_RightWing2.stl",
+   "rel": "Loot Studios/Loyalty Reward 12 Months/LoyaltFantasy_12Mounths_V3_32mm/LoyaltFantasy_12Mounths_V3_32mm_UnSupported/AlpharioxDragonForebearer_32mm_UnSupported/AlpharioxDragonForebearer_32mm_RightWing2.stl",
+   "key": "AlpharioxDragonForebearer_32mm_RightWing2_5f6590",
+   "up": [
+    -1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 211,
+   "row": 2162,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Mercs and Miners/All_32mm/DrillerDrone_32mm_NoSupports/32mm_UMV_Top.stl",
+   "rel": "Loot Studios/Mercs and Miners/All_32mm/DrillerDrone_32mm_NoSupports/32mm_UMV_Top.stl",
+   "key": "32mm_UMV_Top_bb4cfa",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 212,
+   "row": 2164,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Mercs and Miners/All_32mm/LoadedMiningCart_32mm_NoSupports/32mm_OreCart.stl",
+   "rel": "Loot Studios/Mercs and Miners/All_32mm/LoadedMiningCart_32mm_NoSupports/32mm_OreCart.stl",
+   "key": "32mm_OreCart_429bf9",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 213,
+   "row": 2165,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Mercs and Miners/All_32mm/LoadedMiningCart_32mm_NoSupports/32mm_OreCart_Crystal1.stl",
+   "rel": "Loot Studios/Mercs and Miners/All_32mm/LoadedMiningCart_32mm_NoSupports/32mm_OreCart_Crystal1.stl",
+   "key": "32mm_OreCart_Crystal1_754117",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 214,
+   "row": 2173,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Mercs and Miners/All_32mm/MechanicBay_32mm_NoSupports/MechanicBay_HandrailLeftPart01.stl",
+   "rel": "Loot Studios/Mercs and Miners/All_32mm/MechanicBay_32mm_NoSupports/MechanicBay_HandrailLeftPart01.stl",
+   "key": "MechanicBay_HandrailLeftPart01_399ab7",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 215,
+   "row": 2174,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Mercs and Miners/All_32mm/MechanicBay_32mm_NoSupports/MechanicBay_HandrailLeftPart02.stl",
+   "rel": "Loot Studios/Mercs and Miners/All_32mm/MechanicBay_32mm_NoSupports/MechanicBay_HandrailLeftPart02.stl",
+   "key": "MechanicBay_HandrailLeftPart02_6b2f34",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 216,
+   "row": 2178,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Mercs and Miners/All_32mm/MechanicBay_32mm_NoSupports/MechanicBay_Plug02.stl",
+   "rel": "Loot Studios/Mercs and Miners/All_32mm/MechanicBay_32mm_NoSupports/MechanicBay_Plug02.stl",
+   "key": "MechanicBay_Plug02_407f8a",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 217,
+   "row": 2181,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Mercs and Miners/All_32mm/MechanicBay_32mm_NoSupports/MechanicBay_Table1.stl",
+   "rel": "Loot Studios/Mercs and Miners/All_32mm/MechanicBay_32mm_NoSupports/MechanicBay_Table1.stl",
+   "key": "MechanicBay_Table1_469988",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 218,
+   "row": 2184,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Mercs and Miners/All_32mm/Mercenaries_32mm_NoSupports/CoreRoboticEnvoy_32mm_NoSupports/32mm_RoboticEnvoy.stl",
+   "rel": "Loot Studios/Mercs and Miners/All_32mm/Mercenaries_32mm_NoSupports/CoreRoboticEnvoy_32mm_NoSupports/32mm_RoboticEnvoy.stl",
+   "key": "32mm_RoboticEnvoy_2981b1",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 219,
+   "row": 2198,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Mercs and Miners/All_32mm/Miners_32mm_NoSupports/BusinessBrainlord_32mm_NoSupports/32mm_BusinessBrainlord_Brain.stl",
+   "rel": "Loot Studios/Mercs and Miners/All_32mm/Miners_32mm_NoSupports/BusinessBrainlord_32mm_NoSupports/32mm_BusinessBrainlord_Brain.stl",
+   "key": "32mm_BusinessBrainlord_Brain_44def2",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 220,
+   "row": 2201,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Mercs and Miners/All_32mm/Miners_32mm_NoSupports/FlamethrowerDwarf_32mm_NoSupports/32mm_FlamethrowerDwarf.stl",
+   "rel": "Loot Studios/Mercs and Miners/All_32mm/Miners_32mm_NoSupports/FlamethrowerDwarf_32mm_NoSupports/32mm_FlamethrowerDwarf.stl",
+   "key": "32mm_FlamethrowerDwarf_c64fcd",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 221,
+   "row": 2235,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Neon Street 3k/All_32mm/TheMachine_32mm_NoSupports/NeonStreetSamurai_32mm_NoSupports/32mm_NeonStreetSamurai_Hat.stl",
+   "rel": "Loot Studios/Neon Street 3k/All_32mm/TheMachine_32mm_NoSupports/NeonStreetSamurai_32mm_NoSupports/32mm_NeonStreetSamurai_Hat.stl",
+   "key": "32mm_NeonStreetSamurai_Hat_7ee66a",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 222,
+   "row": 2268,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Nightmares of the Abyss/All_32mm/Enemies_32mm_NoSupports/DeathKnight_32mm_NoSupports/32mm_DeathKnight.stl",
+   "rel": "Loot Studios/Nightmares of the Abyss/All_32mm/Enemies_32mm_NoSupports/DeathKnight_32mm_NoSupports/32mm_DeathKnight.stl",
+   "key": "32mm_DeathKnight_69030b",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 223,
+   "row": 2276,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Nightmares of the Abyss/All_32mm/Enemies_32mm_NoSupports/ShadowDemon_32mm_NoSupports/32mm_ShadowDemon.stl",
+   "rel": "Loot Studios/Nightmares of the Abyss/All_32mm/Enemies_32mm_NoSupports/ShadowDemon_32mm_NoSupports/32mm_ShadowDemon.stl",
+   "key": "32mm_ShadowDemon_bbaa94",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 224,
+   "row": 2282,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Nightmares of the Abyss/All_32mm/Heroes_32mm_NoSupports/ZoetheMarauder_32mm_NoSupports/32mm_ZoetheMarauder.stl",
+   "rel": "Loot Studios/Nightmares of the Abyss/All_32mm/Heroes_32mm_NoSupports/ZoetheMarauder_32mm_NoSupports/32mm_ZoetheMarauder.stl",
+   "key": "32mm_ZoetheMarauder_9eb279",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 225,
+   "row": 2290,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Nightmares of the Abyss/All_32mm/Objects_32mm_NoSupports/NightmareChest_32mm_NoSupports/NightmareChest_32mm.stl",
+   "rel": "Loot Studios/Nightmares of the Abyss/All_32mm/Objects_32mm_NoSupports/NightmareChest_32mm_NoSupports/NightmareChest_32mm.stl",
+   "key": "NightmareChest_32mm_6bddf3",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 226,
+   "row": 2292,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Nightmares of the Abyss/All_32mm/Objects_32mm_NoSupports/OdDracnesThrone_32mm_NoSupports/32mm_OdDracnesThrone_A.stl",
+   "rel": "Loot Studios/Nightmares of the Abyss/All_32mm/Objects_32mm_NoSupports/OdDracnesThrone_32mm_NoSupports/32mm_OdDracnesThrone_A.stl",
+   "key": "32mm_OdDracnesThrone_A_7110a9",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 227,
+   "row": 2301,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Nuclear Wasteland/DownloadAll_32mm/1- Heroes/Heroes_32mm_NoSupports/Heroes_32mm_NoSupports/GabrielDietrch1_32mm_NoSupports/32mm_GabrielDietrich_Arm.stl",
+   "rel": "Loot Studios/Nuclear Wasteland/DownloadAll_32mm/1- Heroes/Heroes_32mm_NoSupports/Heroes_32mm_NoSupports/GabrielDietrch1_32mm_NoSupports/32mm_GabrielDietrich_Arm.stl",
+   "key": "32mm_GabrielDietrich_Arm_023569",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 228,
+   "row": 2313,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Nuclear Wasteland/DownloadAll_32mm/2- Enemies/Enemies_32mm_NoSupports/Enemies_32mm_NoSupports/MutantJuggernaut_32mm_NoSupports/32mm_MutantJuggernaut.stl",
+   "rel": "Loot Studios/Nuclear Wasteland/DownloadAll_32mm/2- Enemies/Enemies_32mm_NoSupports/Enemies_32mm_NoSupports/MutantJuggernaut_32mm_NoSupports/32mm_MutantJuggernaut.stl",
+   "key": "32mm_MutantJuggernaut_0585ea",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 229,
+   "row": 2320,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Nuclear Wasteland/DownloadAll_32mm/4- Environment/Environment_NoSupport/BunkerDoor_NoSupports/32mm_BunkerDoor_Plug_A.stl",
+   "rel": "Loot Studios/Nuclear Wasteland/DownloadAll_32mm/4- Environment/Environment_NoSupport/BunkerDoor_NoSupports/32mm_BunkerDoor_Plug_A.stl",
+   "key": "32mm_BunkerDoor_Plug_A_4718c1",
+   "up": [
+    0.0,
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "n": 230,
+   "row": 2366,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Orconspiracy/Enemies_Part2/Orgug Lots-of-Bolts/32mm/No Supports/32mm_Orgug_Sword.stl",
+   "rel": "Loot Studios/Orconspiracy/Enemies_Part2/Orgug Lots-of-Bolts/32mm/No Supports/32mm_Orgug_Sword.stl",
+   "key": "32mm_Orgug_Sword_782ebe",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 231,
+   "row": 2376,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Panshaw Under Siege/DownloadAll_32mm/1 - Heroes/HumanArcher/HumanArcher_32mm_NoSupports/32mm_HumanArcher.stl",
+   "rel": "Loot Studios/Panshaw Under Siege/DownloadAll_32mm/1 - Heroes/HumanArcher/HumanArcher_32mm_NoSupports/32mm_HumanArcher.stl",
+   "key": "32mm_HumanArcher_ac2ecd",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 232,
+   "row": 2379,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Panshaw Under Siege/DownloadAll_32mm/1 - Heroes/SirRichardMounted_V2/SirRichardMounted_V2_32mm_NoSupports/32mm_SirRichardMounted.stl",
+   "rel": "Loot Studios/Panshaw Under Siege/DownloadAll_32mm/1 - Heroes/SirRichardMounted_V2/SirRichardMounted_V2_32mm_NoSupports/32mm_SirRichardMounted.stl",
+   "key": "32mm_SirRichardMounted_948960",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 233,
+   "row": 2404,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Panshaw Under Siege/DownloadAll_32mm/3 - Environment/Tower/Tower_NoSupports/32mm_Tower_B.stl",
+   "rel": "Loot Studios/Panshaw Under Siege/DownloadAll_32mm/3 - Environment/Tower/Tower_NoSupports/32mm_Tower_B.stl",
+   "key": "32mm_Tower_B_f03bef",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 234,
+   "row": 2415,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Panshaw Under Siege/DownloadAll_32mm/4 - NPCs/Argenturam/Argenturam_32mm_NoSupports/32mm_Argenturam_Body.stl",
+   "rel": "Loot Studios/Panshaw Under Siege/DownloadAll_32mm/4 - NPCs/Argenturam/Argenturam_32mm_NoSupports/32mm_Argenturam_Body.stl",
+   "key": "32mm_Argenturam_Body_43b8ec",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 235,
+   "row": 2427,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Sandy Dunes of Lutba/All_Busts/BaronBartholomewRiberdani_Bust/No Supports/BartholomewRiberdani_Bust_Mech.stl",
+   "rel": "Loot Studios/Sandy Dunes of Lutba/All_Busts/BaronBartholomewRiberdani_Bust/No Supports/BartholomewRiberdani_Bust_Mech.stl",
+   "key": "BartholomewRiberdani_Bust_Mech_2f6fb7",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 236,
+   "row": 2431,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Sandy Dunes of Lutba/All_Busts/MechGunslinger_Bust/No Supports/MechGunslinger_Bust.stl",
+   "rel": "Loot Studios/Sandy Dunes of Lutba/All_Busts/MechGunslinger_Bust/No Supports/MechGunslinger_Bust.stl",
+   "key": "MechGunslinger_Bust_caa2ad",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 237,
+   "row": 2432,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Sandy Dunes of Lutba/All_Busts/MechGunslinger_Bust/No Supports/MechGunslinger_Bust_Arm.stl",
+   "rel": "Loot Studios/Sandy Dunes of Lutba/All_Busts/MechGunslinger_Bust/No Supports/MechGunslinger_Bust_Arm.stl",
+   "key": "MechGunslinger_Bust_Arm_9dcf34",
+   "up": [
+    0.0,
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "n": 238,
+   "row": 2453,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Sandy Dunes of Lutba/All_Objects_Part1/WallCornerDamaged/No Supports/32mm_WallCornerDamaged_Left.stl",
+   "rel": "Loot Studios/Sandy Dunes of Lutba/All_Objects_Part1/WallCornerDamaged/No Supports/32mm_WallCornerDamaged_Left.stl",
+   "key": "32mm_WallCornerDamaged_Left_cd0a44",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 239,
+   "row": 2454,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Sandy Dunes of Lutba/All_Objects_Part1/WallCornerDamaged/No Supports/32mm_WallCornerDamaged_Right.stl",
+   "rel": "Loot Studios/Sandy Dunes of Lutba/All_Objects_Part1/WallCornerDamaged/No Supports/32mm_WallCornerDamaged_Right.stl",
+   "key": "32mm_WallCornerDamaged_Right_92c6a5",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 240,
+   "row": 2467,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Sandy Dunes of Lutba/All_Objects_Part2/WallGateDamaged/No Supports/32mm_WallGateDamaged_Wall1.stl",
+   "rel": "Loot Studios/Sandy Dunes of Lutba/All_Objects_Part2/WallGateDamaged/No Supports/32mm_WallGateDamaged_Wall1.stl",
+   "key": "32mm_WallGateDamaged_Wall1_507ed2",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 241,
+   "row": 2518,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Sandy Dunes of Lutba/SacredObelisk_Part1/No Supports/32mm_SacredObelisk_N.stl",
+   "rel": "Loot Studios/Sandy Dunes of Lutba/SacredObelisk_Part1/No Supports/32mm_SacredObelisk_N.stl",
+   "key": "32mm_SacredObelisk_N_1b32c7",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 242,
+   "row": 2531,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Saurian Native Diplomacy/All 32mm/SaurianNAtive_Enemies_32mm_NoSupports/XenowyvernRider_32mm_NoSupports/32mm_XenowyvernRider_Dragon.stl",
+   "rel": "Loot Studios/Saurian Native Diplomacy/All 32mm/SaurianNAtive_Enemies_32mm_NoSupports/XenowyvernRider_32mm_NoSupports/32mm_XenowyvernRider_Dragon.stl",
+   "key": "32mm_XenowyvernRider_Dragon_0f9d73",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 243,
+   "row": 2539,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Savage Outbreak in Space/All_32mm/Enemies_32mm_NoSupports/DamagedSecurityRobot_32mm_NoSupports/32mm_DamagedSecurityRobot.stl",
+   "rel": "Loot Studios/Savage Outbreak in Space/All_32mm/Enemies_32mm_NoSupports/DamagedSecurityRobot_32mm_NoSupports/32mm_DamagedSecurityRobot.stl",
+   "key": "32mm_DamagedSecurityRobot_036f09",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 244,
+   "row": 2545,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Savage Outbreak in Space/All_32mm/Enemies_32mm_NoSupports/MechaZombie_32mm_NoSupports/32mm_MechaZombie.stl",
+   "rel": "Loot Studios/Savage Outbreak in Space/All_32mm/Enemies_32mm_NoSupports/MechaZombie_32mm_NoSupports/32mm_MechaZombie.stl",
+   "key": "32mm_MechaZombie_e86a94",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 245,
+   "row": 2551,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Savage Outbreak in Space/All_32mm/Environment_NoSupport/Crate_NoSupports/32mm_Crate.stl",
+   "rel": "Loot Studios/Savage Outbreak in Space/All_32mm/Environment_NoSupport/Crate_NoSupports/32mm_Crate.stl",
+   "key": "32mm_Crate_2f6a53",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 246,
+   "row": 2570,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Savage Outbreak in Space/All_32mm/Environment_NoSupport/Portal_NoSupports/OnePiece/32mm_Portal.stl",
+   "rel": "Loot Studios/Savage Outbreak in Space/All_32mm/Environment_NoSupport/Portal_NoSupports/OnePiece/32mm_Portal.stl",
+   "key": "32mm_Portal_37a1bd",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 247,
+   "row": 2574,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Ship Ahoy/All_Busts/Alejandro/No Supports/32mm_ Alejandro_Bust.stl",
+   "rel": "Loot Studios/Ship Ahoy/All_Busts/Alejandro/No Supports/32mm_ Alejandro_Bust.stl",
+   "key": "32mm_ Alejandro_Bust_6b1f97",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 248,
+   "row": 2577,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Ship Ahoy/All_Busts/Eleanore/No Supports/Eleanore_Hand_Bust.stl",
+   "rel": "Loot Studios/Ship Ahoy/All_Busts/Eleanore/No Supports/Eleanore_Hand_Bust.stl",
+   "key": "Eleanore_Hand_Bust_4351b1",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 249,
+   "row": 2579,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Ship Ahoy/All_Busts/MattJones_Bust/No Supports/MattJones_Bust.stl",
+   "rel": "Loot Studios/Ship Ahoy/All_Busts/MattJones_Bust/No Supports/MattJones_Bust.stl",
+   "key": "MattJones_Bust_cd4bcb",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 250,
+   "row": 2584,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Ship Ahoy/All_CordesPirateCrew_V3/SahuaginPirate/32mm/No Supports/32mm_Sahuagin_Pirate.stl",
+   "rel": "Loot Studios/Ship Ahoy/All_CordesPirateCrew_V3/SahuaginPirate/32mm/No Supports/32mm_Sahuagin_Pirate.stl",
+   "key": "32mm_Sahuagin_Pirate_59c08d",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 251,
+   "row": 2598,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Ship Ahoy/All_Objects/PiratChest/No Supports/32mm_PirateChest.stl",
+   "rel": "Loot Studios/Ship Ahoy/All_Objects/PiratChest/No Supports/32mm_PirateChest.stl",
+   "key": "32mm_PirateChest_4e80c4",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 252,
+   "row": 2619,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Snowy Mountain Summit/DownloadAll_32mm/2 - Enemies/BarbarianSkeleton/BarbarianSkeleton_32mm_NoSupports/32mm_BarbarianSkeleton.stl",
+   "rel": "Loot Studios/Snowy Mountain Summit/DownloadAll_32mm/2 - Enemies/BarbarianSkeleton/BarbarianSkeleton_32mm_NoSupports/32mm_BarbarianSkeleton.stl",
+   "key": "32mm_BarbarianSkeleton_d94f64",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 253,
+   "row": 2639,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Snowy Mountain Summit/DownloadAll_32mm/3 - Environment/FrostChest/FrostChest_NoSupports/32mm_FrostChest.stl",
+   "rel": "Loot Studios/Snowy Mountain Summit/DownloadAll_32mm/3 - Environment/FrostChest/FrostChest_NoSupports/32mm_FrostChest.stl",
+   "key": "32mm_FrostChest_6ff70f",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 254,
+   "row": 2648,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Snowy Mountain Summit/DownloadAll_32mm/3 - Environment/VillageEntrance/VillageEntrance_NoSupports/32mm_VillageEntrance.stl",
+   "rel": "Loot Studios/Snowy Mountain Summit/DownloadAll_32mm/3 - Environment/VillageEntrance/VillageEntrance_NoSupports/32mm_VillageEntrance.stl",
+   "key": "32mm_VillageEntrance_b32c30",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 255,
+   "row": 2662,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Spacecraft-Crasher/All_Busts/MajorWilliams_Bust/No Supports/MajorWilliams_Arm_Bust.stl",
+   "rel": "Loot Studios/Spacecraft-Crasher/All_Busts/MajorWilliams_Bust/No Supports/MajorWilliams_Arm_Bust.stl",
+   "key": "MajorWilliams_Arm_Bust_693a7d",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 256,
+   "row": 2668,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Spacecraft-Crasher/All_Crew_Part1_V3/All_Crew_Part1_V2_/PowerLoaderV2/32mm/No Supports/32mm_PowerLoader_Cannon_L.stl",
+   "rel": "Loot Studios/Spacecraft-Crasher/All_Crew_Part1_V3/All_Crew_Part1_V2_/PowerLoaderV2/32mm/No Supports/32mm_PowerLoader_Cannon_L.stl",
+   "key": "32mm_PowerLoader_Cannon_L_edf5c9",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 257,
+   "row": 2673,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Spacecraft-Crasher/All_Crew_Part1_V3/All_Crew_Part1_V2_/RemoteMaintenanceRobot/32mm/No Supports/32mm_MaintenanceRobot.stl",
+   "rel": "Loot Studios/Spacecraft-Crasher/All_Crew_Part1_V3/All_Crew_Part1_V2_/RemoteMaintenanceRobot/32mm/No Supports/32mm_MaintenanceRobot.stl",
+   "key": "32mm_MaintenanceRobot_3198df",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 258,
+   "row": 2699,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Spacecraft-Crasher/All_Objects/Reactor/No Supports/32mm_Reactor.stl",
+   "rel": "Loot Studios/Spacecraft-Crasher/All_Objects/Reactor/No Supports/32mm_Reactor.stl",
+   "key": "32mm_Reactor_cb6b65",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 259,
+   "row": 2715,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Chest_32mm_NoSupports/32mm_Chest.stl",
+   "rel": "Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Chest_32mm_NoSupports/32mm_Chest.stl",
+   "key": "32mm_Chest_0a2642",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 260,
+   "row": 2716,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/DoorandWallDoor_32mm_NoSupports/32mm_Door.stl",
+   "rel": "Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/DoorandWallDoor_32mm_NoSupports/32mm_Door.stl",
+   "key": "32mm_Door_b5f916",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 261,
+   "row": 2724,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Pipes_32mm_NoSupports/32mm_Pipe2.stl",
+   "rel": "Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Pipes_32mm_NoSupports/32mm_Pipe2.stl",
+   "key": "32mm_Pipe2_ed60d2",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 262,
+   "row": 2733,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Walls_32mm_NoSupports/32MM_Wall10.stl",
+   "rel": "Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Walls_32mm_NoSupports/32MM_Wall10.stl",
+   "key": "32MM_Wall10_05adbd",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 263,
+   "row": 2734,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Walls_32mm_NoSupports/32MM_Wall2.stl",
+   "rel": "Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Walls_32mm_NoSupports/32MM_Wall2.stl",
+   "key": "32MM_Wall2_e2b443",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 264,
+   "row": 2741,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Walls_32mm_NoSupports/32mm_Wall8.stl",
+   "rel": "Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Walls_32mm_NoSupports/32mm_Wall8.stl",
+   "key": "32mm_Wall8_bc5d6c",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 265,
+   "row": 2745,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Waters_32mm_NoSupports/32mm_Water3.stl",
+   "rel": "Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Waters_32mm_NoSupports/32mm_Water3.stl",
+   "key": "32mm_Water3_fd860b",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 266,
+   "row": 2756,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/The Crimson Sand Arena/All_Busts/LeoOfColossus_Bust/No Supports/LeoOfColossus_Bust_Shield.stl",
+   "rel": "Loot Studios/The Crimson Sand Arena/All_Busts/LeoOfColossus_Bust/No Supports/LeoOfColossus_Bust_Shield.stl",
+   "key": "LeoOfColossus_Bust_Shield_72ec1e",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 267,
+   "row": 2758,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/The Crimson Sand Arena/All_Busts/MysteriousChampion_Bust/No Supports/MysteriousChampion_Bust.stl",
+   "rel": "Loot Studios/The Crimson Sand Arena/All_Busts/MysteriousChampion_Bust/No Supports/MysteriousChampion_Bust.stl",
+   "key": "MysteriousChampion_Bust_4c18ef",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 268,
+   "row": 2768,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/The Crimson Sand Arena/All_Enemies_Part2/Cyclops/32mm/No Supports/32mm_Cyclops.stl",
+   "rel": "Loot Studios/The Crimson Sand Arena/All_Enemies_Part2/Cyclops/32mm/No Supports/32mm_Cyclops.stl",
+   "key": "32mm_Cyclops_f719d8",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 269,
+   "row": 2786,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/The Crimson Sand Arena/All_Objects/ChestColiseum/No Supports/32mm_ChestColiseum.stl",
+   "rel": "Loot Studios/The Crimson Sand Arena/All_Objects/ChestColiseum/No Supports/32mm_ChestColiseum.stl",
+   "key": "32mm_ChestColiseum_8dc3e1",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 270,
+   "row": 2793,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/The Crimson Sand Arena/All_Objects/SpikedPillar/No Supports/32mm_SpikedPillar.stl",
+   "rel": "Loot Studios/The Crimson Sand Arena/All_Objects/SpikedPillar/No Supports/32mm_SpikedPillar.stl",
+   "key": "32mm_SpikedPillar_b80b36",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 271,
+   "row": 2794,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/The Crimson Sand Arena/All_Objects/Stand/No Supports/32mm_Stand.stl",
+   "rel": "Loot Studios/The Crimson Sand Arena/All_Objects/Stand/No Supports/32mm_Stand.stl",
+   "key": "32mm_Stand_defe36",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 272,
+   "row": 2838,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/The Rebels Strike Back/DownloadAll_32mm/4- Environment/Environment_32mm_NoSupports/DamagedBarricades_NoSupports/32mm_DamagedBarricades_Corner_L.stl",
+   "rel": "Loot Studios/The Rebels Strike Back/DownloadAll_32mm/4- Environment/Environment_32mm_NoSupports/DamagedBarricades_NoSupports/32mm_DamagedBarricades_Corner_L.stl",
+   "key": "32mm_DamagedBarricades_Corner_L_8e7f12",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 273,
+   "row": 2839,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/The Rebels Strike Back/DownloadAll_32mm/4- Environment/Environment_32mm_NoSupports/DamagedBarricades_NoSupports/32mm_DamagedBarricades_Corner_R.stl",
+   "rel": "Loot Studios/The Rebels Strike Back/DownloadAll_32mm/4- Environment/Environment_32mm_NoSupports/DamagedBarricades_NoSupports/32mm_DamagedBarricades_Corner_R.stl",
+   "key": "32mm_DamagedBarricades_Corner_R_80fa3a",
+   "up": [
+    -1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 274,
+   "row": 2842,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/The Rebels Strike Back/DownloadAll_32mm/4- Environment/Environment_32mm_NoSupports/DamagedBarricades_NoSupports/32mm_DamagedBarricades_R_Complement.stl",
+   "rel": "Loot Studios/The Rebels Strike Back/DownloadAll_32mm/4- Environment/Environment_32mm_NoSupports/DamagedBarricades_NoSupports/32mm_DamagedBarricades_R_Complement.stl",
+   "key": "32mm_DamagedBarricades_R_Complement_cc7310",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 275,
+   "row": 2858,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/War for Humanity/DownloadAll_32/Heroes_32mm_NoSuports/MarineCommander_32mm_NoSupports/32mm_MarineCommander_Body.stl",
+   "rel": "Loot Studios/War for Humanity/DownloadAll_32/Heroes_32mm_NoSuports/MarineCommander_32mm_NoSupports/32mm_MarineCommander_Body.stl",
+   "key": "32mm_MarineCommander_Body_b352d4",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 276,
+   "row": 2876,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/War for Humanity/DownloadAll_32/Objects_32mm_NoSuports/Container_32mm_NoSupports/32mm_Container_part05.stl",
+   "rel": "Loot Studios/War for Humanity/DownloadAll_32/Objects_32mm_NoSuports/Container_32mm_NoSupports/32mm_Container_part05.stl",
+   "key": "32mm_Container_part05_8f1a4e",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 277,
+   "row": 2889,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/War for Humanity/DownloadAll_32/Objects_32mm_NoSuports/KC3900Zeus_32mm_NoSupports/KC3900Zeus_Bottom_Part_01.stl",
+   "rel": "Loot Studios/War for Humanity/DownloadAll_32/Objects_32mm_NoSuports/KC3900Zeus_32mm_NoSupports/KC3900Zeus_Bottom_Part_01.stl",
+   "key": "KC3900Zeus_Bottom_Part_01_7825b2",
+   "up": [
+    0.0,
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "n": 278,
+   "row": 2915,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/War for Humanity/DownloadAll_32/Objects_32mm_NoSuports/ThunderLTV_32mm_UnSupported/ThunderLTV_32mm_WheelAxleRear.stl",
+   "rel": "Loot Studios/War for Humanity/DownloadAll_32/Objects_32mm_NoSuports/ThunderLTV_32mm_UnSupported/ThunderLTV_32mm_WheelAxleRear.stl",
+   "key": "ThunderLTV_32mm_WheelAxleRear_b8dd1f",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 279,
+   "row": 2943,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Welcome Pack/Barrel/No Supports/32mm_Barrel.stl",
+   "rel": "Loot Studios/Welcome Pack/Barrel/No Supports/32mm_Barrel.stl",
+   "key": "32mm_Barrel_f2d853",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 280,
+   "row": 2945,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Welcome Pack/Chest/No Supports/32mm_Chest.stl",
+   "rel": "Loot Studios/Welcome Pack/Chest/No Supports/32mm_Chest.stl",
+   "key": "32mm_Chest_210ebd",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 281,
+   "row": 2951,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Welcome Pack Sci-fi/CyberKnight/32mm/No Supports/32mm_CyberKnight.stl",
+   "rel": "Loot Studios/Welcome Pack Sci-fi/CyberKnight/32mm/No Supports/32mm_CyberKnight.stl",
+   "key": "32mm_CyberKnight_5df1c3",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 282,
+   "row": 3035,
+   "path": "/run/media/masa/STLLibrary/Warhammer/Stroganoff/epic-scale-mars-warlord-titan/Mars_Warlord_Head_A.stl",
+   "rel": "Warhammer/Stroganoff/epic-scale-mars-warlord-titan/Mars_Warlord_Head_A.stl",
+   "key": "Mars_Warlord_Head_A_14ea94",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 283,
+   "row": 3041,
+   "path": "/run/media/masa/STLLibrary/Warhammer/Stroganoff/epic-scale-mars-warlord-titan/Mars_Warlord_Right_Thigh.stl",
+   "rel": "Warhammer/Stroganoff/epic-scale-mars-warlord-titan/Mars_Warlord_Right_Thigh.stl",
+   "key": "Mars_Warlord_Right_Thigh_0141a6",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 284,
+   "row": 3064,
+   "path": "/run/media/masa/STLLibrary/Warhammer/Stroganoff/epic-scale-mars-warlord-titan/Shin_Leaning_in_forward.stl",
+   "rel": "Warhammer/Stroganoff/epic-scale-mars-warlord-titan/Shin_Leaning_in_forward.stl",
+   "key": "Shin_Leaning_in_forward_969c28",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 285,
+   "row": 3095,
+   "path": "/run/media/masa/STLLibrary/Warhammer/Warhammer_40K_Outpost_-_smal/files/OutPost_Floor_rectangular_post.stl",
+   "rel": "Warhammer/Warhammer_40K_Outpost_-_smal/files/OutPost_Floor_rectangular_post.stl",
+   "key": "OutPost_Floor_rectangular_post_7486ae",
+   "up": [
+    -1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 286,
+   "row": 3113,
+   "path": "/run/media/masa/STLLibrary/Warhammer/Warhammer_40k_Terrain_Kombination_of_Energy_bridge_and_turbine/files/Bedienkonsole.stl",
+   "rel": "Warhammer/Warhammer_40k_Terrain_Kombination_of_Energy_bridge_and_turbine/files/Bedienkonsole.stl",
+   "key": "Bedienkonsole_7b4abc",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 287,
+   "row": 3146,
+   "path": "/run/media/masa/STLLibrary/Warhammer/angry-dinosaur-with-guns-j4roid20211128-9271-lgjo3w/angry-dinosaur-with-guns-j4roid/arm4.stl",
+   "rel": "Warhammer/angry-dinosaur-with-guns-j4roid20211128-9271-lgjo3w/angry-dinosaur-with-guns-j4roid/arm4.stl",
+   "key": "arm4_a2e278",
+   "up": [
+    -1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 288,
+   "row": 3147,
+   "path": "/run/media/masa/STLLibrary/Warhammer/angry-dinosaur-with-guns-j4roid20211128-9271-lgjo3w/angry-dinosaur-with-guns-j4roid/arm5.stl",
+   "rel": "Warhammer/angry-dinosaur-with-guns-j4roid20211128-9271-lgjo3w/angry-dinosaur-with-guns-j4roid/arm5.stl",
+   "key": "arm5_22e0f9",
+   "up": [
+    -1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 289,
+   "row": 3179,
+   "path": "/run/media/masa/STLLibrary/Warhammer/angry-dinosaur-with-guns-j4roid20211128-9271-lgjo3w/angry-dinosaur-with-guns-j4roid/torso3.stl",
+   "rel": "Warhammer/angry-dinosaur-with-guns-j4roid20211128-9271-lgjo3w/angry-dinosaur-with-guns-j4roid/torso3.stl",
+   "key": "torso3_3a6379",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 290,
+   "row": 3194,
+   "path": "/run/media/masa/STLLibrary/Warhammer/femaleceptor20210614-11598-1tazcja/femaleceptor/Claw3.stl",
+   "rel": "Warhammer/femaleceptor20210614-11598-1tazcja/femaleceptor/Claw3.stl",
+   "key": "Claw3_bcaf01",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 291,
+   "row": 3196,
+   "path": "/run/media/masa/STLLibrary/Warhammer/femaleceptor20210614-11598-1tazcja/femaleceptor/Torso.stl",
+   "rel": "Warhammer/femaleceptor20210614-11598-1tazcja/femaleceptor/Torso.stl",
+   "key": "Torso_0bc7bd",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 292,
+   "row": 3212,
+   "path": "/run/media/masa/STLLibrary/Warhammer/jimsbeanz/xeno-tyrant-guard/tyrant_guard_lower_R_arm.STL",
+   "rel": "Warhammer/jimsbeanz/xeno-tyrant-guard/tyrant_guard_lower_R_arm.STL",
+   "key": "tyrant_guard_lower_R_arm_bb9631",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 293,
+   "row": 3224,
+   "path": "/run/media/masa/STLLibrary/Warhammer/little-dnaborrowers-kit20210724-29228-fsf3ga/little-dnaborrowers-kit/MirLeg2.stl",
+   "rel": "Warhammer/little-dnaborrowers-kit20210724-29228-fsf3ga/little-dnaborrowers-kit/MirLeg2.stl",
+   "key": "MirLeg2_7e1488",
+   "up": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "n": 294,
+   "row": 3247,
+   "path": "/run/media/masa/STLLibrary/Warhammer/little-dnaborrowers-kit20210724-29228-fsf3ga/little-dnaborrowers-kit/fingerin2.stl",
+   "rel": "Warhammer/little-dnaborrowers-kit20210724-29228-fsf3ga/little-dnaborrowers-kit/fingerin2.stl",
+   "key": "fingerin2_5fa984",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 295,
+   "row": 3262,
+   "path": "/run/media/masa/STLLibrary/Warhammer/mean-woman-flying-snek-bug-but-accually-not-potatoe20211223-751-1t61so/mean-woman-flying-snek-bug-but-accually-not-potatoe/tail.stl",
+   "rel": "Warhammer/mean-woman-flying-snek-bug-but-accually-not-potatoe20211223-751-1t61so/mean-woman-flying-snek-bug-but-accually-not-potatoe/tail.stl",
+   "key": "tail_97217d",
+   "up": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "n": 296,
+   "row": 3281,
+   "path": "/run/media/masa/STLLibrary/Warhammer/old-school-cool-retired-deer-with-gun20210525-2182-1nb6ipl/old-school-cool-retired-deer-with-gun/gorillarm1.stl",
+   "rel": "Warhammer/old-school-cool-retired-deer-with-gun20210525-2182-1nb6ipl/old-school-cool-retired-deer-with-gun/gorillarm1.stl",
+   "key": "gorillarm1_88eca2",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 297,
+   "row": 3347,
+   "path": "/run/media/masa/STLLibrary/Warhammer/sssss20211127-750-1r0pndp/sssss/tail1.stl",
+   "rel": "Warhammer/sssss20211127-750-1r0pndp/sssss/tail1.stl",
+   "key": "tail1_efbf54",
+   "up": [
+    0.0,
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "n": 298,
+   "row": 3368,
+   "path": "/run/media/masa/STLLibrary/fago_lapices_1.stl",
+   "rel": "fago_lapices_1.stl",
+   "key": "fago_lapices_1_86e4de",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 299,
+   "row": 3370,
+   "path": "/run/media/masa/STLLibrary/fat_cat_scaled.stl",
+   "rel": "fat_cat_scaled.stl",
+   "key": "fat_cat_scaled_514a8b",
+   "up": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "n": 300,
+   "row": 2652,
+   "path": "/run/media/masa/STLLibrary/Loot Studios/Spacecraft-Crasher/All_Aliens_Part1/JuvenileProtoOsteotron1/32mm/No Supports/32mm_JuvenileProtoOsteotron1.stl",
+   "rel": "Loot Studios/Spacecraft-Crasher/All_Aliens_Part1/JuvenileProtoOsteotron1/32mm/No Supports/32mm_JuvenileProtoOsteotron1.stl",
+   "key": "32mm_JuvenileProtoOsteotron1_e71033",
+   "up": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  }
+ ]
+}

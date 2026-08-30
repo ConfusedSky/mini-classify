@@ -178,7 +178,12 @@ notes at the bottom are amended in place. Open work is tracked separately in
   framing, f3d AO, model-browser's three.js chain with AO on/off and white
   rims), two prompt arms, 301 models, a VLM judge. Gotchas: f3d's system
   config forces `up: +Z` for `*.stl` over the command line; model-browser's
-  spindle axis is the STL up rotated by `rotateX(−π/2)`. Results pending.
+  spindle axis is the STL up rotated by `rotateX(−π/2)`. **Result: every
+  alternative renderer beats production by +0.015–0.026 nDCG@20 (0.852 →
+  0.867–0.878), uniformly and insignificantly** — 6–9 of 12 queries better,
+  2–4 worse, one or two rank swaps each; AO on/off, rim colour and
+  render-describing prompt templates are all within 0.01. The renderer is
+  not where search quality is. `eval/renderer_pilot/`.
 
 
 ## Evergreen notes
