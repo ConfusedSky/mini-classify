@@ -88,13 +88,16 @@ class Pose:
         """A plain constructor over an entry `load_pose_cache` returned.
 
         It absorbs no legacy shapes — they were deleted with the 2026-08-31
-        rebuild (docs/cache-rebuild.md §3). What makes reading `v`, `margin`
-        and `front_view` straight out of the dict safe is that each is
-        guaranteed upstream rather than defaulted here: the loader drops every
-        entry not at POSE_CACHE_VERSION and every entry whose `front_view` is
-        not a dict, and `cache_checker.route` — the only production caller —
-        reaches this only past `pose_is_sufficient`, which treats a missing
-        `margin` as a miss and re-resolves the model instead.
+        rebuild (docs/cache-rebuild.md §3). What makes reading `up`, `source`,
+        `v`, `margin` and `front_view` straight out of the dict safe is one
+        thing and not five: `_readable`, the loader's predicate, requires
+        every one of them, because it is derived from these accesses. In
+        particular `margin` is required to be **present** and may be `None` —
+        the sufficiency check is not what guarantees it, and never was: a
+        `source == "vlm"` entry is a hit one line before sufficiency looks at
+        `margin` at all, so a vlm entry with the key missing used to pass
+        sufficiency and raise `KeyError` here, once per run, forever
+        (adversarial review pass 3, 2026-08-31).
 
         `arbitrated` absent is not a legacy shape but a live state: no claim,
         read as `false` (see `to_cache`). `arbiter` is `.get` for the same
@@ -237,6 +240,70 @@ def file_identity(f, root):
     return f"{identity.rel_path(f, root)}|{identity.mtime_key(stat)}|{stat.st_size}"
 
 
+def _readable(entry):
+    """Can the contract process this entry? The loader admits exactly what it
+    can, and drops the rest — the principle 9d39745 and c3adf6c each applied
+    to one shape at a time, and adversarial review pass 3 (2026-08-31) turned
+    into one predicate after finding four more admitted shapes that crashed
+    downstream.
+
+    Every clause below is an **access** `Pose.from_cache` or
+    `pose_is_sufficient` actually makes, not a schema wish. That is the whole
+    derivation, and it is why the clauses may not be weakened one at a time:
+
+    * a `dict` — `pose_is_sufficient`'s `entry["source"]` and every `.get`
+      call in both functions;
+    * `v == POSE_CACHE_VERSION` — `from_cache` reads `d["v"]` with no
+      default, and a pose decided under a different ensemble or escalation
+      gate is not the pose this version would produce anyway (the original
+      reason to drop, `load_pose_cache` below);
+    * `source` a `str` — `pose_is_sufficient` subscripts `entry["source"]`
+      before any `.get`, so an entry without one raises inside *sufficiency*,
+      not in `from_cache`: the check meant to protect the constructor is the
+      thing that crashes;
+    * `up` a usable vector, through `entry_up` so the rule has one home — it
+      is `tuple(float(x) for x in d["up"])` in `from_cache`, which raises on
+      a missing or null `up`, and `entry_up` additionally rejects the zero
+      and NaN vectors `rotation_to_z_up` raises on downstream;
+    * the `margin` **key present**, `None` allowed — `from_cache` reads
+      `d["margin"]` with no default. `None` has to survive: it is the
+      geometry-only pass and C3's `arbitrated: false` marker, and the
+      ensemble upgrades both in place;
+    * `front_view` absent or a dict — `dict(d.get("front_view", {}))` raises
+      on the legacy bare int, which is stamped v4 and so clears the version
+      test (9d39745);
+    * and **not** the sufficiency/guard deadlock (c3adf6c): a judgment
+      (`arbitrated` true or `"rejected"`) on a non-`vlm` source with no
+      margin. `pose_is_sufficient`'s `arbitrated` branch answers
+      `margin is not None`, so such an entry is insufficient in *every* run
+      and `route` re-poses and re-renders it in every run; and
+      `Done.record_pose`'s guard refuses every falsy-`arbitrated` record over
+      a stored judgment, so no re-resolution can heal it. Nothing converges
+      and nothing writes.
+
+    No production writer emits any of these shapes — `Poser._make_pose` fills
+    every required key, and `_fold` stamps a judgment only onto a pose that
+    parked, which ran `needs_arbiter_margin` against a float — so they arrive
+    from a hand-edited or foreign pose-cache.json. Each one that got through
+    became a permanent per-file `Failure` (`route` raises, the driver's J3
+    boundary converts) in every run, never healed."""
+    if not isinstance(entry, dict):
+        return False
+    if entry.get("v") != POSE_CACHE_VERSION:
+        return False
+    if not isinstance(entry.get("source"), str):
+        return False
+    if entry_up(entry) is None:
+        return False
+    if "margin" not in entry:
+        return False
+    if not isinstance(entry.get("front_view", {}), dict):
+        return False
+    return not (entry.get("arbitrated") in (True, "rejected")
+                and entry["source"] != "vlm"
+                and entry["margin"] is None)
+
+
 def load_pose_cache(cache_dir):
     """Cached poses, minus any written by an older POSE_CACHE_VERSION.
 
@@ -259,42 +326,22 @@ def load_pose_cache(cache_dir):
     if not isinstance(raw, dict):
         raise ValueError(f"{p}: pose cache must be a JSON object, "
                          f"got {type(raw).__name__}")
-    # Four ways an entry fails to be one this code can read, and all four
-    # drop. The `front_view` clause: front_view became a per-config dict
-    # *after* the v4 bump, so entries holding a bare int are stamped v4 and
-    # clear the version test, and `Pose.from_cache` — a plain constructor
-    # since the 2026-08-31 rebuild (docs/cache-rebuild.md §3) — raises on
-    # `dict(0)` rather than absorbing them.
+    # One predicate, `_readable`, which says which accesses each clause comes
+    # from. It replaced a list of inline clauses that had accreted one shape
+    # at a time and was still admitting four more that crashed downstream
+    # (adversarial review pass 3, 2026-08-31): the rule is the contract's
+    # accesses, so it belongs somewhere it can be stated and read.
     #
     # Dropping rather than repairing costs a re-pose, so it was priced: 53 of
     # embed-cache512's 3540 entries, in the cache being rebuilt from scratch
     # that same night, and 0 of embed-cache-test's 2508 (census 2026-08-31,
     # after embed-cache2/3/4 were deleted — embed-cache3 had been nearly all
     # bare ints, and while it existed this had to repair instead of drop).
-    #
-    # The `arbitrated` clause is the youngest (adversarial review, 2026-08-31)
-    # and drops the one shape the contract cannot process: a judgment
-    # (`arbitrated` true or `"rejected"`) on a non-`vlm` source carrying no
-    # margin. Its two halves deadlock. `pose_is_sufficient`'s margin clause
-    # calls such an entry insufficient in *every* run, so `route` re-poses and
-    # re-renders it in every run; and `Done.record_pose`'s guard refuses every
-    # falsy-`arbitrated` record over a stored judgment, so no re-resolution
-    # can ever heal it — an unbounded per-run re-render with no exit. No
-    # production writer emits it (`Poser._fold` stamps a judgment only onto a
-    # parked pose, and parking runs through `needs_arbiter_margin`, which
-    # compares the margin against a float), so it takes a hand-edited or
-    # foreign pose-cache.json — the same provenance, and so the same
-    # drop-at-load treatment, as the bare int above.
-    fresh = {k: v for k, v in raw.items()
-             if isinstance(v, dict) and v.get("v") == POSE_CACHE_VERSION
-             and isinstance(v.get("front_view", {}), dict)
-             and not (v.get("arbitrated") in (True, "rejected")
-                      and v.get("source") != "vlm"
-                      and v.get("margin") is None)}
+    fresh = {k: v for k, v in raw.items() if _readable(v)}
     if len(fresh) < len(raw):
         print(f"pose cache: {len(raw) - len(fresh)} of {len(raw)} entries predate "
-              f"v{POSE_CACHE_VERSION} or carry a shape it cannot read, and will "
-              f"be re-resolved")
+              f"v{POSE_CACHE_VERSION} or carry a shape this code cannot process, "
+              f"and will be re-resolved")
     return fresh
 
 
@@ -304,6 +351,29 @@ def save_pose_cache(cache_dir, cache):
     p = Path(cache_dir) / "pose-cache.json"
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(cache))
+
+
+def repose_reopens(entry, arbiter_available, repose_arbiter):
+    """Did `--repose` re-open this settled entry — is *that* why it is a miss?
+
+    A predicate rather than a clause inside `pose_is_sufficient` because two
+    callers need the same answer and a second copy would drift: sufficiency
+    asks it to return False, and `cache_checker.route` asks it to decide
+    `PoseRenderTask.force_escalate`. The Poser has to be *told*, because
+    "re-opened by --repose" is invisible from where it stands: it sees a fresh
+    ensemble margin, and a re-opened entry whose fresh margin clears this
+    run's gate would otherwise take the ungated arm, record
+    `arbitrated=None`, be refused by `Done.record_pose`'s guard, and be
+    re-opened again by the next `--repose` run — re-rendered forever, never
+    re-judged, and silent about it (adversarial review pass 3, 2026-08-31).
+
+    False whenever `--repose` is off (`repose_arbiter is None`), so an
+    ordinary miss — a cold entry, a geometry-only pass, an owed escalation —
+    never forces a call."""
+    return bool(repose_arbiter is not None and arbiter_available
+                and entry is not None
+                and entry.get("arbitrated") in (True, "rejected")
+                and entry.get("arbiter") != repose_arbiter)
 
 
 def pose_is_sufficient(entry, arbiter_available, margin_threshold,
@@ -344,7 +414,7 @@ def pose_is_sufficient(entry, arbiter_available, margin_threshold,
     a different judge is a miss, so the model re-poses and re-escalates to
     this run's arbiter. It fires on the `arbitrated` field alone, whatever the
     entry's margin does against today's gate — the point is re-judging a
-    judgment, not re-checking the gate that bought it. Three notes:
+    judgment, not re-checking the gate that bought it. Four notes:
 
     * it deliberately re-opens `"rejected"` too. A rejection is one API's
       verdict on one request, not a fact about the model: GLM refusing a sheet
@@ -359,12 +429,14 @@ def pose_is_sufficient(entry, arbiter_available, margin_threshold,
     * the `arbiter_available` guard is the same C3 doctrine as above — a
       degraded run must not re-render entries it cannot re-judge. Without it,
       `--repose` on a run whose arbiter probe failed would re-pose the
-      collection and re-record it under no judge at all."""
+      collection and re-record it under no judge at all.
+    * re-opening is only half the transaction, and the clause lives in
+      `repose_reopens` above so `route` can carry the other half: the
+      re-opened file must actually reach the arbiter, whatever its *fresh*
+      margin does against the gate, or the flag never converges."""
     if entry is None:
         return False
-    if (repose_arbiter is not None and arbiter_available
-            and entry.get("arbitrated") in (True, "rejected")
-            and entry.get("arbiter") != repose_arbiter):
+    if repose_reopens(entry, arbiter_available, repose_arbiter):
         # Above the `source == "vlm"` hit deliberately: an answer a *different*
         # arbiter MOVED is the most valuable thing --repose re-buys, since the
         # measured backends disagree (glm +3 -> 41/44 where gemini is +4 ->
@@ -391,12 +463,13 @@ def up_str(up):
 def entry_up(entry):
     """The up vector of a cache entry as a 3-tuple, or None if it has none.
 
-    The one validator, because two callers need the same answer and both used
-    to assume the entry was well-formed: `embed_cache_token` below (so a
-    malformed entry cannot crash a load) and `collection.pose_of` (so it
-    cannot fail a whole query response). `load_pose_cache` filters on `v` and
-    checks no shape at all, and pose-cache.json is hand-editable — the two
-    that turn up are a missing `up` and a null one.
+    The one validator, because three callers need the same answer and the
+    first two used to assume the entry was well-formed: `embed_cache_token`
+    below (so a malformed entry cannot crash a load), `collection.pose_of` (so
+    it cannot fail a whole query response), and — since pass 3, 2026-08-31 —
+    `_readable`, the loader's own predicate, which is what stops such an entry
+    reaching `Pose.from_cache` in the first place. pose-cache.json is
+    hand-editable; the two that turn up are a missing `up` and a null one.
 
     Finite and non-zero as well as three floats: `rotation_to_z_up` raises on
     a zero or NaN vector (json.loads accepts a bare `NaN` literal), and both

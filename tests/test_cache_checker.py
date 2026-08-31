@@ -368,6 +368,48 @@ def test_repose_reaches_route_through_the_namespace_attribute(tmp_path):
     assert type(route(f, 0, ctx, arbiter_available=True)) is EmbedRenderTask
 
 
+def test_only_a_repose_reopen_forces_the_escalation(tmp_path):
+    """`PoseRenderTask.force_escalate` — the convergence half of `--repose`
+    (adversarial review pass 3, 2026-08-31).
+
+    A re-opened entry is a miss for a reason the Poser cannot see: it holds no
+    store (J6) and is handed a *fresh* ensemble margin. When that fresh margin
+    clears the gate the Poser takes the ungated arm, makes no call, records
+    `arbitrated=None` — and `Done.record_pose`'s guard refuses it, so the
+    stored judgment survives, unchanged, foreign, and re-opened again by the
+    next `--repose` run. Re-rendered every run, never re-judged, and silent
+    about it. `route` is the only actor that knows *which* kind of miss this
+    is, so it says so on the task.
+
+    Precision is the whole point of the flag, so both halves are pinned here:
+    the re-open sets it, and an ordinary miss — no entry, a geometry-only
+    pass, an owed escalation, even in the same `--repose` run — does not. A
+    forced call on those would be buying escalations nobody asked for, at a
+    measured ~1227 calls per cold collection (`pose.MARGIN_THRESHOLD`)."""
+    attr = cache_checker.REPOSE_ARBITER_ATTR
+    gemini = pose.arbiter_id("gemini", None)
+
+    f, ctx = marked(tmp_path / "reopen", True, arbiter=pose.arbiter_id("glm", None))
+    setattr(ctx.args, attr, gemini)
+    out = route(f, 0, ctx, arbiter_available=True)
+    assert type(out) is PoseRenderTask and out.force_escalate
+
+    # the same run, the same flag: a miss that --repose did not cause buys no
+    # call. `marked(..., False)` is C3's marker — an escalation this run is
+    # owed and will make on the margin's own account, not forced.
+    for state, name in ((..., "absent"), (False, "marker")):
+        f2, ctx2 = marked(tmp_path / name, state)
+        setattr(ctx2.args, attr, gemini)
+        out2 = route(f2, 0, ctx2, arbiter_available=True)
+        assert type(out2) is PoseRenderTask and not out2.force_escalate, name
+
+    # and a cold miss, where there is no entry to re-open at all
+    f3, ctx3, _, _ = build(tmp_path / "cold", Case("c", PoseRenderTask,
+                                                   pose_state="absent"))
+    setattr(ctx3.args, attr, gemini)
+    assert not route(f3, 0, ctx3, arbiter_available=True).force_escalate
+
+
 def test_the_settled_reroute_re_reads_the_store(tmp_path):
     """The hinge the `Done.record_pose` guard rests on (adversarial review,
     2026-08-31). When that guard refuses a no-claim record — a `--repose`

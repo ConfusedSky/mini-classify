@@ -84,7 +84,7 @@ def grown_library(tmp_path):
 def test_poses_are_re_keyed_onto_the_wider_root(tmp_path):
     lib, kit, f = grown_library(tmp_path)
     cache, _ = anchored_cache(tmp_path, [f], kit, args())
-    rekeyed, old, dropped = plan_poses([f], cache, kit, lib)
+    rekeyed, old, dropped, _ = plan_poses([f], cache, kit, lib)
     assert list(rekeyed) == [pose.file_identity(f, lib)]
     assert list(old) == [pose.file_identity(f, kit)]     # what it was keyed as
     assert not dropped
@@ -98,16 +98,16 @@ def test_entries_matching_no_file_are_dropped(tmp_path):
     gone = model(kit, "Kit/deleted.stl")
     cache, _ = anchored_cache(tmp_path, [f, gone], kit, args())
     gone.unlink()
-    rekeyed, _, dropped = plan_poses([f], cache, kit, lib)
+    rekeyed, _, dropped, _ = plan_poses([f], cache, kit, lib)
     assert len(rekeyed) == 1 and len(dropped) == 1
 
 
 def test_a_re_run_re_keys_nothing_and_drops_nothing(tmp_path):
     lib, kit, f = grown_library(tmp_path)
     cache, _ = anchored_cache(tmp_path, [f], kit, args())
-    rekeyed, _, _ = plan_poses([f], cache, kit, lib)
+    rekeyed, _, _, _ = plan_poses([f], cache, kit, lib)
     (cache / "pose-cache.json").write_text(json.dumps(rekeyed))
-    again, _, dropped = plan_poses([f], cache, kit, lib)
+    again, _, dropped, _ = plan_poses([f], cache, kit, lib)
     assert again == rekeyed and not dropped
 
 
@@ -117,7 +117,7 @@ def test_a_move_between_drives_needs_no_re_keying_at_all(tmp_path):
     a_root, b_root = tmp_path / "driveA", tmp_path / "driveB"
     f_old, f_new = model(a_root), model(b_root)
     cache, _ = anchored_cache(tmp_path, [f_old], a_root, args())
-    rekeyed, _, dropped = plan_poses([f_new], cache, a_root, b_root)
+    rekeyed, _, dropped, _ = plan_poses([f_new], cache, a_root, b_root)
     assert list(rekeyed) == [pose.file_identity(f_new, b_root)]
     assert pose.file_identity(f_new, b_root) == pose.file_identity(f_old, a_root)
     assert not dropped
@@ -133,9 +133,43 @@ def test_a_newer_resolution_is_not_rolled_back_by_an_old_entry(tmp_path):
         "up": [0.0, 1.0, 0.0], "confidence": 0.9, "source": "vlm", "margin": 0.1,
         "v": pose.POSE_CACHE_VERSION, "front_view": {CFG: 5}}
     (cache / "pose-cache.json").write_text(json.dumps(entries))
-    rekeyed, _, dropped = plan_poses([f], cache, kit, lib)
+    rekeyed, _, dropped, _ = plan_poses([f], cache, kit, lib)
     assert rekeyed[pose.file_identity(f, lib)]["source"] == "vlm"
     assert not dropped          # the superseded old entry is claimed, not dropped
+
+
+def test_entries_the_loader_will_drop_are_counted_not_repaired(tmp_path):
+    """The migration re-keys; it does not decide what is readable.
+
+    An entry the *next* run's `pose.load_pose_cache` will drop — an older `v`,
+    or one of the shapes `pose._readable` refuses — is still claimed by a
+    walked file, so it is re-keyed and copied unchanged like any other. That
+    is deliberate: re-keying is a rename, and a migration that quietly deleted
+    entries would be deciding something nobody asked it to. What changes is
+    that it is now *counted*, so a run that re-keys N poses and re-resolves
+    some of them anyway says so before the re-render bill arrives rather than
+    after (adversarial review pass 3, 2026-08-31).
+
+    `_readable` is imported, not mirrored: two copies of that rule would drift
+    and this line would start lying about which entries survive."""
+    lib, kit, f = grown_library(tmp_path)
+    doomed = model(kit, "Kit/doomed.stl")
+    cache, _ = anchored_cache(tmp_path, [f, doomed], kit, args())
+
+    entries = json.loads((cache / "pose-cache.json").read_text())
+    key = pose.file_identity(doomed, kit)
+    entries[key].pop("margin")            # present-and-null is the rule
+    (cache / "pose-cache.json").write_text(json.dumps(entries))
+    before = dict(entries[key])
+
+    rekeyed, _, dropped, unreadable = plan_poses([f, doomed], cache, kit, lib)
+    new_key = pose.file_identity(doomed, lib)
+    assert not dropped and len(rekeyed) == 2
+    assert list(unreadable) == [new_key]
+    assert rekeyed[new_key] == before                     # copied unchanged
+    # and the count really is the loader's answer, not a second opinion
+    pose.save_pose_cache(cache, rekeyed)
+    assert set(pose.load_pose_cache(cache)) == set(rekeyed) - set(unreadable)
 
 
 # --- embeds -----------------------------------------------------------------
@@ -144,7 +178,7 @@ def test_embeds_are_re_keyed_under_the_new_root(tmp_path):
     lib, kit, f = grown_library(tmp_path)
     a = args()
     cache, _ = anchored_cache(tmp_path, [f], kit, a)
-    rekeyed, _, _ = plan_poses([f], cache, kit, lib)
+    rekeyed, _, _, _ = plan_poses([f], cache, kit, lib)
     moves, already, missing, unclaimed = plan_embeds([f], cache, a, rekeyed, kit, lib)
     assert (already, missing, unclaimed) == (0, 0, []) and len(moves) == 1
     move_all(moves)
@@ -160,7 +194,7 @@ def test_embeddings_nothing_claims_are_reported_not_removed(tmp_path):
     a = args()
     cache, _ = anchored_cache(tmp_path, [f, gone], kit, a)
     gone.unlink()
-    rekeyed, _, _ = plan_poses([f], cache, kit, lib)
+    rekeyed, _, _, _ = plan_poses([f], cache, kit, lib)
     _, _, _, unclaimed = plan_embeds([f], cache, a, rekeyed, kit, lib)
     assert len(unclaimed) == 1 and unclaimed[0].exists()
 
@@ -186,7 +220,7 @@ def test_an_older_recipes_embedding_is_never_promoted_into_a_current_name(tmp_pa
     lib, kit, f = grown_library(tmp_path)
     a = args()
     cache, _ = anchored_cache(tmp_path, [f], kit, a)
-    rekeyed, _, _ = plan_poses([f], cache, kit, lib)
+    rekeyed, _, _, _ = plan_poses([f], cache, kit, lib)
     entry = rekeyed[pose.file_identity(f, lib)]
     token = pose.embed_cache_token(entry, a.up_axis)
 
@@ -213,7 +247,7 @@ def test_a_part_applied_rerun_does_not_call_the_leftover_unclaimed(tmp_path):
     lib, kit, f = grown_library(tmp_path)
     a = args()
     cache, _ = anchored_cache(tmp_path, [f], kit, a)
-    rekeyed, _, _ = plan_poses([f], cache, kit, lib)
+    rekeyed, _, _, _ = plan_poses([f], cache, kit, lib)
     moves, _, _, _ = plan_embeds([f], cache, a, rekeyed, kit, lib)
     src, dst = moves[0]
     dst.parent.mkdir(parents=True, exist_ok=True)

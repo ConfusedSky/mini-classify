@@ -65,14 +65,24 @@ SUFFIX = re.compile(r"^(?P<key>.+)_(?P<tail>view\d+|pose)$")
 # --- planning ---------------------------------------------------------------
 
 def plan_poses(files, cache_dir, old_root, new_root):
-    """(rekeyed, kept, dropped) for pose-cache.json.
+    """(rekeyed, kept, dropped, unreadable) for pose-cache.json.
 
     `dropped` are entries no walked file claims — a model deleted or renamed
     since the cache was written. They are returned rather than discarded
-    quietly so a VLM-sourced one can be called out before it goes."""
+    quietly so a VLM-sourced one can be called out before it goes.
+
+    `unreadable` are entries this migration re-keys and copies **unchanged**
+    that `pose.load_pose_cache` will then drop on the next run: an older
+    `v`, or one of the shapes `pose._readable` refuses (adversarial review
+    pass 3, 2026-08-31). Counted, never touched — re-keying is a rename, not
+    a repair, and a migration that quietly deleted entries would be deciding
+    something it was not asked to. Reporting them is the point: a run that
+    re-keys 3540 poses and re-resolves 53 of them anyway should say so before
+    the re-render bill arrives, not after. Imported rather than mirrored so
+    there is exactly one copy of the rule."""
     path = Path(cache_dir) / "pose-cache.json"
     if not path.exists():
-        return {}, {}, {}
+        return {}, {}, {}, {}
     cache = json.loads(path.read_text())
     rekeyed, claimed = {}, set()
     for f in files:
@@ -87,7 +97,8 @@ def plan_poses(files, cache_dir, old_root, new_root):
         claimed.update(k for k in (old, new) if k in cache)
         rekeyed[new] = entry
     dropped = {k: v for k, v in cache.items() if k not in claimed}
-    return rekeyed, cache, dropped
+    unreadable = {k: v for k, v in rekeyed.items() if not pose._readable(v)}
+    return rekeyed, cache, dropped, unreadable
 
 
 def plan_embeds(files, cache_dir, args, poses, old_root, new_root):
@@ -196,7 +207,7 @@ def main():
     files = load_file_list(Path(args.input), args.cache_dir, args.rescan)
     print(f"collection {len(files)} models\n")
 
-    rekeyed, old_cache, dropped = plan_poses(
+    rekeyed, old_cache, dropped, unreadable = plan_poses(
         files, args.cache_dir, old_root, new_root)
     paid = [v for v in dropped.values() if v.get("source") == "vlm"]
     print(f"poses      {len(rekeyed)} re-keyed of {len(old_cache)}, "
@@ -209,6 +220,13 @@ def main():
         # the last download drops entries for models that are sitting right there
         print(f"           the file list came from cache — rerun with --rescan "
               f"before --apply, or those {len(dropped)} may just be unwalked")
+    if unreadable:
+        # copied unchanged, then dropped by load_pose_cache on the next run:
+        # the re-render is owed either way, and this is where it becomes
+        # visible instead of arriving as an unexplained re-pose
+        print(f"           {len(unreadable)} entries the loader will drop are "
+              f"copied unchanged — an older v, or a shape it cannot process; "
+              f"they will be re-resolved on the next run")
 
     moves_e, already_e, missing_e, unclaimed_e = plan_embeds(
         files, args.cache_dir, args, rekeyed, old_root, new_root)

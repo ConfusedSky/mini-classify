@@ -243,6 +243,16 @@ never re-derives it from the store (true when the fresh source is
 `vlm`/`siglip`) — and the renders-wanted arm treats it like missing
 renders: the redraw is forced even when the render set is complete.
 
+The one thing this decision carries *forward* rather than returning is
+`PoseRenderTask.force_escalate` (2026-08-31, pass 3): a miss caused by
+`--repose` re-opening a settled judgment must reach the arbiter whatever the
+fresh ensemble margin turns out to be, and `route` is the only actor that can
+tell that kind of miss from an ordinary one — the Poser holds no store (J6).
+`pose.repose_reopens` is the predicate, shared with `pose_is_sufficient` so
+the two cannot disagree about which misses these are; see data_structures.md
+§Parent → child for the round trip and why the Poser still obeys
+`can_arbitrate()`.
+
 `settled=True` marks that second call, and only the driver's `Resolved` arm
 passes it: this run's pose decision is made, so `route` skips the
 sufficiency re-check and takes the entry as it stands. Without it,
@@ -291,8 +301,10 @@ One loop: `recv` → dispatch on type → `send` result(s); `EndOfInput`
 terminates it. Conventions:
 
 * `PoseRenderTask` → `loader.get` → `up_axis_scores` → `renderer.pose_tiles`
-  → `PoseTiles(geo_scores, tiles)`. The geometry evidence crosses with the
-  tiles because the mesh does not.
+  → `PoseTiles(geo_scores, tiles, force_escalate)`. The geometry evidence
+  crosses with the tiles because the mesh does not; `force_escalate` is
+  echoed off the task untouched, because the Poser reads it and the task
+  never reaches the Poser.
 * `EmbedRenderTask` → `renderer.views(lm, index, pose.up)` (`index` because
   residency and `Release` key on it, invariant 2; `lm=None` on a resident
   hit) — **`mesh.rotate` on a

@@ -111,13 +111,34 @@ class Done:
         the caller's identity for the file; the store keys on file_identity,
         which Done derives itself (J6: the Poser has no root).
 
-        **A record that claims no judgment does not overwrite one.** An
-        incoming `arbitrated` of `False` or absent says "asked and not
-        answered *yet*", or "never asked at all" — neither is a verdict, and
-        the judgment a stored entry carries is replaced only by another
-        judgment. So an entry whose `arbitrated` is `True` or `"rejected"` is
-        left byte-untouched by such a record; an incoming `True`/`"rejected"`
-        replaces it exactly as before.
+        **A record that claims no judgment does not overwrite one, and a
+        rejection never replaces an answer.** The whole rule, by
+        (stored, incoming) — `judged` is `True` or `"rejected"`:
+
+            stored          incoming            outcome
+            ------          --------            -------
+            unjudged        anything            replaces
+            judged          False / absent      REFUSED
+            True            "rejected"          REFUSED  (2026-08-31, pass 3)
+            "rejected"      "rejected"          replaces (re-judged refusal)
+            "rejected"      True                replaces
+            True            True                replaces
+
+        The first refusal: `False` or absent says "asked and not answered
+        *yet*", or "never asked at all" — neither is a verdict, and a judgment
+        is replaced only by another judgment.
+
+        The second is a design ruling (adversarial review pass 3,
+        2026-08-31). `"rejected"` is a verdict, but the verdict is "this judge
+        will not answer" — worth recording exactly where there is no answer to
+        keep, and nowhere else. Under `--repose` an incoming rejection over a
+        stored `True` trades a paid, *answered* judgment (whose `up` the old
+        judge may well have MOVED) for a refusal: the same trade the guard
+        above exists to refuse, differing only in that the thing arriving is
+        typed as settled. The cost is symmetric and bounded — a `--repose` run
+        under a rejecting judge re-opens that entry on every run, exactly as a
+        same-judge rejection already stays put, and `--repose` runs are
+        deliberate.
 
         The guard lives here rather than in the Poser because Done owns the
         store and the Poser may not read it (J6) — which is precisely why the
@@ -174,8 +195,12 @@ class Done:
         read is what breaks this; `tests/test_cache_checker.py` pins it."""
         ident = file_identity(file, self.ctx.root)
         stored = self.poses.get(ident)
-        if not pose.arbitrated and stored is not None \
-                and stored.get("arbitrated") in (True, "rejected"):
+        was = stored.get("arbitrated") if stored is not None else None
+        # The two refusals of the table above, in the order they were found:
+        # nothing over a judgment, and a refusal over an *answer*.
+        if was in (True, "rejected") and not pose.arbitrated:
+            return
+        if was is True and pose.arbitrated == "rejected":
             return
         self.poses[ident] = pose.to_cache()
 

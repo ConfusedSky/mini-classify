@@ -368,11 +368,12 @@ class Collection:
         if not entry:
             return None
         # A malformed entry degrades to "no pose", never to a raised
-        # exception: `load_pose_cache` filters on `v` and validates no shape,
-        # pose-cache.json is hand-editable, and one bad entry must not fail a
+        # exception. `load_pose_cache` does validate shape now (`_readable`,
+        # 2026-08-31) and drops a missing or null `up` itself, but this stays
+        # the belt: pose-cache.json is hand-editable, `confidence: null` is
+        # not one of the loader's clauses, and one bad entry must not fail a
         # whole query response when this module already treats a null pose as
-        # a real state (review, 2026-08-19). `confidence: null` and a missing
-        # `up` are the two that occur.
+        # a real state (review, 2026-08-19).
         up = pose.entry_up(entry)
         if up is None:
             return None

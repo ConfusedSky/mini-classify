@@ -71,6 +71,14 @@ def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False,
     bumping the stall clock (review, 2026-08-20). `false` means "ask again
     on a later run"; this flag is what confines it to one.
 
+    `PoseRenderTask.force_escalate` is the one thing this decision carries
+    *forward* rather than returning: a miss caused by `--repose` re-opening a
+    settled judgment must reach the arbiter whatever the fresh ensemble margin
+    turns out to be, and `route` is the only actor that can tell that kind of
+    miss from an ordinary one (the Poser holds no store — J6). It rides the
+    task to the child and back on `PoseTiles`, because the Poser is handed
+    tiles, never tasks.
+
     `arbiter_available` — the driver's `cfg.poser.can_arbitrate()`, and
     **keyword-only with no default** so every caller breaks loudly
     (docs/archive/tri-state-pass-2.md, 2026-08-21). It is what makes a marked entry a
@@ -100,10 +108,24 @@ def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False,
         # there, and every other namespace that reaches here — the tools', the
         # tests' — predates the flag and means "off". The name is
         # REPOSE_ARBITER_ATTR on both sides so it cannot drift.
+        repose_arbiter = getattr(args, REPOSE_ARBITER_ATTR, None)
         if entry is None or not (settled or pose.pose_is_sufficient(
                 entry, arbiter_available, args.up_margin,
-                repose_arbiter=getattr(args, REPOSE_ARBITER_ATTR, None))):
-            return PoseRenderTask(file=f, index=index)
+                repose_arbiter=repose_arbiter)):
+            # Why the entry is a miss, not just that it is. Only `route` knows
+            # — the Poser holds no store (J6) and sees only a fresh ensemble
+            # margin — so a re-opened judgment whose fresh margin clears the
+            # gate would make no call, record `arbitrated=None`, be refused by
+            # `Done.record_pose`'s guard, and be re-opened again by the next
+            # `--repose` run: re-rendered forever, never re-judged, silently.
+            # `pose.repose_reopens` is the same predicate sufficiency used one
+            # line above, so the two cannot disagree about which misses these
+            # are; every ordinary miss (no entry, geometry-only, an owed
+            # escalation) leaves it False and buys no call it was not owed.
+            return PoseRenderTask(
+                file=f, index=index,
+                force_escalate=pose.repose_reopens(entry, arbiter_available,
+                                                   repose_arbiter))
         resolved = pose.Pose.from_cache(entry)
 
     # Embedding cache: entry=None on the forced path — embed_cache_token then

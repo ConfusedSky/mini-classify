@@ -140,7 +140,10 @@ class Poser:
         # emptying — and READ by the driver (P4): quiescence and the M4/N1
         # subtractions need membership, hence an exposed dict, not a predicate
         self.parked: dict[int, ParkedFile] = {}
-        self._stash: dict[int, tuple[np.ndarray, list[list[np.ndarray]]]] = {}
+        # (geo_scores, tiles-grid, force_escalate) — everything from the
+        # PoseTiles that on_tile_embeds still needs once the Embedder answers
+        self._stash: dict[
+            int, tuple[np.ndarray, list[list[np.ndarray]], bool]] = {}
         # The breaker (C5, docs/archive/tri-state-pass-2.md, 2026-08-21). Touched only
         # from the parent thread — `poll`/`fold_done`/`settle` and the driver's
         # routing all run there — so no lock, and the count is fold-ordered by
@@ -163,9 +166,10 @@ class Poser:
     # --- the ensemble ------------------------------------------------------
 
     def on_tiles(self, m: PoseTiles) -> EmbedTilesRequest:
-        """Stash (geo_scores, tiles-grid) keyed by index and return the embed
-        request — the ensemble cannot finish without the Embedder."""
-        self._stash[m.index] = (m.geo_scores, m.tiles)
+        """Stash (geo_scores, tiles-grid, force_escalate) keyed by index and
+        return the embed request — the ensemble cannot finish without the
+        Embedder."""
+        self._stash[m.index] = (m.geo_scores, m.tiles, m.force_escalate)
         flat = [im for row in m.tiles for im in row]   # candidate-major, the
         return EmbedTilesRequest(file=m.file, index=m.index,   # grid's order
                                  tiles=np.stack(flat))
@@ -180,7 +184,7 @@ class Poser:
         SigLIP's upright margin per candidate, combine, and record which tier
         *moved* the answer. The resolved pose is recorded through record_pose
         BEFORE any park — that recording is settle's abandonment floor (I15)."""
-        geo_scores, grid = self._stash.pop(m.index)
+        geo_scores, grid, force_escalate = self._stash.pop(m.index)
         embeds = m.embeds.float().cpu().numpy()        # the one GPU pull
         sig = pose.upright_scores(embeds, self.up_T, self.down_T) \
                   .reshape(len(grid), -1).mean(axis=1)
@@ -190,7 +194,18 @@ class Poser:
         up = tuple(float(v) for v in pose.UP_CANDIDATES[idx])
         resolved = (up, ratio, source, margin)
 
-        gated = pose.needs_arbiter_margin(margin, self.cfg.margin_threshold)
+        # `force_escalate` is `route` telling us this file's stored judgment
+        # was re-opened by `--repose`, which is a fact about the *store* and
+        # so invisible from here (J6: the Poser may not read it). Without the
+        # OR, a re-opened entry whose FRESH margin clears the gate takes the
+        # ungated arm below, records `arbitrated=None`, is refused by
+        # `Done.record_pose`'s guard, and is re-opened again by the next
+        # `--repose` run: re-rendered every run, never re-judged, and silent
+        # — the flag never converges (adversarial review pass 3, 2026-08-31).
+        # `can_arbitrate()` still decides whether a call can actually be made,
+        # so the breaker and an absent backend override the force.
+        gated = force_escalate or pose.needs_arbiter_margin(
+            margin, self.cfg.margin_threshold)
         if gated and self.can_arbitrate():
             # The park-time record is `False`, not absent (C3,
             # docs/archive/tri-state-pass-2.md, 2026-08-21): every completion path

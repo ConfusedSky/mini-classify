@@ -72,6 +72,10 @@ keeps a module seam inside the child regardless; see
 class PoseRenderTask:              # pose unknown → render candidate tiles
     file: Path
     index: int
+    force_escalate: bool = False   # `route` re-opened a settled entry under
+                                   # --repose: the Poser must escalate this
+                                   # file whatever its FRESH margin does
+                                   # against the gate (2026-08-31, pass 3)
 
 @dataclass(frozen=True)
 class EmbedRenderTask:             # pose resolved → render classification views
@@ -101,6 +105,22 @@ class EndOfInput:                  # terminates the child. A message, not None:
                                    # (K2/L4)
 ```
 
+**`force_escalate` crosses the boundary twice and is a bool for that reason**
+(adversarial review pass 3, 2026-08-31). It is a fact about the *store* —
+`--repose` re-opened this entry's judgment — and the Poser cannot see it: the
+Poser holds no store (J6) and is handed a *fresh* ensemble margin. When that
+fresh margin clears the gate, the ungated arm records `arbitrated=None`,
+`Done.record_pose`'s guard refuses it, and the next `--repose` run re-opens
+the same entry: re-rendered every run, never re-judged, and silent about it.
+`route` is the only actor that can tell that kind of miss from an ordinary
+one, so it says so on the task; and the Poser is handed tiles, never tasks, so
+the flag rides to the child and back on `PoseTiles`. Defaulted `False` on both
+(every other construction site means "no"), and a plain bool, so it rides the
+existing spawn pickling unchanged (I13). The Poser ORs it into `gated` and
+still consults `can_arbitrate()`, so an absent backend and a tripped breaker
+outrank the force — C3's doctrine, which a "must escalate" flag would
+otherwise quietly overrule.
+
 The child owns saving renders in every case (Q2): the pixels are already in
 its memory, and `--save-renders` config is passed once at child startup. On
 the `needs_embed=False` path the row comes from the accompanying `CachedHit`
@@ -125,6 +145,9 @@ class PoseTiles:                   # → Poser
     tiles: list[list[np.ndarray]]  # [candidate][azimuth] — the grid, not a
                                    # flat list (D7): the ensemble reshapes by
                                    # candidate, and n_az just changed 4 → 2
+    force_escalate: bool = False   # echoed back from the PoseRenderTask that
+                                   # caused this render; the child decides
+                                   # nothing with it
 
 @dataclass(frozen=True)
 class EmbedViews:                  # → Embedder
@@ -428,14 +451,34 @@ class Pose:
   for pre-provenance caches; and the whole check is gated on
   `arbiter_available`, the same C3 doctrine that keeps a degraded run from
   re-rendering what it cannot re-judge.
-* **A record that claims no judgment does not overwrite one** — the guard in
-  `Done.record_pose` (adversarial review, 2026-08-31). An incoming `Pose` whose
-  `arbitrated` is falsy (`False`, or absent) leaves a stored entry whose
-  `arbitrated` is `true` or `"rejected"` **byte-untouched**; an incoming
-  `true`/`"rejected"` replaces it as always. It lives in `Done` because Done
-  owns the store and the Poser may not read it (J6) — which is exactly why the
-  Poser cannot tell it is about to park over a judgment, and why the owner is
-  the only actor that can refuse.
+* **A record that claims no judgment does not overwrite one, and a rejection
+  never replaces an answer** — the guard in `Done.record_pose` (adversarial
+  review, 2026-08-31, extended by pass 3 the same day). The whole rule, by
+  (stored, incoming):
+
+  | stored | incoming | outcome |
+  |---|---|---|
+  | unjudged | anything | replaces |
+  | `true` / `"rejected"` | `false` / absent | **refused** |
+  | `true` | `"rejected"` | **refused** (pass 3) |
+  | `"rejected"` | `"rejected"` | replaces (re-judged refusal) |
+  | `"rejected"` | `true` | replaces |
+  | `true` | `true` | replaces |
+
+  It lives in `Done` because Done owns the store and the Poser may not read it
+  (J6) — which is exactly why the Poser cannot tell it is about to park over a
+  judgment, and why the owner is the only actor that can refuse.
+
+  The second refusal is a design ruling, not a bug fix. `"rejected"` *is* a
+  verdict, but the verdict is "this judge will not answer" — worth recording
+  where there is no answer to keep, and nowhere else. Under `--repose` an
+  incoming rejection over a stored `true` discards an `up` the previous judge
+  may have MOVED in exchange for a refusal, and then seals it, since the stamp
+  now matches this run's arbiter. That is the same trade the falsy half of the
+  guard exists to refuse; the incoming record merely happens to be typed as
+  settled. The cost is symmetric and bounded: a `--repose` run under a
+  rejecting judge re-opens that entry every run, exactly as a same-judge
+  rejection already stays put, and `--repose` runs are deliberate.
 
   What it prevents: `--repose` re-opens a settled entry *before* securing its
   replacement. The park-time record (`poser.on_tile_embeds`: the fresh ensemble
@@ -465,7 +508,9 @@ class Pose:
   pose back into that entry. The fresh ensemble answer is discarded in the
   Poser and never reaches `Done`, so there is no orphan embedding. A failed
   re-judgment therefore behaves as though the re-open never happened, and the
-  next `--repose` run re-opens the entry again — the intended retry. The costs
+  next `--repose` run re-opens the entry again — the intended retry, and since
+  pass 3 a retry that can actually converge: see `force_escalate` under
+  Parent → child. The costs
   are one wasted pose-tile render and ensemble pass, and — under
   `--save-renders`, and only when the discarded answer's source is `siglip` or
   `vlm` — a redraw of already-correct views forced by that answer's
@@ -483,9 +528,15 @@ class Pose:
   `pose.load_pose_cache` therefore drops them by shape as well, with the same
   rule that drops non-dicts and mismatched `v` (53 of `embed-cache512`'s 3540,
   0 of `embed-cache-test`'s 2508, after `embed-cache2/3/4` were deleted).
-  `margin`'s absence needs
-  no absorber: such an entry is a miss at `pose_is_sufficient` and never
-  reaches the constructor. Version filtering keeps the home it always had, and
+  ~~`margin`'s absence needs no absorber: such an entry is a miss at
+  `pose_is_sufficient` and never reaches the constructor.~~ **False since pass
+  3, 2026-08-31**: a `source == "vlm"` entry is a *hit* one line before
+  sufficiency reads `margin` at all, so a vlm entry with the key missing
+  passed sufficiency and raised out of the constructor. The guarantee is the
+  loader's, and only the loader's — `pose._readable` requires the `margin` key
+  present (`None` allowed, since that is the geometry-only pass and C3's
+  marker) along with every other access `from_cache` and `pose_is_sufficient`
+  make. Version filtering keeps the home it always had, and
   `v` is still not defaulted — now because it is read directly, which has the
   same effect D10 asked for: nothing can stamp an unversioned entry as freshly
   resolved.

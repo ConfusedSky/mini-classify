@@ -33,14 +33,17 @@ def tile():
 # frozenness coverage via parent_only() instead.
 def queue_crossers():
     return [
-        M.PoseRenderTask(file=Path("a.stl"), index=0),
+        # force_escalate non-default: it crosses to the child and back, so a
+        # field that failed to pickle would look like the flag doing nothing
+        M.PoseRenderTask(file=Path("a.stl"), index=0, force_escalate=True),
         M.EmbedRenderTask(file=Path("a.stl"), index=1, pose=pose(),
                           needs_embed=False),
         M.Release(file=Path("a.stl"), index=2),
         M.EndOfInput(),
         M.PoseTiles(file=Path("a.stl"), index=3,
                     geo_scores=np.arange(6, dtype=float),
-                    tiles=[[tile(), tile()] for _ in range(6)]),
+                    tiles=[[tile(), tile()] for _ in range(6)],
+                    force_escalate=True),
         M.EmbedViews(file=Path("a.stl"), index=4, pose=pose(),
                      views=[tile() for _ in range(16)]),
         M.Rendered(file=Path("a.stl"), index=5),

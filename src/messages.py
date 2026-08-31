@@ -33,6 +33,16 @@ if TYPE_CHECKING:
 class PoseRenderTask:              # pose unknown → render candidate tiles
     file: Path
     index: int
+    force_escalate: bool = False   # `route` re-opened a settled entry under
+                                   # --repose: the Poser must escalate this
+                                   # file whatever its FRESH margin does
+                                   # against the gate. Defaulted because every
+                                   # other caller means "no" and the flag is a
+                                   # bool, so it rides the spawn pickle
+                                   # unchanged (I13). It travels on to the
+                                   # Poser through PoseTiles below — the Poser
+                                   # never sees the task, and re-derives
+                                   # nothing: it holds no store (J6)
 
 
 @dataclass(frozen=True)
@@ -75,6 +85,11 @@ class PoseTiles:                   # → Poser
                                    # geometry evidence must
     tiles: list[list[np.ndarray]]  # [candidate][azimuth] — the grid, not a
                                    # flat list (D7)
+    force_escalate: bool = False   # echoed back from the PoseRenderTask that
+                                   # caused this render. The child decides
+                                   # nothing with it; it rides here because
+                                   # the Poser is the only actor that reads it
+                                   # and the task never reaches the Poser
 
 
 @dataclass(frozen=True)

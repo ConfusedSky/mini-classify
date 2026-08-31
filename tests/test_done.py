@@ -20,6 +20,7 @@ import copy
 import csv
 import io
 import os
+from concurrent.futures import Future
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,7 +28,7 @@ import numpy as np
 import pytest
 import torch
 
-from src import pose
+from src import cache_checker, pose
 from src.cache_checker import route
 from src.cachedir import cache_key, view_config
 from src.identity import cache_key_from_identity
@@ -38,10 +39,13 @@ from src.messages import (
     CachedHit,
     Embedded,
     Failure,
+    PoseRenderTask,
+    PoseTiles,
     Release,
     Rendered,
     ResultRow,
     Retired,
+    TileEmbeds,
 )
 from src.pose import Pose
 
@@ -356,13 +360,13 @@ def test_a_failed_fold_never_overwrites_a_judgment(tmp_path):
 
 def test_a_genuine_new_judgment_still_replaces_the_old_one(tmp_path):
     """The guard refuses records that claim nothing, not the re-judgment
-    --repose exists to buy. Both settled states replace and both are
-    replaceable — including a stored `"rejected"`, which is one API's verdict
-    on one request and exactly what a run under a different arbiter re-opens
-    — and the replacement carries the new judge, otherwise the flag would be a
-    no-op."""
+    --repose exists to buy. An incoming `true` replaces either settled state,
+    and a stored `"rejected"` is replaceable by either — it is one API's
+    verdict on one request, and exactly what a run under a different arbiter
+    re-opens. The replacement carries the new judge, or the flag is a no-op."""
     rig = make_rig(tmp_path)
-    for stored, state in ((True, True), (True, "rejected"), ("rejected", True)):
+    for stored, state in ((True, True), ("rejected", True),
+                          ("rejected", "rejected")):
         f = stl(rig, name=f"j{stored}-{state}.stl")
         judged(rig, f, stored, backend="glm")
         fresh = a_poser(rig)._make_pose((0.0, 1.0, 0.0), 1.0, "vlm", 0.2,
@@ -371,6 +375,34 @@ def test_a_genuine_new_judgment_still_replaces_the_old_one(tmp_path):
         entry = rig.ctx.poses[pose.file_identity(f, rig.root)]
         assert entry == fresh.to_cache()
         assert entry["arbiter"] == pose.arbiter_id("gemini", None)
+
+
+def test_a_rejection_never_replaces_an_answer(tmp_path):
+    """The case flipped by the 2026-08-31 pass-3 ruling — it used to replace,
+    and `test_a_genuine_new_judgment_still_replaces_the_old_one` used to pin
+    that it did.
+
+    `(stored=True, incoming="rejected")` is the one pair where both sides are
+    settled and the trade is still a loss: `"rejected"` is a verdict, but the
+    verdict is "*this* judge will not answer", which is worth recording
+    exactly where there is no answer to keep. Under `--repose` it would
+    discard an `up` the previous judge may have MOVED, in exchange for a
+    refusal — and then seal it, because the stamp now matches this run's
+    arbiter and no later run re-opens it. That is the same trade the falsy
+    guard exists to refuse; the incoming record merely happens to be typed as
+    settled.
+
+    The price, deliberately paid: a `--repose` run under a judge that keeps
+    rejecting re-opens the entry every run (one wasted pose render each),
+    which is bounded to deliberate `--repose` runs and symmetric with a
+    same-judge rejection already staying put."""
+    rig = make_rig(tmp_path)
+    f = stl(rig)
+    before = judged(rig, f, True, backend="glm")          # an answer, paid for
+    rejection = a_poser(rig)._make_pose((0.0, 1.0, 0.0), 1.0, "siglip", 0.2,
+                                        arbitrated="rejected")
+    rig.done.record_pose(f, 0, rejection)
+    assert rig.ctx.poses[pose.file_identity(f, rig.root)] == before
 
 
 def test_outside_repose_the_guard_changes_nothing(tmp_path):
@@ -410,6 +442,124 @@ def test_outside_repose_the_guard_changes_nothing(tmp_path):
                 (1.0, 0.0, 0.0), 1.0, source, 0.01,
                 arbitrated=state).to_cache())
             assert pose.pose_is_sufficient(entry, True, pose.MARGIN_THRESHOLD)
+
+
+# --- the whole --repose chain, once ------------------------------------------
+
+# One text-probe dimension, as tests/test_poser.py uses: upright_scores is
+# 2 * the embed value, so the tile embeddings below hand SigLIP's vote to
+# exactly one candidate and the ensemble's answer is known.
+PROBE_UP, PROBE_DOWN = np.array([[1.0]]), np.array([[-1.0]])
+GEO_CONFIDENT = np.array([0.5, 0.01, 0.0, 0.0, 0.0, 0.0])   # margin 1.98
+
+
+def tile_grid(n_az=2):
+    return [[np.zeros((4, 4, 3), np.uint8) for _ in range(n_az)]
+            for _ in range(6)]
+
+
+def sig_tile_embeds(win=0, n_az=2):
+    e = np.zeros((6 * n_az, 1), dtype=np.float32)
+    e[win * n_az:(win + 1) * n_az] = 1.0
+    return torch.from_numpy(e)
+
+
+class InlineArbiter:
+    """The real Arbiter is a thread pool; here the call runs inline and its
+    outcome lands on a `Future` exactly as `Poser._fold` reads it."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def submit(self, call):
+        self.calls += 1
+        fut = Future()
+        try:
+            fut.set_result(call())
+        except BaseException as e:                       # noqa: BLE001
+            fut.set_exception(e)
+        return fut
+
+
+def repose_pass(rig, f, ask):
+    """One `--repose` run over one file, end to end. Real `route`, real
+    `Poser`, real `Done` and the real pose store; the renderer and the
+    Embedder are the two fakes, and the child's echo of `force_escalate` is
+    inlined (`tests/test_render_child.py` pins that hop itself).
+
+    Returns (cold task, arbiter, settled re-route)."""
+    from src.poser import Poser, VlmConfig
+    arbiter = InlineArbiter()
+    poser = Poser(PROBE_UP, PROBE_DOWN, arbiter, rig.done.record_pose,
+                  VlmConfig(backend="gemini", ask=ask))
+    cold = route(f, 0, rig.ctx, arbiter_available=poser.can_arbitrate())
+    assert type(cold) is PoseRenderTask                  # re-opened
+    req = poser.on_tiles(PoseTiles(cold.file, cold.index, GEO_CONFIDENT,
+                                   tile_grid(), cold.force_escalate))
+    out = poser.on_tile_embeds(TileEmbeds(req.file, req.index,
+                                          sig_tile_embeds()))
+    if out is None:                                      # parked on the call
+        (out,) = poser.poll()
+    settled = route(out.file, out.index, rig.ctx, pose_changed=out.pose_changed,
+                    settled=True, arbiter_available=poser.can_arbitrate())
+    return cold, arbiter, settled
+
+
+def test_a_repose_run_holds_a_foreign_judgment_until_a_judge_answers(tmp_path):
+    """The chain nothing else pins (adversarial review pass 3, 2026-08-31):
+    `route` → the child's echo → the ensemble → the arbiter fold →
+    `Done.record_pose` → the settled re-route, with the real components and
+    one store, across two `--repose` runs of the same file.
+
+    Each piece has its own unit test; what only this can show is that they
+    compose into the two properties the flag is for.
+
+    **A run that cannot buy an answer changes nothing.** Run 1's arbiter
+    refuses transiently. The entry is re-opened, re-rendered, re-escalated,
+    the call fails, `_fold` records `arbitrated=False` — and the guard holds
+    the stored judgment byte-identical, so the run proceeds on the *judged*
+    pose: the settled re-route carries the store's `up`, not the ensemble's,
+    which is what keeps the `.npy` key, the CSV row and the `front_view` merge
+    all describing the same pixels.
+
+    **A run that can buy one converges.** Run 2's arbiter answers and moves
+    the pose; the judgment lands stamped with this run's arbiter, and the
+    entry is then sufficient *under the same flag* — so a third `--repose` run
+    re-opens nothing. That last assertion is the loop closing, and it is the
+    one that fails if the forced escalation is dropped: with no call made, run
+    2 records `arbitrated=None`, the guard refuses it, and the foreign
+    judgment is re-opened again forever."""
+    rig = make_rig(tmp_path, up_margin=pose.MARGIN_THRESHOLD)
+    f = stl(rig)
+    ident = pose.file_identity(f, rig.root)
+    gemini = pose.arbiter_id("gemini", None)
+    before = judged(rig, f, True, backend="glm")     # another judge's answer
+    setattr(rig.ctx.args, cache_checker.REPOSE_ARBITER_ATTR, gemini)
+
+    def refuse(tiles):
+        raise pose.VLMUnavailable("429 from the arbiter")
+
+    cold, arbiter, settled = repose_pass(rig, f, refuse)
+    # the fresh ensemble margin is 1.98 against a 0.45 gate: without
+    # force_escalate this run makes no call at all
+    assert cold.force_escalate and arbiter.calls == 1
+    assert rig.ctx.poses[ident] == before                    # byte-identical
+    assert settled.pose == Pose.from_cache(before)           # the judged pose
+    assert settled.pose.up == (1.0, 0.0, 0.0) != (0.0, 0.0, 1.0)  # not the
+                                                             # ensemble's
+
+    cold2, arbiter2, settled2 = repose_pass(rig, f, lambda tiles: 4)
+    assert cold2.force_escalate and arbiter2.calls == 1
+    entry = rig.ctx.poses[ident]
+    assert entry["arbitrated"] is True and entry["arbiter"] == gemini
+    assert entry["source"] == "vlm" and entry["up"] == [1.0, 0.0, 0.0]
+    assert settled2.pose == Pose.from_cache(entry)
+
+    # converged: the same flag, the same judge, and nothing left to re-open
+    assert pose.pose_is_sufficient(entry, True, pose.MARGIN_THRESHOLD,
+                                   repose_arbiter=gemini)
+    assert type(route(f, 0, rig.ctx, arbiter_available=True)) \
+        is not PoseRenderTask
 
 
 def test_front_view_resolved_once_and_merged_into_entry(tmp_path):

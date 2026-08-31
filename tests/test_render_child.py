@@ -200,6 +200,29 @@ def test_pose_task_carries_geometry_evidence_and_the_grid(monkeypatch, trap_exit
     assert len(tiles.tiles) == 6             # [candidate][azimuth]
 
 
+def test_force_escalate_rides_the_task_across_and_back(monkeypatch, trap_exit):
+    """The only path from `route` to the Poser (2026-08-31, pass 3 finding 3).
+
+    The Poser is handed `PoseTiles`, never the task that caused it, so
+    `--repose`'s forced escalation has to cross the process boundary twice:
+    parent → child on `PoseRenderTask`, child → parent on `PoseTiles`. The
+    child decides nothing with it and renders identically either way — it is
+    an echo, and this is what pins the echo, because a dropped field here
+    would look exactly like the flag doing nothing."""
+    log = []
+    results = RecordingResults(log)
+    monkeypatch.setattr(render_child, "Renderer", lambda cfg: FakeRenderer(log))
+    monkeypatch.setattr(render_child, "loader", FakeLoader(log))
+    with pytest.raises(ExitCalled):
+        render_child.run_child(
+            ScriptedTasks([PoseRenderTask(Path("/c/a.stl"), 0),
+                           PoseRenderTask(Path("/c/b.stl"), 1,
+                                          force_escalate=True),
+                           EndOfInput()]),
+            results, CFG)
+    assert [m.force_escalate for m in results.sent] == [False, True]
+
+
 # --- Failure conversion ------------------------------------------------------
 
 def test_a_bad_mesh_becomes_failure_and_the_run_continues(monkeypatch, trap_exit):

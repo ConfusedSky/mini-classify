@@ -62,7 +62,11 @@ def _handle(msg, renderer: Renderer):
             geo_scores = pose.up_axis_scores(lm.mesh)  # the mesh never crosses
         with stage("pose-render"):                     # the boundary, so its
             tiles = renderer.pose_tiles(lm, msg.index)  # geometry evidence must
-        return PoseTiles(msg.file, msg.index, geo_scores, tiles)
+        # force_escalate is echoed, never acted on: the child renders the same
+        # tiles either way, and it is the Poser's decision the flag belongs to
+        # — this is the only path from `route` to the Poser (2026-08-31).
+        return PoseTiles(msg.file, msg.index, geo_scores, tiles,
+                         msg.force_escalate)
     # EmbedRenderTask. The pose->embed revisit is the residency win: a
     # resident mesh needs no re-parse, so loader.get runs only on a miss.
     lm = None

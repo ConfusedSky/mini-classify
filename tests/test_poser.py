@@ -95,10 +95,12 @@ def make_poser(done=None, arb=None, clock=None, **cfg):
     return poser, done, arb
 
 
-def feed(poser, win=0, geo=GEO_CONFIDENT, index=7, n_az=2, file=F):
+def feed(poser, win=0, geo=GEO_CONFIDENT, index=7, n_az=2, file=F,
+         force_escalate=False):
     """One file through on_tiles → on_tile_embeds, SigLIP favouring `win`."""
     poser.on_tiles(PoseTiles(file=file, index=index, geo_scores=geo,
-                             tiles=grid_tiles(n_az)))
+                             tiles=grid_tiles(n_az),
+                             force_escalate=force_escalate))
     return poser.on_tile_embeds(
         TileEmbeds(file=file, index=index, embeds=sig_embeds(win, n_az)))
 
@@ -201,6 +203,57 @@ def test_an_ungated_resolution_makes_no_claim():
     feed(poser)                                  # margin 1.98, well clear
     assert done.poses[-1][2].arbitrated is None
     assert poser.gate_fired_no_call == 0
+
+
+def test_force_escalate_parks_a_margin_that_clears_the_gate():
+    """`--repose`'s convergence half, at the end that acts on it (adversarial
+    review pass 3, 2026-08-31).
+
+    A re-opened entry's *fresh* ensemble margin has nothing to do with why it
+    was re-opened — `--repose` re-judges a judgment, not a gate — and here it
+    is 1.98 against a 0.45 threshold: ungated, no call, `arbitrated=None`
+    recorded. `Done.record_pose`'s guard then refuses that record over the
+    stored judgment, so the entry survives foreign and the next `--repose` run
+    re-opens it again: re-rendered forever, never re-judged, nothing in the
+    output saying so. The flag is what closes the loop, and the fold is what
+    proves it closes: the judgment lands stamped with *this* run's arbiter,
+    which is exactly what stops the next run re-opening it.
+
+    Both halves, because only the pair is evidence — the same margin, the same
+    config, one bit apart."""
+    poser, done, arb = make_poser(backend="gemini", margin_threshold=0.45,
+                                  ask=lambda tiles: 0)
+    assert feed(poser, force_escalate=True) is None      # parked, not resolved
+    assert len(arb.calls) == 1 and set(poser.parked) == {7}
+    assert done.poses[-1][2].arbitrated is False         # the park-time record
+    arb.futures[0].set_result(0)
+    assert poser.poll() == [Resolved(F, 7, pose_changed=False)]
+    settled = done.poses[-1][2]
+    assert settled.arbitrated is True and settled.arbiter == GEMINI_ID
+
+    # ...and without the flag the identical file makes no call at all
+    poser2, done2, arb2 = make_poser(backend="gemini", margin_threshold=0.45,
+                                     ask=lambda tiles: 0)
+    assert feed(poser2) == Resolved(F, 7, pose_changed=False)
+    assert not arb2.calls and not poser2.parked
+    assert done2.poses[-1][2].arbitrated is None
+
+
+def test_a_forced_escalation_still_obeys_the_breaker_and_the_backend():
+    """`can_arbitrate()` outranks the force. `route` only sets it when the
+    driver passed `arbiter_available=True`, but the breaker can trip while the
+    file is out at the child, and an `off` run must never call — C3's doctrine,
+    which a "must escalate" flag would otherwise quietly overrule. The gate
+    fired and no call was made, so it records `false` and is counted."""
+    for cfg in (dict(backend=None), dict(backend="gemini")):
+        poser, done, arb = make_poser(margin_threshold=0.45, **cfg)
+        if cfg["backend"]:
+            poser._tripped = True                # the breaker, mid-run
+        assert feed(poser, force_escalate=True) == Resolved(F, 7,
+                                                            pose_changed=False)
+        assert not arb.calls and not poser.parked
+        assert done.poses[-1][2].arbitrated is False
+        assert poser.gate_fired_no_call == 1
 
 
 def test_can_arbitrate_follows_the_backend():

@@ -630,9 +630,12 @@ def test_view_angles_is_elevation_major():
 
 def test_pose_cache_roundtrip(tmp_path):
     # front_view keyed by view config, the only shape the loader passes through
+    # — and `margin`, which `_readable` requires *present* and lets be null:
+    # this is the geometry-only pass, exactly the entry that must survive
     cache = {"some|identity": {"up": [0.0, 0.0, 1.0],
                                "front_view": {"8v-e20,-20-ev2": 2},
                                "confidence": 0.15, "source": "geometry",
+                               "margin": None,
                                "v": pose.POSE_CACHE_VERSION}}
     pose.save_pose_cache(tmp_path, cache)
     assert pose.load_pose_cache(tmp_path) == cache
@@ -642,9 +645,11 @@ def test_pose_cache_roundtrip(tmp_path):
 
 def test_pose_cache_drops_stale_versions(tmp_path):
     # a pose decided under an older ensemble or gate is not this version's pose
-    cache = {"old": {"up": [0.0, 0.0, 1.0], "source": "vlm"},                    # no v
-             "older": {"up": [0.0, 1.0, 0.0], "source": "vlm", "v": 1},
-             "current": {"up": [0.0, 0.0, 1.0], "source": "vlm",
+    cache = {"old": {"up": [0.0, 0.0, 1.0], "source": "vlm",
+                     "margin": 0.5},                                        # no v
+             "older": {"up": [0.0, 1.0, 0.0], "source": "vlm", "margin": 0.5,
+                       "v": 1},
+             "current": {"up": [0.0, 0.0, 1.0], "source": "vlm", "margin": 0.5,
                          "v": pose.POSE_CACHE_VERSION}}
     pose.save_pose_cache(tmp_path, cache)
     assert set(pose.load_pose_cache(tmp_path)) == {"current"}
@@ -1062,6 +1067,67 @@ def test_the_loader_drops_a_judgment_that_records_no_margin(tmp_path):
     # the drop this entry is a miss in every run, forever
     assert not pose.pose_is_sufficient(dict(base, margin=None, arbitrated=True),
                                        True, pose.MARGIN_THRESHOLD)
+
+
+def test_the_loader_admits_only_what_route_can_process(tmp_path):
+    """`_readable`, and the four shapes that got past the accreted clauses it
+    replaced (adversarial review pass 3, 2026-08-31).
+
+    Each one passed `pose_is_sufficient` — or crashed *inside* it — and then
+    raised out of `Pose.from_cache`, which `cache_checker.route` calls with no
+    guard. `route` raising is the driver's J3 boundary, so every one of these
+    became a `RENDER_ERROR` row for that file in **every** run: never
+    resolved, never re-posed, never healed, and the CSV blaming the mesh.
+
+    The two the version and deadlock clauses could never have caught are the
+    reason this is one predicate instead of a fourth clause: a `vlm` entry
+    with the `margin` key missing is a *hit* one line before sufficiency looks
+    at `margin` at all, and an entry with no `source` raises `KeyError` inside
+    sufficiency itself, before `from_cache` is even reached. Both are
+    `from_cache` accesses; neither is expressible as "the shape sufficiency
+    would reject".
+
+    The four survivors are the whole live schema, and each is here because
+    tightening a clause would take it: C3's `arbitrated: false` marker and the
+    geometry-only pass both carry `margin: None` (present, null — which is why
+    the requirement is the *key*, not a value), a judged entry carries a
+    margin, and a `vlm` entry is sufficient whatever its margin does."""
+    # margin 0.9 clears MARGIN_THRESHOLD: every crasher below has to be
+    # *sufficient* before it can reach `from_cache` and raise there
+    ok = {"up": [0.0, 0.0, 1.0], "confidence": 0.5, "source": "geometry",
+          "margin": 0.9, "v": pose.POSE_CACHE_VERSION}
+    crashers = {
+        # sufficient on its source alone, one line before `margin` is read
+        "vlm-no-margin-key": {k: v for k, v in
+                              dict(ok, source="vlm").items() if k != "margin"},
+        "no-up": {k: v for k, v in ok.items() if k != "up"},
+        # a judgment with a margin: settled, sufficient — and `up` is null
+        "null-up-judged": dict(ok, up=None, arbitrated=True),
+        "no-source": {k: v for k, v in ok.items() if k != "source"},
+    }
+    survivors = {
+        "marked": dict(ok, margin=None, arbitrated=False),   # C3's marker
+        "geometry-only": dict(ok, margin=None),
+        "judged": dict(ok, arbitrated=True, arbiter="gemini/g"),
+        "vlm": dict(ok, source="vlm", margin=None),
+    }
+
+    # first: these really do crash the pair, or the drop is pinning nothing
+    for name, entry in crashers.items():
+        with pytest.raises((KeyError, TypeError)):
+            if pose.pose_is_sufficient(entry, True, pose.MARGIN_THRESHOLD):
+                pose.Pose.from_cache(entry)
+            else:                       # a miss for another reason would make
+                raise AssertionError(   # the raises() above pass vacuously
+                    f"{name} was a miss, not a crash — re-pick the fixture")
+
+    pose.save_pose_cache(tmp_path, {**crashers, **survivors})
+    got = pose.load_pose_cache(tmp_path)
+    assert set(got) == set(survivors)
+    # ...and everything admitted really is constructible, which is the whole
+    # claim the predicate makes
+    for entry in got.values():
+        assert pose.Pose.from_cache(entry).v == pose.POSE_CACHE_VERSION
 
 
 def test_an_entry_below_the_current_version_never_reaches_from_cache(tmp_path):
