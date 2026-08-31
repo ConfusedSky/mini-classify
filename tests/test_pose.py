@@ -1024,6 +1024,46 @@ def test_the_loader_drops_a_legacy_bare_int_front_view(tmp_path):
     assert pose.front_view(got["keyed"], "8v-e20,-20") == 5
 
 
+def test_the_loader_drops_a_judgment_that_records_no_margin(tmp_path):
+    """The shape the contract cannot process (adversarial review, 2026-08-31):
+    a judgment — `arbitrated` true or `"rejected"` — on a non-`vlm` source
+    with `margin: None`. The two halves deadlock. `pose_is_sufficient`'s
+    margin clause calls it insufficient every run (pinned by
+    `test_a_settled_entry_is_never_re_asked`), so `route` re-poses and
+    re-renders it every run; `Done.record_pose`'s guard refuses every
+    falsy-`arbitrated` record over a stored judgment, so the re-resolution can
+    never heal it. Nothing converges and nothing writes: the model re-renders
+    forever.
+
+    No production writer emits it — `Poser._fold` stamps a judgment only onto
+    a pose that parked, and parking runs `needs_arbiter_margin`, which
+    compares the margin against a float — so, like the bare-int `front_view`,
+    it arrives only from a hand-edited or foreign pose-cache.json, and the
+    loader is where such a shape stops.
+
+    Three neighbours it must not take with it: a judgment *with* a margin is
+    the ordinary settled entry; a margin-less entry with *no* judgment is the
+    geometry-only pass the ensemble upgrades in place, whether it carries C3's
+    `arbitrated: false` marker or no claim at all; and `source == "vlm"` is
+    sufficient whatever its margin, so it never re-opens and never loops."""
+    base = {"up": [0, 0, 1], "confidence": 0.5, "source": "geometry",
+            "v": pose.POSE_CACHE_VERSION}
+    pose.save_pose_cache(tmp_path, {
+        "loop-true": dict(base, margin=None, arbitrated=True),
+        "loop-rejected": dict(base, margin=None, arbitrated="rejected"),
+        "judged": dict(base, margin=0.2, arbitrated=True),
+        "geometry-only": dict(base, margin=None),
+        "marked": dict(base, margin=None, arbitrated=False),
+        "vlm": dict(base, source="vlm", margin=None, arbitrated=True)})
+    got = pose.load_pose_cache(tmp_path)
+    assert set(got) == {"judged", "geometry-only", "marked", "vlm"}
+
+    # the half that lives in this module, stated where the drop is: without
+    # the drop this entry is a miss in every run, forever
+    assert not pose.pose_is_sufficient(dict(base, margin=None, arbitrated=True),
+                                       True, pose.MARGIN_THRESHOLD)
+
+
 def test_an_entry_below_the_current_version_never_reaches_from_cache(tmp_path):
     """`from_cache` reads `v` and `margin` straight out of the dict now, with
     no defaults (docs/cache-rebuild.md §3). What makes that safe is upstream,

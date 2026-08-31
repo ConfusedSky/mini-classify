@@ -259,21 +259,38 @@ def load_pose_cache(cache_dir):
     if not isinstance(raw, dict):
         raise ValueError(f"{p}: pose cache must be a JSON object, "
                          f"got {type(raw).__name__}")
-    # Three ways an entry fails to be one this code can read, and all three
-    # drop. The `front_view` clause is the youngest: front_view became a
-    # per-config dict *after* the v4 bump, so entries holding a bare int are
-    # stamped v4 and clear the version test, and `Pose.from_cache` — a plain
-    # constructor since the 2026-08-31 rebuild (docs/cache-rebuild.md §3) —
-    # raises on `dict(0)` rather than absorbing them.
+    # Four ways an entry fails to be one this code can read, and all four
+    # drop. The `front_view` clause: front_view became a per-config dict
+    # *after* the v4 bump, so entries holding a bare int are stamped v4 and
+    # clear the version test, and `Pose.from_cache` — a plain constructor
+    # since the 2026-08-31 rebuild (docs/cache-rebuild.md §3) — raises on
+    # `dict(0)` rather than absorbing them.
     #
     # Dropping rather than repairing costs a re-pose, so it was priced: 53 of
     # embed-cache512's 3540 entries, in the cache being rebuilt from scratch
     # that same night, and 0 of embed-cache-test's 2508 (census 2026-08-31,
     # after embed-cache2/3/4 were deleted — embed-cache3 had been nearly all
     # bare ints, and while it existed this had to repair instead of drop).
+    #
+    # The `arbitrated` clause is the youngest (adversarial review, 2026-08-31)
+    # and drops the one shape the contract cannot process: a judgment
+    # (`arbitrated` true or `"rejected"`) on a non-`vlm` source carrying no
+    # margin. Its two halves deadlock. `pose_is_sufficient`'s margin clause
+    # calls such an entry insufficient in *every* run, so `route` re-poses and
+    # re-renders it in every run; and `Done.record_pose`'s guard refuses every
+    # falsy-`arbitrated` record over a stored judgment, so no re-resolution
+    # can ever heal it — an unbounded per-run re-render with no exit. No
+    # production writer emits it (`Poser._fold` stamps a judgment only onto a
+    # parked pose, and parking runs through `needs_arbiter_margin`, which
+    # compares the margin against a float), so it takes a hand-edited or
+    # foreign pose-cache.json — the same provenance, and so the same
+    # drop-at-load treatment, as the bare int above.
     fresh = {k: v for k, v in raw.items()
              if isinstance(v, dict) and v.get("v") == POSE_CACHE_VERSION
-             and isinstance(v.get("front_view", {}), dict)}
+             and isinstance(v.get("front_view", {}), dict)
+             and not (v.get("arbitrated") in (True, "rejected")
+                      and v.get("source") != "vlm"
+                      and v.get("margin") is None)}
     if len(fresh) < len(raw):
         print(f"pose cache: {len(raw) - len(fresh)} of {len(raw)} entries predate "
               f"v{POSE_CACHE_VERSION} or carry a shape it cannot read, and will "

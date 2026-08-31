@@ -356,12 +356,15 @@ def test_a_failed_fold_never_overwrites_a_judgment(tmp_path):
 
 def test_a_genuine_new_judgment_still_replaces_the_old_one(tmp_path):
     """The guard refuses records that claim nothing, not the re-judgment
-    --repose exists to buy. Both settled states replace, and the replacement
-    carries the new judge — otherwise the flag would be a no-op."""
+    --repose exists to buy. Both settled states replace and both are
+    replaceable — including a stored `"rejected"`, which is one API's verdict
+    on one request and exactly what a run under a different arbiter re-opens
+    — and the replacement carries the new judge, otherwise the flag would be a
+    no-op."""
     rig = make_rig(tmp_path)
-    for state in (True, "rejected"):
-        f = stl(rig, name=f"j{state}.stl")
-        judged(rig, f, True, backend="glm")
+    for stored, state in ((True, True), (True, "rejected"), ("rejected", True)):
+        f = stl(rig, name=f"j{stored}-{state}.stl")
+        judged(rig, f, stored, backend="glm")
         fresh = a_poser(rig)._make_pose((0.0, 1.0, 0.0), 1.0, "vlm", 0.2,
                                         arbitrated=state)
         rig.done.record_pose(f, 0, fresh)
@@ -377,9 +380,15 @@ def test_outside_repose_the_guard_changes_nothing(tmp_path):
     * a stored entry that carries no judgment is replaced by a park record
       exactly as before — every non-`--repose` re-resolution goes through
       this, and it is the write the tri-state's `false` depends on;
-    * the case the guard *does* refuse is unreachable without `--repose`,
-      because a truthy-`arbitrated` entry is always sufficient, so `route`
-      never re-opens it and the Poser never resolves that file at all."""
+    * the case the guard *does* refuse is unreachable without `--repose` for
+      every shape `pose.load_pose_cache` admits: a judged entry that gets past
+      the loader carries a margin, and a judged entry with a margin is
+      sufficient, so `route` never re-opens it and the Poser never resolves
+      that file at all. Truthy `arbitrated` alone is not the reason —
+      sufficiency's `arbitrated` branch answers `margin is not None`, and a
+      judgment recording no margin is insufficient every run *and* unwritable
+      through this guard, which is the deadlock the loader drops that shape to
+      prevent."""
     rig = make_rig(tmp_path)
     f = stl(rig)
     for stored in (False, None):
@@ -390,11 +399,17 @@ def test_outside_repose_the_guard_changes_nothing(tmp_path):
                                        arbitrated=False)
         rig.done.record_pose(f, 0, park)
         assert rig.ctx.poses[pose.file_identity(f, rig.root)] == park.to_cache()
-    # ...and route never hands the Poser a judged entry to begin with
+    # ...and route never hands the Poser a judged entry to begin with. Both
+    # sources, because the claim above rests on sufficiency's `arbitrated`
+    # branch: a `"vlm"` entry is a hit one line earlier, on its source alone,
+    # and would pass this even with that branch deleted. The margin is under
+    # MARGIN_THRESHOLD in both, so nothing here is sufficient by the gate.
     for state in (True, "rejected"):
-        entry = dict(a_poser(rig)._make_pose((1.0, 0.0, 0.0), 1.0, "vlm", 0.01,
-                                             arbitrated=state).to_cache())
-        assert pose.pose_is_sufficient(entry, True, pose.MARGIN_THRESHOLD)
+        for source in ("vlm", "siglip"):
+            entry = dict(a_poser(rig)._make_pose(
+                (1.0, 0.0, 0.0), 1.0, source, 0.01,
+                arbitrated=state).to_cache())
+            assert pose.pose_is_sufficient(entry, True, pose.MARGIN_THRESHOLD)
 
 
 def test_front_view_resolved_once_and_merged_into_entry(tmp_path):

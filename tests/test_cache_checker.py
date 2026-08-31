@@ -342,26 +342,29 @@ def test_a_settled_entry_is_never_re_rendered(tmp_path):
 
 def test_repose_reaches_route_through_the_namespace_attribute(tmp_path):
     """The seam `--repose` actually crosses (adversarial review finding 4,
-    2026-08-31). `main` sets `args.repose_arbiter`; `route` reads it back as
-    `getattr(ctx.args, "repose_arbiter", None)` and passes it on as the
-    `repose_arbiter=` keyword. Three names have to agree and none of them is
-    checked by anything — a rename on either side, or on the keyword, degrades
+    2026-08-31). `classify_stls.main` sets the attribute
+    `cache_checker.REPOSE_ARBITER_ATTR` names; `route` reads it back with
+    `getattr` off the same constant and passes it on as the `repose_arbiter=`
+    keyword. Naming it once is what stops a rename on one side degrading
     silently into "the flag does nothing", which is indistinguishable from a
-    cache with no foreign judgments in it.
+    cache with no foreign judgments in it — so this test goes through the
+    constant too, and a rename that missed a side would fail here rather than
+    pass against a hard-coded string.
 
     Both directions, because only the pair is evidence: the attribute present
     and naming a different judge re-opens a settled entry, and the attribute
     *absent* — every namespace built before the flag existed, the tools' and
     the tests' — still means off."""
+    attr = cache_checker.REPOSE_ARBITER_ATTR
     f, ctx = marked(tmp_path, True, arbiter=pose.arbiter_id("glm", None))
-    assert not hasattr(ctx.args, "repose_arbiter")       # as `main` leaves it
+    assert not hasattr(ctx.args, attr)         # a namespace predating the flag
     assert type(route(f, 0, ctx, arbiter_available=True)) is EmbedRenderTask
 
-    ctx.args.repose_arbiter = pose.arbiter_id("gemini", None)
+    setattr(ctx.args, attr, pose.arbiter_id("gemini", None))
     assert type(route(f, 0, ctx, arbiter_available=True)) is PoseRenderTask
     # ...and this run's own judge is not re-opened, or every run would re-buy
     # its own work
-    ctx.args.repose_arbiter = pose.arbiter_id("glm", None)
+    setattr(ctx.args, attr, pose.arbiter_id("glm", None))
     assert type(route(f, 0, ctx, arbiter_available=True)) is EmbedRenderTask
 
 
@@ -386,7 +389,8 @@ def test_the_settled_reroute_re_reads_the_store(tmp_path):
     ctx.poses[ident] = dict(ctx.poses[ident], up=judged_up, source="vlm",
                             arbitrated=True,
                             arbiter=pose.arbiter_id("glm", None))
-    ctx.args.repose_arbiter = pose.arbiter_id("gemini", None)
+    setattr(ctx.args, cache_checker.REPOSE_ARBITER_ATTR,
+            pose.arbiter_id("gemini", None))
     # re-opened: this is the state the Poser is handed
     assert type(route(f, 0, ctx, arbiter_available=True)) is PoseRenderTask
 

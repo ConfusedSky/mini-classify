@@ -394,7 +394,12 @@ def main():
     # Every import below is deferred, and for one reason: src.done, src.embedder
     # and src.poser own torch, this module is re-imported by the spawned render
     # child (module docstring), and none of this runs there.
-    from src import driver
+    # `cache_checker` owns no torch, and is deferred under the other half of
+    # the same rule: this module's scope is the render child's startup cost
+    # (CLAUDE.md's import-weight constraint), only `main` needs the seam's
+    # name, and `src.driver` right below already imports it — so deferring
+    # here removes the cost rather than moving it onto a caller.
+    from src import cache_checker, driver
     from src.arbiter import Arbiter
     from src.done import Done
     from src.driver import Admission, DriverConfig
@@ -404,10 +409,12 @@ def main():
 
     vlm_backend = resolve_pose_vlm(args)
     # --repose's comparison value, on the namespace because `route` reads the
-    # run's flags through `CacheContext.args` and nothing else crosses. It must
-    # be built the same way the Poser builds its stamp, which is why both go
-    # through `pose.arbiter_id` — and after `resolve_pose_vlm`, which is where
-    # an `auto` degrade settles both the backend and the model pin.
+    # run's flags through `CacheContext.args` and nothing else crosses — under
+    # `cache_checker`'s own REPOSE_ARBITER_ATTR, so the writer and the reader
+    # cannot drift apart. It must be built the same way the Poser builds its
+    # stamp, which is why both go through `pose.arbiter_id` — and after
+    # `resolve_pose_vlm`, which is where an `auto` degrade settles both the
+    # backend and the model pin.
     if args.repose and vlm_backend is None:
         raise SystemExit(
             "--repose needs an arbiter — it exists to re-judge, and this run "
@@ -430,11 +437,12 @@ def main():
             f"backend's (+3 -> 41/44), for every entry gemini settled. Fix "
             f"the gemini credentials, or pass `--pose-vlm {vlm_backend}` "
             f"explicitly if re-judging with the fallback is what you mean")
-    args.repose_arbiter = (pose.arbiter_id(vlm_backend, args.pose_vlm_model)
-                           if args.repose else None)
+    repose_arbiter = (pose.arbiter_id(vlm_backend, args.pose_vlm_model)
+                      if args.repose else None)
+    setattr(args, cache_checker.REPOSE_ARBITER_ATTR, repose_arbiter)
     if args.repose:
         print(f"--repose: re-arbitrating cached poses not judged by "
-              f"{args.repose_arbiter}")
+              f"{repose_arbiter}")
     print(f"loading {args.model} ...")
     with stage("model-load"):
         # the Embedder is the only owner of torch models: the fp16 load, the

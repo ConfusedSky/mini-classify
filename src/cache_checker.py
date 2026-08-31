@@ -36,6 +36,18 @@ from src.messages import (
     Retired,
 )
 
+REPOSE_ARBITER_ATTR = "repose_arbiter"
+"""The namespace attribute `--repose` crosses on, owned here because `route`
+is the reader.
+
+`classify_stls.main` sets it, `route` reads it back off `ctx.args`, and
+nothing else carries the flag — `CacheContext.args` is the only thing that
+crosses. Before this was a shared constant the name was spelled out on both
+sides, and a rename on either one degraded silently into "the flag does
+nothing", which is indistinguishable from a cache holding no foreign
+judgments. Naming it once makes a rename break an import instead (adversarial
+review, 2026-08-31)."""
+
 # --- The decision ------------------------------------------------------------
 
 def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False,
@@ -85,11 +97,12 @@ def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False,
         # `pose_is_sufficient` takes is a different one: the *arbiter's*, plus
         # this run's gate (docs/archive/tri-state-pass-2.md, 2026-08-21).
         # `repose_arbiter` via getattr: it is `main`'s, set on the namespace
-        # only when --repose is given, and every other namespace that reaches
-        # here — the tools', the tests' — predates the flag and means "off".
+        # there, and every other namespace that reaches here — the tools', the
+        # tests' — predates the flag and means "off". The name is
+        # REPOSE_ARBITER_ATTR on both sides so it cannot drift.
         if entry is None or not (settled or pose.pose_is_sufficient(
                 entry, arbiter_available, args.up_margin,
-                repose_arbiter=getattr(args, "repose_arbiter", None))):
+                repose_arbiter=getattr(args, REPOSE_ARBITER_ATTR, None))):
             return PoseRenderTask(file=f, index=index)
         resolved = pose.Pose.from_cache(entry)
 

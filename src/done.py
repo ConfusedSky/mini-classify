@@ -137,12 +137,18 @@ class Done:
         nothing bought in exchange. `--repose` re-judges a judgment; it must
         never spend one.
 
-        Outside `--repose` the refused case is unreachable, so this changes no
-        existing behaviour: an entry with `arbitrated` truthy is always
-        sufficient (`pose.pose_is_sufficient` returns True on it), so `route`
-        never re-opens it, so the Poser never resolves that file and never
-        writes over it. Pinned by test, since "unreachable" is a claim about
-        another module and nothing here can enforce it.
+        Outside `--repose` the refused case is unreachable for every shape the
+        loader admits, so this changes no existing behaviour: a judged entry
+        that gets past `pose.load_pose_cache` carries a margin, and a judged
+        entry with a margin is sufficient (`pose.pose_is_sufficient`), so
+        `route` never re-opens it, so the Poser never resolves that file and
+        never writes over it. Truthy `arbitrated` is not on its own enough —
+        sufficiency's `arbitrated` branch answers `margin is not None`, and a
+        judgment recording no margin would be insufficient every run *and*
+        unwritable through this guard, re-rendering forever. That deadlock is
+        why the loader drops the shape at load rather than passing it here.
+        Pinned by test, since "unreachable" is a claim about another module
+        and nothing here can enforce it.
 
         The in-run consequence of holding the old entry — nothing inconsistent,
         and worth stating because the run has already re-rendered by then.
@@ -159,8 +165,10 @@ class Done:
         re-judgment therefore behaves as if the re-open never happened; the
         entry is re-opened again by the next `--repose` run, which is the
         intended retry. The cost is one wasted pose-tile render and ensemble
-        pass, plus — under `--save-renders` — a redraw of already-correct
-        views, forced by a `pose_changed` that came from the discarded answer.
+        pass, plus — under `--save-renders`, and only when the discarded
+        answer's source is `siglip` or `vlm` — a redraw of already-correct
+        views: `pose_changed` is `source in poser.MOVED_SOURCES`, so a
+        geometry-sourced discard forces no redraw at all.
 
         A future refactor of `route` that "optimizes away" that second store
         read is what breaks this; `tests/test_cache_checker.py` pins it."""

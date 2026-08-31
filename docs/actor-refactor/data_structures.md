@@ -444,9 +444,15 @@ class Pose:
   breaker tripping — downgraded the paid judgment to the answer the old judge
   had overruled, and a fresh margin that cleared this run's gate made no call
   at all and erased it permanently. Outside `--repose` the refused case is
-  unreachable (a truthy-`arbitrated` entry is always sufficient, so `route`
-  never re-opens it), so the guard changes no pre-existing behaviour; a test
-  pins that, since it is a claim about another module.
+  unreachable **for every shape the loader admits**: a judged entry that gets
+  past `pose.load_pose_cache` carries a margin, and a judged entry with a
+  margin is sufficient, so `route` never re-opens it. Truthy `arbitrated` is
+  not on its own enough — sufficiency's `arbitrated` branch answers
+  `margin is not None` — and a judgment recording no margin would be
+  insufficient every run *and* unwritable through this guard, re-rendering
+  forever; `load_pose_cache` drops that shape at load for exactly that reason.
+  So the guard changes no pre-existing behaviour; a test pins that, since it
+  is a claim about another module.
 
   **The in-run consequence, once the guard holds an entry** (traced
   2026-08-31): nothing inconsistent. `route` re-reads the store on the
@@ -460,9 +466,11 @@ class Pose:
   Poser and never reaches `Done`, so there is no orphan embedding. A failed
   re-judgment therefore behaves as though the re-open never happened, and the
   next `--repose` run re-opens the entry again — the intended retry. The costs
-  are one wasted pose-tile render and ensemble pass, and, under
-  `--save-renders`, a redraw of already-correct views forced by a
-  `pose_changed` that came from the discarded answer. That second store read is
+  are one wasted pose-tile render and ensemble pass, and — under
+  `--save-renders`, and only when the discarded answer's source is `siglip` or
+  `vlm` — a redraw of already-correct views forced by that answer's
+  `pose_changed`, which is `source in poser.MOVED_SOURCES`: a geometry-sourced
+  discard forces no redraw at all. That second store read is
   the load-bearing hinge; `tests/test_cache_checker.py` pins it against a
   refactor that "optimizes" it away.
 * **The freeze is shallow, and `Pose` is unhashable** (R4): `front_view` is a
@@ -492,8 +500,12 @@ class Pose:
   loudly is the point. See docs/archive/tri-state-pass-2.md §C4, 2026-08-21.
   Since 2026-08-31 there is a fourth, `*, repose_arbiter=None` — keyword-only
   and defaulted, unlike the other two, because it is a flag nobody is obliged
-  to pass: `route` reads it as `getattr(ctx.args, "repose_arbiter", None)` so
-  every namespace built before `--repose` existed still means "off".)
+  to pass: `route` reads it as
+  `getattr(ctx.args, cache_checker.REPOSE_ARBITER_ATTR, None)` so every
+  namespace built before `--repose` existed still means "off". The attribute
+  name is that one constant on both sides — `classify_stls.main` `setattr`s
+  through it — so a rename breaks an import instead of silently disabling the
+  flag.)
 * **`pose_is_sufficient` stays a module function over the raw entry
   `dict | None`** (D11, corrected 2026-08-17 — B's review proved the
   earlier `Pose | None` wording wrong: the store holds what
