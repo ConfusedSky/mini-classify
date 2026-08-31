@@ -1,0 +1,113 @@
+diff --git a/client/src/dev/pilot.ts b/client/src/dev/pilot.ts
+new file mode 100644
+index 0000000..79057d9
+--- /dev/null
++++ b/client/src/dev/pilot.ts
+@@ -0,0 +1,48 @@
++/**
++ * Dev-only render hook for the mini-classify renderer pilot (2026-08-29):
++ * `window.__pilot.render(libPath, axis, states, variants)` parses a model once
++ * and returns one base64 PNG per state per variant through the thumbnail
++ * chain. Installed from main.tsx under `import.meta.env.DEV` only; nothing in
++ * the app calls it.
++ */
++import type { CameraState, OrbitAxis } from '../../../shared/types'
++import { disposeModel, formatOf, parseModel } from '../three/models'
++import { renderThumbnail, type ThumbOptions } from '../three/renderer'
++import { setLightingMode } from '../viewer/lighting'
++
++async function blobToBase64(blob: Blob): Promise<string> {
++  const buf = new Uint8Array(await blob.arrayBuffer())
++  let s = ''
++  for (let i = 0; i < buf.length; i += 0x8000) {
++    s += String.fromCharCode(...buf.subarray(i, i + 0x8000))
++  }
++  return btoa(s)
++}
++
++export function installPilot(): void {
++  setLightingMode('camera')
++  const w = window as unknown as { __pilot?: unknown }
++  w.__pilot = {
++    async render(
++      libPath: string,
++      axis: OrbitAxis,
++      states: CameraState[],
++      variants: Record<string, ThumbOptions>,
++    ): Promise<Record<string, string[]>> {
++      const format = formatOf(libPath)
++      if (format === null) throw new Error(`unsupported: ${libPath}`)
++      const res = await fetch(`/api/file?path=${encodeURIComponent(libPath)}`)
++      if (!res.ok) throw new Error(`fetch ${res.status}: ${libPath}`)
++      const object = parseModel(await res.arrayBuffer(), format)
++      const out: Record<string, string[]> = {}
++      for (const [name, opts] of Object.entries(variants)) {
++        out[name] = []
++        for (const state of states) {
++          out[name].push(await blobToBase64(await renderThumbnail(object, state, axis, opts)))
++        }
++      }
++      disposeModel(object)
++      return out
++    },
++  }
++}
+diff --git a/client/src/main.tsx b/client/src/main.tsx
+index 8ccb4c8..01c5857 100644
+--- a/client/src/main.tsx
++++ b/client/src/main.tsx
+@@ -3,6 +3,10 @@ import { createRoot } from 'react-dom/client'
+ import App from './App'
+ import './index.css'
+ 
++if (import.meta.env.DEV) {
++  void import('./dev/pilot').then((m) => m.installPilot())
++}
++
+ // Orbit is per-model (server-persisted) now; clear the retired experiment's
+ // global settings.
+ try {
+diff --git a/client/src/three/renderer.ts b/client/src/three/renderer.ts
+index c02f791..2c13644 100644
+--- a/client/src/three/renderer.ts
++++ b/client/src/three/renderer.ts
+@@ -352,14 +352,30 @@ export function unstage(
+  * Render a model to a 512×512 transparent PNG through the thumbnail
+  * post-process chain on the shared renderer (never the visible canvas).
+  */
++/** Pilot-only knobs (dev hook, 2026-08-29); production callers pass none. */
++export interface ThumbOptions {
++  /** Run the GTAO pass (default true — the shipped recipe). */
++  ao?: boolean
++  /** Replace the red/blue rim accents with white at the same intensity. */
++  neutralRims?: boolean
++}
++
+ export function renderThumbnail(
+   object: THREE.Object3D,
+   state: CameraState = DEFAULT_CAMERA,
+   axis: OrbitAxis = 'y',
++  opts: ThumbOptions = {},
+ ): Promise<Blob> {
+   const r = getRenderer()
+   const lit = makeScene()
+   const { scene, rig } = lit
++  if (opts.neutralRims === true) {
++    for (const light of rig.children) {
++      if (light instanceof THREE.DirectionalLight && light.color.getHex() !== 0xffffff) {
++        light.color.setHex(0xffffff)
++      }
++    }
++  }
+   // Staging reparents — the object may belong to a live ViewerSession scene
+   // (it is LRU-shared), so its original parent must be restored after.
+   const originalParent = object.parent
+@@ -373,7 +389,7 @@ export function renderThumbnail(
+   const prevTarget = r.getRenderTarget()
+   const pixels = new Uint8Array(THUMB_SIZE * THUMB_SIZE * 4)
+   try {
+-    chain.render(scene, camera, bounds)
++    chain.render(scene, camera, bounds, opts.ao ?? true)
+     // `OutputPass` leaves `needsSwap` at the `Pass` default, so the composer
+     // swaps after it: the finished frame is in `readBuffer`, not writeBuffer
+     // (D1). Those pixels are already sRGB — OutputPass converted them (D2).

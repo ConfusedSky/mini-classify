@@ -17,9 +17,12 @@ Order of operations (all from this directory, `.venv/bin/python`):
 | report | `score.py --report` | the table |
 
 `render_three.mjs` needs model-browser's dev server on :5173 with the
-dev-only hook installed (`model-browser-pilot-hook.ts` is a copy of
-`client/src/dev/pilot.ts`; `renderThumbnail` grew an `opts` parameter for AO
-and rim colour). It drives the Playwright Chromium under
+dev-only hook installed. The hook was removed from model-browser's tree once
+the pilot answered (the three.js arms sit in the same noise band as the rest
+— LEARNINGS 2026-08-29); `model-browser-pilot.patch` is the complete diff
+(`client/src/dev/pilot.ts`, a DEV-guarded install in `main.tsx`, and an
+`opts` parameter on `renderThumbnail` for AO/rim-colour), so a rerun is
+`git apply model-browser-pilot.patch` in that repo. It drives the Playwright Chromium under
 `~/.cache/ms-playwright` with `--ignore-gpu-blocklist --use-gl=angle
 --use-angle=gl`, which is what reaches the iGPU.
 
