@@ -210,5 +210,10 @@ should be checked on a model whose genre is not the library's mode.
   six (or sixteen) tiles, so the 512 and 1024 sheets arrive as the *same*
   pixels and solo's 6,646 tokens are six times the effective resolution,
   not a pricing quirk — which is why solo made gemini size-robust and why
-  1024 sheets could not help it. For Gemini, send separate images, not
-  composites, whenever the tiles matter.
+  1024 sheets could not help it. It does **not** mean "always send separate
+  images": on the arbiter the sheet scored as well or better than solo at
+  half the cost (43 vs 41 at 512, tier +4 either way) — a *comparison*
+  question wants all six candidates in one image, and silhouettes at ~300 px
+  are enough. Separate images won for *recognition* (what the Osteotron is),
+  where detail the shared budget discards is the whole task. Task-dependent,
+  and past ~512 the sheet size is wasted either way.
