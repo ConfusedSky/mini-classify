@@ -9,7 +9,11 @@ carried.
 
 **When a rebuild is planned, work this list first**, decide which items to
 take, and delete them in the same change that regenerates the cache — not
-afterwards, or the shims will look load-bearing again.
+afterwards, or the shims will look load-bearing again. Most of this list was
+taken on 2026-08-31, with the rebuild of `embed-cache512`: every section below
+carries a **Taken 2026-08-31** note saying what went and where, or — for §2 —
+why it deliberately stayed. The sections are kept rather than deleted, because
+what a shim bought is the part that stops being obvious once it is gone.
 
 Scope note: "the cache" means the whole set — `pose-cache.json`, the per-view
 `.npy` embeddings, and the saved renders, for the primary collection. A
@@ -42,6 +46,21 @@ assertion of the exact matrices plus the rotation properties.
 Do not do this piecemeal. It is item one on the recipe list (§6) and the whole
 reason that list exists.
 
+**Taken 2026-08-31** (the ev2/glm rebuild): `_AXIS_ROTATIONS` now holds exact
+0 and ±1. `rotation_to_z_up` is unchanged in shape — the six exact matrices
+plus the Rodrigues fallback, with the normalise-first guard, which was never
+about bit-fidelity. `test_rotation_to_z_up_matches_open3d_bit_for_bit` became
+`test_rotation_to_z_up_is_exact_for_the_six_candidates`: the matrices restated
+as constants, every entry asserted to be exactly 0 or ±1, plus the rotation
+properties (`R @ up == +Z`, orthonormal, det 1) now asserted exactly rather
+than to 1e-12. The equality-with-Open3D assertion is gone, which is the point;
+the new test's docstring says so, since a reader finding no Open3D comparison
+would otherwise assume it was overlooked. The remaining Open3D comparison is
+`test_rotation_to_z_up_falls_back_for_a_non_axis_vector`, which pins the
+Rodrigues path at ~1e-14 and is unaffected. What replaces the byte-for-byte
+discipline going forward is `identity.RECIPE_VERSION` (§6): the table is now
+inside a key.
+
 ## 2. Key elisions that exist to keep old keys byte-identical
 
 `identity.cache_key_from_identity` appends a token **only when non-default**,
@@ -63,6 +82,17 @@ built before the change, including the eval caches nobody plans to rebuild.
 Deciding to keep the elisions is a legitimate outcome; deciding by accident is
 not.
 
+**Taken 2026-08-31 — decided, and the answer is no.** The elisions stay, all
+three. `embed-cache512` was rebuilt; `embed-cache2` and `embed-cache-test` were
+not, and making any token unconditional re-keys those two wholesale — every
+lookup misses, and the SigLIP-1 figures they exist to preserve become
+unreproducible without re-rendering a collection nobody intends to re-render.
+The trap this section names is real and is answered instead by writing the
+version down: `cache-meta.json`'s `cache_key_format` string spells the optional
+tokens (`[|e:...][|compiled][|evN][|rN]`), and `identity.py` carries the
+changelog for each. This is the ruling every other section defers to when it
+weighs invalidating a non-rebuilt cache — see §3 and §6.
+
 ## 3. Legacy shapes in the pose cache
 
 * `Pose.from_cache` (`src/pose.py`) absorbs **bare-int `front_view` entries**
@@ -82,6 +112,44 @@ not.
 **At a rebuild:** every entry is written fresh at the current version, so all
 four can go. `from_cache` becomes a plain constructor.
 
+**Taken 2026-08-31, in full.** `Pose.from_cache` is a plain constructor (`v`
+and `margin` read straight out of the dict, no defaults). Gone with it:
+`pose.RENAMED_SOURCES` and its application in `load_pose_cache`,
+`Done._score`'s legacy-int merge on the write side, and `pose.front_view`'s
+`isinstance` guard on the read side — that last a fourth item this section did
+not list, deletable because every caller of `front_view` reads entries that
+came through the loader. Deleting the two defaults is safe because neither is
+reachable, and the reasoning is worth keeping: an entry below the current
+version never survives `load_pose_cache`, and an entry with no `margin` is a
+miss at `pose_is_sufficient`, so `cache_checker.route` re-resolves it instead
+of constructing a `Pose`.
+
+The **bare-int `front_view`** needed one addition rather than a deletion.
+front_view became per-config keyed *after* the v4 bump, so those entries are
+stamped `v: 4`, clear the version filter, and reach the constructor, where
+`dict(0)` raises and kills a run. `load_pose_cache`'s freshness test therefore
+grew a third clause — dict, at version, and `front_view` absent-or-a-dict — and
+the entry is dropped, which is the same rule it already applies to non-dicts
+and stale versions.
+
+Dropping costs a re-pose, so it was priced, and the price is what decided it:
+53 of `embed-cache512`'s 3540 entries, in the cache being rebuilt from scratch
+that same night, and 0 of `embed-cache-test`'s 2508. The alternative —
+repairing the entry in place, keeping the pose and popping the unusable index —
+was the ruling for part of this day, while `embed-cache3` still existed and was
+nearly all bare ints; dropping it there would have re-rendered and re-billed
+the arbiter across a cache nobody was rebuilding, the cost §2 refused for the
+same caches. `embed-cache2/3/4` were deleted on 2026-08-31, which removed that
+population and let this be a deletion rather than a relocation. Worth
+remembering as a shape: a shim's cost is a fact about the caches that exist,
+and it can change under you mid-change.
+
+`POSE_CACHE_VERSION` was **not** bumped and stays at 4. A bump wipes all four
+`arbitrated` states (this section's own warning) for every cache not being
+rebuilt, and buys nothing for the one that is: a fresh rebuild writes
+current-version entries anyway. `load_pose_cache`'s below-version drop stays —
+that is the mechanism, not a shim.
+
 ## 4. `cache-meta.json` version 0
 
 `cachedir.CACHE_VERSION` documents `0 = unstamped (every cache from before the
@@ -91,6 +159,25 @@ up-token elision it guards against — deterministic poses keyed as the
 
 **At a rebuild:** the version-0 branch is dead. Keep the *stamp*; drop the
 handling of its absence.
+
+**Taken 2026-08-31.** `require_cache_version` no longer refuses an unstamped
+cache: version 0 means "not stamped yet" and is stamped. Gone with it is the
+definition of "populated" that decision needed — the `pose-cache.json` /
+`embeds/` / `renders/` / root-level-`.npy` probe, whose careful pre-layout case
+(S2) existed only so a genuinely unmigrated cache could not be stamped current.
+`CACHE_VERSION` stays at 1 and its `0 =` changelog line is now a note on what 0
+used to mean.
+
+What was **not** dropped, on a close read of "the handling of its *absence*":
+the refusal for a stamp naming a *different* scheme. Deleting that too would
+mean the next `CACHE_VERSION` bump silently re-stamps every old cache and
+misses every key — precisely the failure the guard was built for, re-armed for
+whoever bumps it next. Its test now stages the mismatch by moving
+`CACHE_VERSION` rather than by writing `CACHE_VERSION - 1`, since that literal
+is 0 and 0 no longer means what it did. Two `tests/test_collection.py` tests
+moved with this: the corrupt-stamp parametrisation now asserts the load
+succeeds and re-stamps, and `test_an_old_key_scheme_is_named_with_the_right_fix`
+monkeypatches the constant.
 
 ## 5. `migrate_cache_keys.py`'s old key formats
 
@@ -106,6 +193,33 @@ changes drives), which is the one migration a fresh cache can still need.
 Note this cuts the other way too: **run the migration before rebuilding, not
 after.** Anything it could still rescue is cheaper to migrate than to
 re-render.
+
+**Taken 2026-08-31: reduced to the root-move case, not deleted.** `old_base`,
+`old_identity`, `old_cache_key`, `old_render_key` and `old_embed_cache_token`
+are gone, and with them the absolute-path/nanosecond-mtime root migration, the
+flat pre-`embeds/` layout move, and the whole up-token migration
+(`plan_token_moves`, the `cache_version` 0 → 1 pass, which went with §4). What
+is left re-keys poses, `embeds/*.npy` and render filenames from one collection
+root to another — the case a library that grows upward or changes anchor still
+needs.
+
+The reduction also **closed the stale-promotion hazard** the framing change's
+review raised, and closed it mechanically rather than with a warning. The
+hazard was `old_cache_key`: it spelled sources in the pre-`ev` format, so it
+would find an embedding of a framing nothing renders and file it under a name
+carrying `|ev2` — stale pixels promoted to current. With it gone, both sides of
+every move come from the live `cache_key_from_identity` with only the root
+differing, so a `.npy` written under an older `EMBED_CACHE_VERSION` or
+`RECIPE_VERSION` matches neither name, is never moved, and lands in the
+unclaimed count the run prints. Renders are safe for a different reason:
+`plan_renders` preserves the camera-config directory name, which carries the
+`-evN` suffix. `test_an_older_recipes_embedding_is_never_promoted_into_a_current_name`
+is that property as a test, because a docstring warning cannot fail.
+
+One behaviour changed rather than shrank: the render move is now **in place**
+(renders live under the cache), so `plan_renders`'s remap carries each new key
+to itself as well as old→new, or a re-run would report its own output as
+strays.
 
 ## 6. The render recipe is not in the cache key
 
@@ -142,6 +256,41 @@ them once the current keys are populated. Delete them with the recipe version
 that replaces the whole mechanism, not before: until then they are what a
 rollback of the framing change would land back on.
 
+**Taken 2026-08-31: `identity.RECIPE_VERSION = 1` exists, and the open question
+above is closed.** It lives in `identity.py`, not `renderer.py`, per the
+import-rule table in `docs/actor-refactor/interfaces.md` — cache identity is
+the stdlib-side leaf, and a key-naming tool may not be made to import a
+rendering library to name a key. `cache_key_from_identity` appends `|r{N}`.
+The changelog is `RIG_VERSION`-shaped and names the whole recipe as rebuilt:
+per-view tight fit (`renderer.tight_view_cams`, 45° FOV matching `_shoot`,
+margin 1.05, seeded 200k subsample), pose tiles left on the fixed 1.4×
+extent-norm orbit, sun 90000 / fill 10000, `defaultLit` at 0.7 grey, and the
+exact `_AXIS_ROTATIONS` from §1.
+
+`EMBED_CACHE_VERSION` stays at 2 and untouched. The two version different
+things and move independently: `ev` versions the *derivation* (bytes →
+embedding — a parser swap bumps it), `r` versions the *pixels that derivation
+runs on* (a light, the FOV, the rotation table). The `ev2` bump remains the
+hand-made stand-in it was for the one recipe change that predates this.
+
+**Deviation from this section's text, recorded so it reads as chosen.** §6 says
+to introduce the version unconditional, because a rebuild leaves "no entries to
+protect". That is true of `embed-cache512` and false of `embed-cache2` and
+`embed-cache-test`, which are not being rebuilt — an unconditional `|r1` would
+orphan both, which is exactly the cost §2 was ruled against on the same day for
+the same caches. So `RECIPE_VERSION` ships **elided at 1**, under the same
+doctrine as `|evN`, and `tests/test_identity.py::test_the_recipe_version_ships_at_1_and_is_elided`
+pins both the elision and this reason. The awkwardness §6 predicted — a v1
+elided to avoid invalidating existing entries — is therefore real after all,
+because "existing entries" turned out to mean the caches outside the rebuild.
+
+Not done, and left here on purpose: `cachedir.view_config` does **not** carry a
+recipe token. At version 1 it would append nothing, so nothing is wrong today,
+but a bump has to reach it the way `EMBED_CACHE_VERSION` does — a `front_view`
+index resolved from one recipe's embeddings names the hero view of a framing
+the next recipe does not render. `identity.py`'s changelog comment says this at
+the constant.
+
 ## 7. Mixed render formats on disk
 
 `cachedir.render_index` is deliberately extension-agnostic because a renders
@@ -151,6 +300,13 @@ JPEGs. A rebuild writes one format.
 **At a rebuild:** the newest-wins tie-break can go. The extension-agnostic
 *lookup* is probably still worth keeping — it costs nothing and the next
 format change is free — so this is the smallest item here.
+
+**Taken 2026-08-31, exactly as written.** `render_index` no longer `stat()`s
+every file to sort by mtime; it is one `sorted(iterdir())`. The
+extension-agnostic lookup stays. Its test stopped asserting *which* of two
+files for one view wins — that would pin `sorted()`'s order as if it meant
+something — and asserts instead that one is chosen and the choice is stable
+across calls, which is the only property a caller can use.
 
 ---
 

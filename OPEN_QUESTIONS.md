@@ -442,7 +442,17 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   collapse. It bites the API sketch harder than the REPL — `docs/api/surface.md`
   caps hits at `top`/`cap`, so a duplicate-heavy query spends its budget
   listing the same mesh repeatedly, and model-browser has no way to tell.
-- **The cache key records the pose but not the recipe that drew it.**
+- ~~**The cache key records the pose but not the recipe that drew it.**~~
+  **Answered 2026-08-31** with the `embed-cache512` rebuild:
+  `identity.RECIPE_VERSION = 1` is the `RIG_VERSION`-shaped integer this entry
+  argues for, and `cache_key_from_identity` appends `|r{N}`. It ships elided at
+  1 — the deviation this entry's last paragraph predicted, taken for the reason
+  it names, and recorded in docs/cache-rebuild.md §6 along with the two things
+  still outstanding: `cachedir.view_config` does not carry the token yet (free
+  at version 1, required at a bump), and the scoped-invalidation tool below was
+  not built, because a rebuild redrew everything anyway. The rest of this entry
+  is the argument that produced it, kept.
+
   `cache_key` covers views, elevations, render size, model, `--compile` and the
   up *vector* — not `rotation_to_z_up`, which decides *which* rotation realised
   that vector and therefore which side of the model each azimuth sees. Change
@@ -450,9 +460,11 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   **1902 of `embed-cache2`'s 2945**, 65% of the primary cache: the embeddings
   on disk answer a different question than the ones a fresh run would produce,
   and nothing anywhere fails.
-  `tests/test_pose.py::test_rotation_to_z_up_matches_open3d_bit_for_bit`
-  (2026-08-19) stops the accidental version of this. It cannot stop a
-  deliberate one, which is the actual question.
+  `tests/test_pose.py::test_rotation_to_z_up_is_exact_for_the_six_candidates`
+  (the bit-for-bit-against-Open3D test until 2026-08-31, when the rebuild let
+  the table become exact integers) stops the accidental version of this. It
+  cannot stop a deliberate one, which was the actual question — and is what
+  `RECIPE_VERSION` now answers.
 
   `rotation_to_z_up` is only the instance that surfaced. The whole render
   recipe is outside cache identity — `orbit_camera`'s framing, the 1.4 radius
@@ -771,14 +783,22 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   so it can only ever answer "which method survives this", never "how often".
   Everything else here is downstream of this.
 
-- **Six of the 49 up-axis label paths are stale (2026-08-30).** Loot's
-  Orconspiracy set was reorganised into `Enemies_Part1/2/4_V2`; `load_labels`
-  still returns the old `Enemies/...` paths, so `build_sheets` for a new sheet
-  size crashes on the first missing file. `eval/f3d_arbiter.resolve` finds
-  them again by filename under the set's folder — a workaround, not a fix.
-  The fix is either re-anchoring the six entries in `up_axis_labels.json` or
-  teaching `load_labels` to resolve by name; the pose cache keys for that set
-  are path-relative too, so a rescan re-renders them as new files either way.
+- ~~**Six of the 49 up-axis label paths are stale (2026-08-30).**~~ **Fixed
+  2026-08-31** by the first of the two routes below. Loot's Orconspiracy set
+  was reorganised into `Enemies_Part1/2/4_V2`; `load_labels` still returned the
+  old `Enemies/...` paths, so `build_sheets` for a new sheet size crashed on
+  the first missing file, and `eval/f3d_arbiter.resolve` re-found them by
+  filename under the set's folder — a workaround, not a fix. The six entries in
+  `up_axis_labels.json` are now re-anchored (FemaleOrcWarrior and Goro under
+  `Enemies_Part1`, OrcShaman and OrcArcher under `Enemies_Part2`,
+  Orguss_OnePiece and Orguss_Head under `Enemies_Part4_V2/Orguss the Tall -
+  Green Dragon`), each verified against the file on disk before writing, and
+  all 49 now resolve. `resolve()` and its two call sites
+  (`f3d_arbiter.main`, `o3d_solo.main`) are deleted — both call
+  `common.load_labels()` directly, which is the convention this repo already
+  states. Note the caveat that stood then still stands: the pose cache keys for
+  that set are path-relative, so those six read as new files to a rescan and
+  are re-rendered whichever route was taken.
 - **Arbiter backend, decided for now (2026-08-30):** primary stays
   gemini-3.5-flash on production tiles, grid, 512 (43/44, +4 → 42/44,
   ~$2.7/run). The measured fallback is GLM-5.3-Flash **low** effort, production

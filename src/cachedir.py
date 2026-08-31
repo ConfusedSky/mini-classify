@@ -116,16 +116,21 @@ def renders_dir(cache_dir, args):
 def render_index(rdir):
     """Map '<render_key>_view<i>' to the saved render, from one listing of the dir.
 
-    Extension-agnostic on purpose: a directory may hold PNGs written before
-    --render-format existed alongside new JPEGs, and switching format must
-    neither re-render them nor hide them from the tools. Newest wins when a view
-    exists in both. One listing rather than a glob per view — the lookup runs
-    n_views times per model, and real stems contain '(' and '['."""
+    Extension-agnostic on purpose, and that half stays: switching
+    --render-format must neither re-render the existing images nor hide them
+    from the tools, and the next format change is then free.
+
+    What went with the 2026-08-31 rebuild is the newest-wins tie-break — a
+    `stat()` per file to order a directory that a rebuild writes in one format
+    (docs/cache-rebuild.md §7). Two files for one view can now only come from a
+    format switch over an unrebuilt renders directory, where either image is
+    the same pose and the tools show one of them.
+
+    One listing rather than a glob per view — the lookup runs n_views times per
+    model, and real stems contain '(' and '['."""
     if rdir is None or not Path(rdir).is_dir():
         return {}
-    files = sorted((p for p in Path(rdir).iterdir() if p.is_file()),
-                   key=lambda p: p.stat().st_mtime)
-    return {p.stem: p for p in files}
+    return {p.stem: p for p in sorted(Path(rdir).iterdir()) if p.is_file()}
 
 
 # Writing the renders is `Renderer.save_renders` and only that (F-4): the
@@ -288,9 +293,12 @@ CACHE_META_FILE = "cache-meta.json"
 # leave existing keys alone. That is why this is a hand-set integer and not a
 # hash of the key format: an auto-derived stamp would fire on exactly the
 # changes this repo makes carefully so it does not have to.
-#   0 = unstamped (every cache from before the stamp existed): the up-token
-#       elision, where deterministic poses keyed as the --up-axis string
 #   1 = the up_str token (pose.embed_cache_token, review P2.3-B)
+# 0 is not a scheme any more, it is "not stamped yet". It used to name every
+# cache from before the stamp existed — keyed with the up-token elision, where
+# deterministic poses keyed as the --up-axis string — and `require_cache_version`
+# refused those. Nothing writes that scheme and the 2026-08-31 rebuild
+# regenerated the last cache holding it (docs/cache-rebuild.md §4).
 CACHE_VERSION = 1
 
 
@@ -300,10 +308,10 @@ def cache_version(cache_dir):
     An unreadable or malformed stamp is also 0, deliberately. The function is
     total because `/status` calls it to *diagnose* a server that will not
     start, and an exception there made the one route built to explain a broken
-    cache the first route to fail on one (2026-08-19). Reading corrupt as
-    unstamped is the safe direction: `require_cache_version` then refuses a
-    populated cache rather than accepting keys it cannot vouch for, which is
-    the same call it makes for a genuinely unstamped one (S2). Caching
+    cache the first route to fail on one (2026-08-19). A corrupt stamp then
+    reads as unstamped and `require_cache_version` rewrites it, which is right
+    now that 0 carries no key-scheme claim of its own: the keys are at the one
+    live scheme either way, and the file that said so was torn. Caching
     disabled is 0 too — `Path("")` would otherwise quietly read
     `./cache-meta.json` from whatever directory the process happens to run
     in (review, 2026-08-20)."""
@@ -327,7 +335,7 @@ def stamp_cache_version(cache_dir):
         "cache_version": CACHE_VERSION,
         # informational only, never compared — see the CACHE_VERSION note
         "cache_key_format": "sha1(rel|mtime|size|views|render_size|up_token"
-                            "|model|pv[|e:...][|compiled][|evN])",
+                            "|model|pv[|e:...][|compiled][|evN][|rN])",
     }, indent=2))
 
 
@@ -337,26 +345,34 @@ def require_cache_version(cache_dir):
     A moved scheme does not error on its own — every lookup just misses, and
     the run silently re-renders and re-embeds the whole collection: hours,
     and real money once a pose entry is VLM-sourced. The stamp turns that
-    into one line naming the fix. An empty cache is simply stamped current."""
+    into one line naming the fix.
+
+    **Version 0 is no longer one of those schemes.** It used to mean
+    "unstamped, therefore keyed under the up-token elision", and an unstamped
+    cache was refused unless it was empty — which needed a definition of
+    "populated" careful enough to include the pre-layout shape (root-level
+    `.npy`, no pose-cache.json), because stamping a genuinely unmigrated cache
+    current would have shut this guard forever (S2). Nothing writes that scheme
+    any more and the 2026-08-31 rebuild regenerated the last cache holding it,
+    so 0 now carries no claim at all: it is a cache that has not been stamped
+    yet, and the answer is to stamp it (docs/cache-rebuild.md §4).
+
+    What stays is the refusal for a stamp that names a *different* scheme,
+    which is what the next bump will need — and the reason the stamp itself is
+    worth keeping when there is only one live version to record."""
     if not cache_dir:
         return
     v = cache_version(cache_dir)
     if v == CACHE_VERSION:
         return
-    d = Path(cache_dir)
-    # "populated" must include the pre-layout shape — root-level .npy with no
-    # pose-cache.json or embeds/ (a forced --up-axis cache writes no pose
-    # cache at all). Treating that as empty would stamp a genuinely
-    # unmigrated cache as current, which is the exact failure this guard
-    # exists to prevent (S2).
-    if ((d / "pose-cache.json").exists() or (d / EMBEDS_SUBDIR).exists()
-            or (d / RENDERS_SUBDIR).exists() or any(d.glob("*.npy"))):
-        raise SystemExit(
-            f"{cache_dir}: cache_version {v}, this code expects {CACHE_VERSION} — "
-            f"every key would miss and the collection would re-embed from "
-            f"scratch.\n  run: .venv/bin/python migrate_cache_keys.py "
-            f"--cache-dir {cache_dir} --apply")
-    stamp_cache_version(cache_dir)
+    if v == 0:
+        stamp_cache_version(cache_dir)
+        return
+    raise SystemExit(
+        f"{cache_dir}: cache_version {v}, this code expects {CACHE_VERSION} — "
+        f"every key would miss and the collection would re-embed from "
+        f"scratch.\n  run: .venv/bin/python migrate_cache_keys.py "
+        f"--cache-dir {cache_dir} --apply")
 
 
 def cache_root(inp, cache_dir, confirm=True, reanchor=False):

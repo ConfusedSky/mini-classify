@@ -66,7 +66,7 @@
    "stem": "32mm_FemaleOrcWarrior",
    "set": "orig",
    "up": "+Y",
-   "path": "Loot Studios/Orconspiracy/Enemies/Female Orc Warrior/32mm/No Supports/32mm_FemaleOrcWarrior.stl"
+   "path": "Loot Studios/Orconspiracy/Enemies_Part1/Female Orc Warrior/32mm/No Supports/32mm_FemaleOrcWarrior.stl"
   },
   {
    "stem": "Propane_Tank",
@@ -138,7 +138,7 @@
    "stem": "32mm_Goro",
    "set": "orig",
    "up": "+Y",
-   "path": "Loot Studios/Orconspiracy/Enemies/Goro/32mm/No Supports/32mm_Goro.stl"
+   "path": "Loot Studios/Orconspiracy/Enemies_Part1/Goro/32mm/No Supports/32mm_Goro.stl"
   },
   {
    "stem": "Grass Tufts Tuner (3)",
@@ -150,13 +150,13 @@
    "stem": "32mm_OrcShaman",
    "set": "orig",
    "up": "+Y",
-   "path": "Loot Studios/Orconspiracy/Enemies/Orc Shaman/32mm/No Supports/32mm_OrcShaman.stl"
+   "path": "Loot Studios/Orconspiracy/Enemies_Part2/Orc Shaman/32mm/No Supports/32mm_OrcShaman.stl"
   },
   {
    "stem": "32mm_OrcArcher",
    "set": "holdout",
    "up": "+Y",
-   "path": "Loot Studios/Orconspiracy/Enemies/Orc Archer/32mm/No Supports/32mm_OrcArcher.stl"
+   "path": "Loot Studios/Orconspiracy/Enemies_Part2/Orc Archer/32mm/No Supports/32mm_OrcArcher.stl"
   },
   {
    "stem": "ebj-prime4",
@@ -288,7 +288,7 @@
    "stem": "32mm_Orguss_OnePiece",
    "set": "hard",
    "up": "+Y",
-   "path": "Loot Studios/Orconspiracy/Enemies/Orguss the Tall - Green Dragon/32mm/No Supports/One Piece/32mm_Orguss_OnePiece.stl"
+   "path": "Loot Studios/Orconspiracy/Enemies_Part4_V2/Orguss the Tall - Green Dragon/32mm/No Supports/One Piece/32mm_Orguss_OnePiece.stl"
   },
   {
    "stem": "BondedSouls_bodies_32mm_unsupported",
@@ -306,7 +306,7 @@
    "stem": "32mm_Orguss_Head",
    "set": "hard",
    "up": "+Y",
-   "path": "Loot Studios/Orconspiracy/Enemies/Orguss the Tall - Green Dragon/32mm/No Supports/32mm_Orguss_Head.stl"
+   "path": "Loot Studios/Orconspiracy/Enemies_Part4_V2/Orguss the Tall - Green Dragon/32mm/No Supports/32mm_Orguss_Head.stl"
   }
  ],
  "collection_root": "/run/media/masa/STLLibrary",

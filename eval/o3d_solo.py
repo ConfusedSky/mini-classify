@@ -29,7 +29,7 @@ def main():
         gemini_vlm.report(saved["predictions"], thumbs, cols)
         gemini_vlm.cost_report(saved["usage"])
         return
-    labels = F.resolve(load_labels())
+    labels = load_labels()
     base = load_baselines()
     items = [dict(l, **{"arb": base[l["stem"]]["needs_arbiter"],
                         "geo": base[l["stem"]]["geometry"],

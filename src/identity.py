@@ -135,6 +135,33 @@ def rel_path(f, root):
 #       written from here on — version 1 is the one that stays invisible.
 EMBED_CACHE_VERSION = 2
 
+# Versions the render *recipe* — the knobs that decide what the camera sees,
+# none of which any other part of the key covers. EMBED_CACHE_VERSION above
+# versions the derivation math (file bytes -> embedding); this versions the
+# pixels that math is run on, and the two move independently: swapping the STL
+# parser bumps that one and not this, moving a light bumps this one and not
+# that. Before it existed, a change to any of these re-posed or re-lit every
+# cached model silently under an unchanged key (OPEN_QUESTIONS, "the render
+# recipe is not in the cache key").
+#
+# Changelog in model-browser's RIG_VERSION form — the integer says the cache is
+# invalid, the log says which models to look at and why:
+#   1 = the recipe as rebuilt 2026-08-31. Classification views fitted per view
+#       to the rotated mesh's projected vertices (`renderer.tight_view_cams`,
+#       45 degree FOV matching what `_shoot` passes to `setup_camera`, margin
+#       1.05, seeded 200k-vertex subsample); pose tiles left on the fixed 1.4x
+#       extent-norm orbit; sun 90000 / fill 10000; `defaultLit` at 0.7 grey;
+#       the exact (noise-free) `pose._AXIS_ROTATIONS`.
+#
+# Elided at 1 for the same reason EMBED_CACHE_VERSION is: embed-cache2 and
+# embed-cache-test are not part of this rebuild, and an unconditional token
+# would orphan both (docs/cache-rebuild.md §2, §6).
+#
+# A bump has to reach `cachedir.view_config` as well, the way
+# EMBED_CACHE_VERSION does: a `front_view` index resolved from embeddings of
+# one recipe names the hero view of a framing the next recipe does not render.
+RECIPE_VERSION = 1
+
 # The --elevations default. It lives here because the key elides it: a single
 # 20 degree ring appends nothing, which is what keeps keys written before
 # --elevations existed byte-identical. `cachedir.add_cache_args` declares the
@@ -169,11 +196,13 @@ def cache_key_from_identity(ident, args, up_token):
     # up_token is the pose's up vector ("0,0,1"), the only pose input that
     # changes the pixels — pose.embed_cache_token.
     ver = "" if EMBED_CACHE_VERSION == 1 else f"|ev{EMBED_CACHE_VERSION}"
+    rec = "" if RECIPE_VERSION == 1 else f"|r{RECIPE_VERSION}"
     # torch.compile's kernels drift ~1e-03 from eager, so the two regimes are
     # different numbers under the same pixels; like elev, the token appears
     # only when non-default.
     comp = "|compiled" if getattr(args, "compile", False) else ""
-    raw = f"{ident}|{args.views}|{args.render_size}|{up_token}|{args.model}|pv{elev}{comp}{ver}"
+    raw = (f"{ident}|{args.views}|{args.render_size}|{up_token}|{args.model}"
+           f"|pv{elev}{comp}{ver}{rec}")
     return hashlib.sha1(raw.encode()).hexdigest()
 
 

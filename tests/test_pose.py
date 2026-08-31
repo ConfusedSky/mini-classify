@@ -46,41 +46,47 @@ def test_cylinder_is_ambiguous():
     assert ratio > 0.6
 
 
-def test_rotation_to_z_up_matches_open3d_bit_for_bit():
-    """The table is byte-identical to the Open3D construction it replaced.
+def test_rotation_to_z_up_is_exact_for_the_six_candidates():
+    """The six matrices, spelled out, and the properties that make each one a
+    rotation at all.
 
-    `Renderer.views` rotates by this before shooting, so it decides the pixels
-    — and therefore the cached embeddings — of every non-`+Z` model (1902 of
-    embed-cache2's 2945), while the embedding key records only the up *vector*.
-    A value that differed in the last bit would re-pose those models under
-    unchanged keys with nothing failing.
+    **What this test used to assert, and deliberately no longer does:**
+    equality with the Open3D construction the table was transcribed from,
+    `cos(pi/2)` noise included. That equality was the whole point while the
+    table had to stay bit-identical to what drew every cached embedding — the
+    key records only the up *vector*, so a last-bit difference would have
+    re-posed cached models under unchanged keys. The 2026-08-31 rebuild
+    regenerates those embeddings, the noise is gone from `_AXIS_ROTATIONS`, and
+    asserting against Open3D would now assert the noise back in
+    (docs/cache-rebuild.md §1). Dropping that assertion is the change.
 
-    So this asserts against Open3D itself rather than against transcribed
-    constants: the point is the *equality*, and a test that only restated the
-    table would drift with it. Note `np.array_equal` is the right comparison
-    and `allclose` is not — the whole risk here lives in the last bits."""
+    So the constants are restated here on purpose. A quarter or half turn about
+    an axis has an exact matrix; there is nothing to compute, and a second
+    independent spelling is what catches a transcription slip. `array_equal`,
+    not `allclose`: an entry that is 1e-17 rather than 0 means the table went
+    back to being a floating-point result."""
     z = np.array([0.0, 0.0, 1.0])
+    want = {
+        (0.0, 0.0, 1.0):  [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        (0.0, 0.0, -1.0): [[1, 0, 0], [0, -1, 0], [0, 0, -1]],
+        (0.0, 1.0, 0.0):  [[1, 0, 0], [0, 0, -1], [0, 1, 0]],
+        (0.0, -1.0, 0.0): [[1, 0, 0], [0, 0, 1], [0, -1, 0]],
+        (1.0, 0.0, 0.0):  [[0, 0, -1], [0, 1, 0], [1, 0, 0]],
+        (-1.0, 0.0, 0.0): [[0, 0, 1], [0, 1, 0], [-1, 0, 0]],
+    }
+    assert len(want) == len(pose.UP_CANDIDATES)
     for up in pose.UP_CANDIDATES:
-        if np.allclose(up, z):
-            want = np.eye(3)
-        elif np.allclose(up, -z):
-            want = o3d.geometry.get_rotation_matrix_from_xyz((np.pi, 0, 0))
-        else:
-            axis = np.cross(up, z)
-            axis = axis / np.linalg.norm(axis)
-            angle = np.arccos(np.clip(up @ z, -1, 1))
-            want = o3d.geometry.get_rotation_matrix_from_axis_angle(axis * angle)
+        key = tuple(float(x) for x in up)
         got = pose.rotation_to_z_up(up)
-        # `.tobytes()`, not `array_equal` — the latter reports -0.0 == 0.0, and
-        # four of the six matrices carry signed zeros the table transcribes
-        # deliberately. array_equal let a sign-flipped table pass (found in
-        # review, 2026-08-19)
-        assert got.tobytes() == np.ascontiguousarray(want, np.float64).tobytes(), tuple(up)
-        # and the properties that make it a legitimate rotation, so a rewrite
-        # that is merely *different* reads differently from one that is wrong
-        assert np.allclose(got @ np.asarray(up, float), z, atol=1e-12), tuple(up)
-        assert np.allclose(got @ got.T, np.eye(3), atol=1e-12), tuple(up)
-        assert abs(np.linalg.det(got) - 1.0) < 1e-12, tuple(up)
+        assert np.array_equal(got, np.array(want[key], dtype=float)), key
+        # every entry exactly 0 or +/-1 — no residue of the old construction
+        assert set(np.abs(got).ravel()) <= {0.0, 1.0}, key
+        # and the properties that make it a legitimate rotation, so a table
+        # that is merely *different* reads differently from one that is wrong.
+        # Exact here too: these hold to the bit for a signed permutation.
+        assert np.array_equal(got @ np.asarray(up, float), z), key
+        assert np.array_equal(got @ got.T, np.eye(3)), key
+        assert np.linalg.det(got) == pytest.approx(1.0, abs=1e-12), key
 
 
 def test_rotation_to_z_up_falls_back_for_a_non_axis_vector():
@@ -623,7 +629,9 @@ def test_view_angles_is_elevation_major():
 
 
 def test_pose_cache_roundtrip(tmp_path):
-    cache = {"some|identity": {"up": [0.0, 0.0, 1.0], "front_view": 2,
+    # front_view keyed by view config, the only shape the loader passes through
+    cache = {"some|identity": {"up": [0.0, 0.0, 1.0],
+                               "front_view": {"8v-e20,-20-ev2": 2},
                                "confidence": 0.15, "source": "geometry",
                                "v": pose.POSE_CACHE_VERSION}}
     pose.save_pose_cache(tmp_path, cache)
@@ -914,36 +922,60 @@ def test_embed_cache_token_is_the_up_vector():
     assert pose.embed_cache_token(None, "auto") == "unresolved"
 
 
-def test_pose_cache_renames_legacy_sources(tmp_path):
-    # the P2.3-A rename maps on load — no version bump, because the poses
-    # themselves are unchanged and a bump would re-resolve (and re-bill) them
-    pose.save_pose_cache(tmp_path, {
-        "a": {"up": [0, 0, 1], "source": "heuristic", "v": pose.POSE_CACHE_VERSION},
-        "b": {"up": [0, 0, 1], "source": "ensemble", "v": pose.POSE_CACHE_VERSION},
-        "c": {"up": [0, 0, 1], "source": "vlm", "v": pose.POSE_CACHE_VERSION}})
+def test_the_loader_drops_a_legacy_bare_int_front_view(tmp_path):
+    """The last legacy shape, and where it is answered (docs/cache-rebuild.md
+    §3).
+
+    `Pose.from_cache` used to absorb it. It no longer does — `dict(0)` raises —
+    and the shape clears the version test, because front_view became
+    per-config keyed *after* the v4 bump. So the loader is what such an entry
+    cannot get past, by the same rule it already applies to non-dicts and stale
+    versions.
+
+    Dropping costs a re-pose, which is why it was priced rather than assumed:
+    53 of embed-cache512's 3540 entries, in the cache being rebuilt that night,
+    and 0 of embed-cache-test's 2508. Repairing the entry in place — keeping
+    the pose, popping the index — was the alternative while embed-cache3 still
+    existed and was nearly all bare ints; deleting that cache made the honest
+    version affordable."""
+    legacy = {"up": [0.0, 0.0, 1.0], "confidence": 0.17, "source": "geometry",
+              "margin": 1.6489, "v": pose.POSE_CACHE_VERSION, "front_view": 0}
+    keyed = dict(legacy, front_view={"8v-e20,-20": 5})
+    pose.save_pose_cache(tmp_path, {"legacy": legacy, "keyed": keyed})
     got = pose.load_pose_cache(tmp_path)
-    assert [got[k]["source"] for k in "abc"] == ["geometry", "siglip", "vlm"]
+
+    assert set(got) == {"keyed"}                            # dropped, not repaired
+    assert got["keyed"]["front_view"] == {"8v-e20,-20": 5}  # a dict is untouched
+
+    # and what survives the loader is exactly what a run can construct, which
+    # is the requirement the drop exists to meet
+    assert pose.Pose.from_cache(got["keyed"]).front_view == {"8v-e20,-20": 5}
+    assert pose.front_view(got["keyed"], "8v-e20,-20") == 5
 
 
-def test_pose_from_cache_never_defaults_v():
-    # D10: `v` is carried through, never defaulted — a default of
-    # POSE_CACHE_VERSION would stamp unversioned entries as freshly resolved
-    # and defeat load_pose_cache's drop rule
-    p = pose.Pose.from_cache({"up": [0, 0, 1], "source": "geometry"})
-    assert p.v != pose.POSE_CACHE_VERSION
-    assert p.v == 0
-    assert p.margin is None                      # absent from older entries
+def test_an_entry_below_the_current_version_never_reaches_from_cache(tmp_path):
+    """`from_cache` reads `v` and `margin` straight out of the dict now, with
+    no defaults (docs/cache-rebuild.md §3). What makes that safe is upstream,
+    so pin it there rather than trusting the constructor: the loader drops
+    anything not at POSE_CACHE_VERSION — including the unversioned entries the
+    `v=0` default used to invent a version for — and `pose_is_sufficient` calls
+    a missing margin a miss, so `cache_checker.route` re-resolves instead of
+    constructing."""
+    pose.save_pose_cache(tmp_path, {
+        "old": {"up": [0, 0, 1], "source": "geometry", "margin": 0.9,
+                "v": pose.POSE_CACHE_VERSION - 1},
+        "unversioned": {"up": [0, 0, 1], "source": "geometry", "margin": 0.9},
+        "current": {"up": [0, 0, 1], "confidence": 0.5, "source": "geometry",
+                    "margin": 0.9, "v": pose.POSE_CACHE_VERSION}})
+    got = pose.load_pose_cache(tmp_path)
+    assert set(got) == {"current"}
+    assert pose.Pose.from_cache(got["current"]).v == pose.POSE_CACHE_VERSION
 
-
-def test_pose_from_cache_treats_bare_int_front_view_as_absent():
-    # D3: pre-keying entries (real on disk: embed-cache3 is nearly all
-    # `front_view: 0`) carry no record of the config that produced them
-    entry = {"up": [0.0, 0.0, 1.0], "confidence": 0.17, "source": "geometry",
-             "margin": 1.6489, "v": 4, "front_view": 0}
-    assert pose.Pose.from_cache(entry).front_view == {}
-    # a per-config dict is preserved as-is
-    keyed = dict(entry, front_view={"8v-e20,-20": 5})
-    assert pose.Pose.from_cache(keyed).front_view == {"8v-e20,-20": 5}
+    # the geometry-only entry (no margin) is the other half: it survives the
+    # loader and is a miss at the gate, so nothing constructs a Pose from it
+    no_margin = {"up": [0, 0, 1], "confidence": 0.5, "source": "geometry",
+                 "v": pose.POSE_CACHE_VERSION}
+    assert pose.pose_is_sufficient(no_margin, True, pose.MARGIN_THRESHOLD) is False
 
 
 def test_pose_to_cache_round_trips_a_real_entry():
@@ -951,11 +983,10 @@ def test_pose_to_cache_round_trips_a_real_entry():
     entry = {"up": [0.0, 0.0, 1.0], "confidence": 0.17, "source": "geometry",
              "margin": 1.6512, "v": 4, "front_view": {"8v-e20,-20": 0}}
     assert pose.Pose.from_cache(entry).to_cache() == entry
-    # `front_view` is omitted when nothing has been resolved, matching
-    # entries that predate front-view caching
+    # `front_view` is omitted until a config has been resolved, so an entry
+    # that has none round-trips without growing an empty dict
     bare = {k: v for k, v in entry.items() if k != "front_view"}
     assert pose.Pose.from_cache(bare).to_cache() == bare
-    assert "front_view" not in pose.Pose.from_cache(dict(bare, front_view=0)).to_cache()
 
 
 def test_front_view_is_keyed_by_view_config():
@@ -966,10 +997,10 @@ def test_front_view_is_keyed_by_view_config():
     assert pose.front_view(entry, "4v-e20") is None
 
 
-def test_legacy_front_view_int_is_treated_as_absent():
-    # pre-keying entries carry no record of the config that produced them; a
-    # warm classify pass regenerates them from cached embeddings
-    assert pose.front_view({"front_view": 6}, "8v-e20,-20") is None
+def test_front_view_of_an_entry_with_none_cached():
+    # the legacy bare int is not tested here any more: the loader drops those
+    # entries before any caller sees one (test_the_loader_drops_a_legacy_bare_int_front_view),
+    # which is what let this function drop its own isinstance guard
     assert pose.front_view({}, "8v-e20,-20") is None
     assert pose.front_view(None, "8v-e20,-20") is None
 

@@ -393,21 +393,31 @@ class Pose:
   win the combined argmax — rare, unmeasured, and the component scores are
   not stored), and the agreement label with `margin: None` is a latent
   overload that is not live (0 of 4092 entries across both caches).
-  Mechanically the rename maps old spellings in `load_pose_cache` — the
+  ~~Mechanically the rename maps old spellings in `load_pose_cache` — the
   refactor's `from_cache` inherits that — with **no version bump**, because a
-  bump would re-resolve (and re-bill) unchanged poses.
+  bump would re-resolve (and re-bill) unchanged poses.~~ **The map is gone
+  since 2026-08-31** (`pose.RENAMED_SOURCES`, docs/cache-rebuild.md §3): the
+  rebuilt cache writes only the new spellings, and an old-spelling entry in a
+  cache that was not rebuilt now loads with the spelling it has. Nothing reads
+  `source` for anything but `== "vlm"` and the CSV column, so it does not
+  crash a run — it just reports the name it was written with. The names above
+  are what this project means; the map was only for the transition.
 * **The freeze is shallow, and `Pose` is unhashable** (R4): `front_view` is a
   dict, so `hash(pose)` raises and mutation through the field is still
   possible. Nothing may key on a `Pose`; `index` is the identity, everywhere.
-* **`from_cache` absorbs legacy shapes, not versions.** The shapes are real on
-  disk: `embed-cache3` holds bare-int `front_view: 0` entries beside
-  per-config dicts — today merged at the *write* site
-  (`cache_checker.route`, D3) — and `margin` is absent from older
-  entries. Version filtering already has a home and keeps it:
-  `pose.load_pose_cache` drops mismatched `v` before construction.
-  `from_cache` therefore carries `v` through rather than defaulting it — a
-  field default of `POSE_CACHE_VERSION` would stamp unversioned entries as
-  freshly resolved and silently defeat that drop rule (D10).
+* ~~**`from_cache` absorbs legacy shapes, not versions.**~~ **False since
+  2026-08-31** (the `embed-cache512` rebuild, docs/cache-rebuild.md §3):
+  `from_cache` is a plain constructor and absorbs nothing. Bare-int
+  `front_view` entries are stamped `v: 4` and so clear the version filter —
+  `pose.load_pose_cache` therefore drops them by shape as well, with the same
+  rule that drops non-dicts and mismatched `v` (53 of `embed-cache512`'s 3540,
+  0 of `embed-cache-test`'s 2508, after `embed-cache2/3/4` were deleted).
+  `margin`'s absence needs
+  no absorber: such an entry is a miss at `pose_is_sufficient` and never
+  reaches the constructor. Version filtering keeps the home it always had, and
+  `v` is still not defaulted — now because it is read directly, which has the
+  same effect D10 asked for: nothing can stamp an unversioned entry as freshly
+  resolved.
 * (Wave 2 retired `pose_is_sufficient`'s second parameter with the
   `--no-up-ensemble` flag — the ensemble is always available now. ~~so the
   function is single-arg: `pose_is_sufficient(entry)`~~ — **false since

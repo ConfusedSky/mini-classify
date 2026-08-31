@@ -317,8 +317,10 @@ fails. **Prefer `azimuth_zero`; the table is the explanation, not the
 contract.**
 
 That choice is now pinned on this side as well
-(`tests/test_pose.py::test_rotation_to_z_up_matches_open3d_bit_for_bit`, which
-asserts the six against Open3D itself with `array_equal`),
+(`tests/test_pose.py::test_rotation_to_z_up_is_exact_for_the_six_candidates`,
+which asserts the six matrices entry by entry — it asserted them against
+Open3D's own construction until the 2026-08-31 rebuild let the table drop its
+floating-point noise, docs/cache-rebuild.md §1),
 because it was already load-bearing before any consumer existed: `views`
 rotates the mesh by this matrix before shooting, so it decides the pixels — and
 therefore the cached embeddings — for every non-`+Z` model, while the embedding

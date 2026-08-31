@@ -19,6 +19,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from src import cachedir
 from src import pose
 from src.cachedir import (CACHE_VERSION, cache_key, embeds_dir, find_stls,
                           stamp_cache_version, view_config)
@@ -572,14 +573,19 @@ def test_a_corrupt_stamp_reads_as_unstamped_rather_than_raising(tmp_path, conten
     """`cache_version` is called by `/status`, the route that exists to explain
     a server which cannot start — so an exception there made the diagnostic
     route the first to fail on a broken cache (review, 2026-08-19). Reading
-    corrupt as 0 is the safe direction: `require_cache_version` then refuses a
-    populated cache rather than vouching for keys it cannot read."""
-    from src.cachedir import cache_version
+    corrupt as 0 keeps it total.
+
+    What 0 then *means* changed with the 2026-08-31 rebuild (§4): it named the
+    pre-stamp key scheme and was refused; now it means only "not stamped yet",
+    so a torn stamp is rewritten and the load goes through. That is the right
+    answer for a file whose only job is to record the one live scheme — the
+    keys underneath it are that scheme whatever the stamp says."""
+    from src.cachedir import CACHE_VERSION, cache_version
     args, *_ = build(tmp_path, ["a/one.stl"])
     (Path(args.cache_dir) / "cache-meta.json").write_text(content)
     assert cache_version(args.cache_dir) == 0
-    with pytest.raises(CacheUnusable):              # and the guard still bites
-        Collection.load(args)
+    Collection.load(args)                           # no longer refused
+    assert cache_version(args.cache_dir) == CACHE_VERSION       # re-stamped
 
 
 def test_the_walk_cache_is_written_atomically(tmp_path):
@@ -595,16 +601,21 @@ def test_the_walk_cache_is_written_atomically(tmp_path):
     assert not list(cache.glob("*.tmp")), "temp file left behind"
 
 
-def test_an_old_key_scheme_is_named_with_the_right_fix(tmp_path):
+def test_an_old_key_scheme_is_named_with_the_right_fix(tmp_path, monkeypatch):
     """The guard every other cache consumer calls
     (`cachedir.require_cache_version`) and this module did not. Without it a cache from
     an older key scheme misses on every lookup and reports "run
     classify_stls.py first", when the actionable line is migrate_cache_keys —
-    the exact wrong-advice shape VolumeUnavailable exists to prevent."""
+    the exact wrong-advice shape VolumeUnavailable exists to prevent.
+
+    The mismatch has to be staged by moving `CACHE_VERSION` rather than by
+    writing `CACHE_VERSION - 1`: since the 2026-08-31 rebuild (§4) that
+    literal is 0, which now means "not stamped yet" and is stamped rather than
+    refused. Bumping the constant is also the real shape of the next
+    occurrence — new code, a cache stamped by the old."""
     args, *_ = build(tmp_path, ["a/one.stl"])
     Collection.load(args)                                # stamps it current
-    (Path(args.cache_dir) / "cache-meta.json").write_text(
-        json.dumps({"cache_version": CACHE_VERSION - 1}))
+    monkeypatch.setattr(cachedir, "CACHE_VERSION", CACHE_VERSION + 1)
     with pytest.raises(CacheUnusable) as e:
         Collection.load(args)
     assert "cache_version" in e.value.message

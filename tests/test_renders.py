@@ -112,12 +112,22 @@ def test_index_resolves_whatever_format_was_written(tmp_path):
     assert index["bunny_view1"].suffix == ".jpg"
 
 
-def test_index_prefers_the_newest_when_a_view_exists_twice(tmp_path):
-    # a format switch can leave both behind; the newer one is the current pose
+def test_index_resolves_one_of_a_duplicated_view_without_stat_ing(tmp_path):
+    """The newest-wins tie-break went with the 2026-08-31 rebuild
+    (docs/cache-rebuild.md §7): a rebuilt renders directory holds one format,
+    and ordering it cost a `stat()` per file on every load.
+
+    Two files for one view can now only come from a format switch over an
+    unrebuilt directory, where both images are the same pose — so the index
+    just has to name one of them, deterministically. It does not matter which,
+    and this asserts only that: pinning the extension would pin `sorted()`'s
+    order as if it meant something."""
     tile(tmp_path / "bunny_view0.png")
     tile(tmp_path / "bunny_view0.jpg")
-    os.utime(tmp_path / "bunny_view0.png", (1, 1))
-    assert render_index(tmp_path)["bunny_view0"].suffix == ".jpg"
+    os.utime(tmp_path / "bunny_view0.png", (1, 1))     # older, and irrelevant
+    index = render_index(tmp_path)
+    assert index["bunny_view0"].suffix in (".png", ".jpg")
+    assert render_index(tmp_path)["bunny_view0"] == index["bunny_view0"]
 
 
 def test_index_omits_missing_views_and_missing_dirs(tmp_path):

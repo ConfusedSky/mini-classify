@@ -216,3 +216,44 @@ def test_tight_framing_ships_as_version_2(tmp_path):
     raw = f"{ident}|{a.views}|{a.render_size}|auto|{a.model}|pv|e:20,-20|ev2"
     assert cache_key_from_identity(ident, a, "auto") == \
         hashlib.sha1(raw.encode()).hexdigest()
+
+
+def test_the_recipe_version_ships_at_1_and_is_elided(tmp_path):
+    """RECIPE_VERSION covers the render knobs no other part of the key does —
+    the rotation table, the FOV, the tight-fit margin, the lights, the material
+    (docs/cache-rebuild.md §6). It ships at 1, and 1 appends nothing.
+
+    The elision is a decision, not an oversight, and this is where it is
+    pinned: §6 says to introduce the version unconditional because a rebuild
+    leaves "no entries to protect", but embed-cache2 and embed-cache-test are
+    not being rebuilt, so an unconditional `|r1` would orphan both — the same
+    cost the §2 ruling refused for `|evN`. Hence the assertion below that the
+    shipped key is byte-identical to the key with no recipe token at all."""
+    assert identity.RECIPE_VERSION == 1
+    root = tmp_path / "STL"
+    f = collection(root)
+    a = args()
+    ident = pose.file_identity(f, root)
+    raw = f"{ident}|{a.views}|{a.render_size}|auto|{a.model}|pv|e:20,-20|ev2"
+    assert cache_key_from_identity(ident, a, "auto") == \
+        hashlib.sha1(raw.encode()).hexdigest()
+
+
+def test_a_recipe_bump_moves_every_key(tmp_path, monkeypatch):
+    """And it has to *be* a version, not a comment: a bump must move the key,
+    or a recipe change goes on re-posing cached models silently, which is the
+    open question §6 exists to close."""
+    root = tmp_path / "STL"
+    f = collection(root)
+    ident = pose.file_identity(f, root)
+    keys = {}
+    for v in (1, 2, 3):
+        monkeypatch.setattr(identity, "RECIPE_VERSION", v)
+        keys[v] = cache_key_from_identity(ident, args(), "auto")
+    assert len({*keys.values()}) == 3
+
+    monkeypatch.setattr(identity, "RECIPE_VERSION", 2)
+    a = args()
+    raw = f"{ident}|{a.views}|{a.render_size}|auto|{a.model}|pv|e:20,-20|ev2|r2"
+    assert cache_key_from_identity(ident, a, "auto") == \
+        hashlib.sha1(raw.encode()).hexdigest()

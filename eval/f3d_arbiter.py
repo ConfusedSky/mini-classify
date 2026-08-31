@@ -39,18 +39,6 @@ for col in (f"{TAG}-f3d-grid", f"{TAG}-f3d-solo"):
     gemini_vlm.PRICES[col] = OR_PRICES.get(GLM, {"in": 0, "out": 0})
 
 
-def resolve(labels):
-    """The 2026-08-30 Orconspiracy reshuffle: labels whose file moved are found
-    again by name under the set's folder (Enemies -> Enemies_Part1/2/4_V2)."""
-    orc = Path("/run/media/masa/STLLibrary/Loot Studios/Orconspiracy")
-    for l in labels:
-        if not l["path"].exists():
-            hits = [h for h in orc.rglob(l["path"].name) if "Supported" not in str(h.parent)]
-            assert hits, f"missing labelled file: {l['path']}"
-            l["path"] = hits[0]
-    return labels
-
-
 def build_tiles(labels):
     TILE_DIR.mkdir(parents=True, exist_ok=True)
     todo = [(l, ax) for l in labels for ax in AX
@@ -226,7 +214,7 @@ def main():
         gemini_vlm.cost_report(saved["usage"])
         return
 
-    labels = resolve(load_labels())
+    labels = load_labels()
     base = load_baselines()
     items = [dict(l, **{"arb": base[l["stem"]]["needs_arbiter"],
                         "geo": base[l["stem"]]["geometry"],

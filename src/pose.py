@@ -80,24 +80,26 @@ class Pose:
 
     @classmethod
     def from_cache(cls, d):
-        """Absorb legacy *shapes*, not versions: bare-int front_view entries
-        carry no record of the config that produced them and are treated as
-        absent (matching `front_view` below); `margin` is absent from older
-        entries. `v` is carried through, never defaulted — a default of
-        POSE_CACHE_VERSION would stamp unversioned entries as freshly
-        resolved and defeat `load_pose_cache`'s drop rule (D10). Source
-        spellings are already mapped by `load_pose_cache` (RENAMED_SOURCES);
-        this constructor takes the entry as loaded."""
-        fv = d.get("front_view")
+        """A plain constructor over an entry `load_pose_cache` returned.
+
+        It absorbs no legacy shapes — they were deleted with the 2026-08-31
+        rebuild (docs/cache-rebuild.md §3). What makes reading `v`, `margin`
+        and `front_view` straight out of the dict safe is that each is
+        guaranteed upstream rather than defaulted here: the loader drops every
+        entry not at POSE_CACHE_VERSION and every entry whose `front_view` is
+        not a dict, and `cache_checker.route` — the only production caller —
+        reaches this only past `pose_is_sufficient`, which treats a missing
+        `margin` as a miss and re-resolves the model instead.
+
+        `arbitrated` absent is not a legacy shape but a live state: no claim,
+        read as `false` (see `to_cache`)."""
         return cls(up=tuple(float(x) for x in d["up"]),
                    confidence=float(d.get("confidence", 0.0)),
                    source=d["source"],
-                   v=d.get("v", 0),
-                   margin=d.get("margin"),
-                   # absent on every entry written before 2026-08-19 and on
-                   # every model that never escalated — see `to_cache`
+                   v=d["v"],
+                   margin=d["margin"],
                    arbitrated=d.get("arbitrated"),
-                   front_view=dict(fv) if isinstance(fv, dict) else {})
+                   front_view=dict(d.get("front_view", {})))
 
     def to_cache(self):
         """The pose cache's JSON entry shape.
@@ -236,23 +238,26 @@ def load_pose_cache(cache_dir):
     if not isinstance(raw, dict):
         raise ValueError(f"{p}: pose cache must be a JSON object, "
                          f"got {type(raw).__name__}")
+    # Three ways an entry fails to be one this code can read, and all three
+    # drop. The `front_view` clause is the youngest: front_view became a
+    # per-config dict *after* the v4 bump, so entries holding a bare int are
+    # stamped v4 and clear the version test, and `Pose.from_cache` — a plain
+    # constructor since the 2026-08-31 rebuild (docs/cache-rebuild.md §3) —
+    # raises on `dict(0)` rather than absorbing them.
+    #
+    # Dropping rather than repairing costs a re-pose, so it was priced: 53 of
+    # embed-cache512's 3540 entries, in the cache being rebuilt from scratch
+    # that same night, and 0 of embed-cache-test's 2508 (census 2026-08-31,
+    # after embed-cache2/3/4 were deleted — embed-cache3 had been nearly all
+    # bare ints, and while it existed this had to repair instead of drop).
     fresh = {k: v for k, v in raw.items()
-             if isinstance(v, dict) and v.get("v") == POSE_CACHE_VERSION}
+             if isinstance(v, dict) and v.get("v") == POSE_CACHE_VERSION
+             and isinstance(v.get("front_view", {}), dict)}
     if len(fresh) < len(raw):
         print(f"pose cache: {len(raw) - len(fresh)} of {len(raw)} entries predate "
-              f"v{POSE_CACHE_VERSION} and will be re-resolved")
-    for v in fresh.values():
-        # The 2026-08-14 rename (review P2.3-A): same poses, honest names —
-        # "geometry" = geometry's pick stood, "siglip" = SigLIP moved it off
-        # that pick. Mapped on load rather than behind a version bump: the
-        # poses themselves are unchanged, and a bump would re-resolve (and
-        # re-bill) every entry for a spelling.
-        if v.get("source") in RENAMED_SOURCES:
-            v["source"] = RENAMED_SOURCES[v["source"]]
+              f"v{POSE_CACHE_VERSION} or carry a shape it cannot read, and will "
+              f"be re-resolved")
     return fresh
-
-
-RENAMED_SOURCES = {"heuristic": "geometry", "ensemble": "siglip"}
 
 
 def save_pose_cache(cache_dir, cache):
@@ -371,27 +376,26 @@ BACK_PROMPTS = [
 ]
 
 
-# The exact rotations for the six `UP_CANDIDATES`, transcribed float-for-float
-# from the Open3D construction that used to compute them
-# (`get_rotation_matrix_from_xyz((pi,0,0))` for the antiparallel case, Rodrigues
-# about `up x z` otherwise). The near-zero entries are cos(pi/2) and sin(pi)
-# noise and are kept rather than cleaned to 0: this table exists to be
-# *bit-identical* to what the renderer drew every cached embedding with, and
-# tidying it would be a change to the render recipe (OPEN_QUESTIONS) for
-# cosmetic reasons. `tests/test_pose.py` asserts the equality against Open3D
-# itself, so the transcription cannot drift.
+# The exact rotations for the six `UP_CANDIDATES`: each takes its candidate to
+# +Z by a quarter or half turn, so every entry is 0 or +/-1 and nothing here is
+# approximate.
+#
+# Until the 2026-08-31 rebuild these were transcribed float-for-float from the
+# Open3D construction that computed them, cos(pi/2) and sin(pi) noise included
+# (`6.123233995736766e-17` where this table now reads `0.0`), because the table
+# had to stay bit-identical to what drew every cached embedding: the key records
+# only the up *vector*, so a last-bit difference would have re-posed cached
+# models under unchanged keys. The rebuild regenerates every one of those
+# embeddings, which is the only moment the noise can be dropped — see
+# docs/cache-rebuild.md §1, and RECIPE_VERSION in identity.py, which is what
+# makes any future change here visible in the key instead of silent.
 _AXIS_ROTATIONS = {
     (0.0, 0.0, 1.0):  [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
-    (0.0, 0.0, -1.0): [[1.0, 0.0, 0.0], [0.0, -1.0, -1.2246467991473532e-16],
-                       [0.0, 1.2246467991473532e-16, -1.0]],
-    (0.0, 1.0, 0.0):  [[1.0, 0.0, 0.0], [0.0, 6.123233995736766e-17, -1.0],
-                       [0.0, 1.0, 6.123233995736766e-17]],
-    (0.0, -1.0, 0.0): [[1.0, -0.0, 0.0], [0.0, 6.123233995736766e-17, 1.0],
-                       [-0.0, -1.0, 6.123233995736766e-17]],
-    (1.0, 0.0, 0.0):  [[6.123233995736766e-17, -0.0, -1.0], [0.0, 1.0, -0.0],
-                       [1.0, 0.0, 6.123233995736766e-17]],
-    (-1.0, 0.0, 0.0): [[6.123233995736766e-17, 0.0, 1.0], [0.0, 1.0, -0.0],
-                       [-1.0, 0.0, 6.123233995736766e-17]],
+    (0.0, 0.0, -1.0): [[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, -1.0]],
+    (0.0, 1.0, 0.0):  [[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]],
+    (0.0, -1.0, 0.0): [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]],
+    (1.0, 0.0, 0.0):  [[0.0, 0.0, -1.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]],
+    (-1.0, 0.0, 0.0): [[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], [-1.0, 0.0, 0.0]],
 }
 
 
@@ -403,13 +407,12 @@ def rotation_to_z_up(up):
     needs one to publish `pose.azimuth_zero` (docs/api/surface.md).
 
     Two paths, and the split is the point. Every `up` this project resolves is
-    one of `UP_CANDIDATES`, so those six are served from a table of the exact
-    matrices Open3D produced, byte for byte: this function decides the pixels
-    of every non-`+Z` render (`Renderer.views` rotates by it), the embedding
-    key records only the up *vector*, and so a value that differed even in the
-    last bit would re-pose cached models under unchanged keys. A naive
-    Rodrigues rewrite is *not* bit-identical here — it differs by ~5e-17 on
-    four of the six, in the entries that ought to be zero.
+    one of `UP_CANDIDATES`, and each of those six is a quarter or half turn
+    whose matrix is exactly 0 and +/-1 — so they are served from `_AXIS_ROTATIONS`
+    rather than computed. Rodrigues on the same input lands ~5e-17 off in the
+    entries that ought to be zero, and this function decides the pixels of every
+    non-`+Z` render (`Renderer.views` rotates by it), so the table is what keeps
+    a rotation the pipeline uses constantly from being a floating-point result.
 
     Anything else falls through to Rodrigues, which agrees with Open3D to
     ~1e-15. Nothing in the pipeline reaches it, since poses are always
@@ -421,8 +424,9 @@ def rotation_to_z_up(up):
     divides by zero and yields an all-NaN matrix. Open3D's version hid this: it
     took `nan` axis-angle input and returned the *identity*, so `[0,0,-2]`
     silently rendered upside down rather than failing. Normalising sends every
-    such vector to the table, where the answer is right. Bit-fidelity survives
-    it because the six candidates are exactly unit, and `x / 1.0 == x`.
+    such vector to the table, where the answer is right, and it cannot miss the
+    table on a rounding step: the six candidates are exactly unit, so the
+    division is `x / 1.0 == x`.
 
     A zero vector raises: there is no rotation taking nothing to +Z, and a
     caller that has one is holding a bug, not an edge case."""
@@ -433,7 +437,9 @@ def rotation_to_z_up(up):
     v = v / n
     exact = _AXIS_ROTATIONS.get(tuple(float(x) for x in v))
     if exact is not None:
-        return np.array(exact)          # a fresh array per call, as before
+        # a fresh array per call: a caller that mutates what it gets back must
+        # not be mutating the table every later call reads
+        return np.array(exact)
     z = np.array([0.0, 0.0, 1.0])
     axis = np.cross(v, z)
     axis = axis / np.linalg.norm(axis)
@@ -466,13 +472,16 @@ def front_view(entry, cfg):
 
     front_view indexes into a specific run's view list, so it is stored as a
     dict keyed by `cachedir.view_config` — an index cached at 8 views is
-    out of range at 4 and silently wrong under different elevations. Legacy
-    integer entries carry no record of the config that produced them and are
-    treated as absent; a warm classify pass regenerates them from cached
-    embeddings, and consumers fall back to view 0 (a real render, just not
-    necessarily the front) until it does."""
-    fv = (entry or {}).get("front_view")
-    return fv.get(cfg) if isinstance(fv, dict) else None
+    out of range at 4 and silently wrong under different elevations. A config
+    nothing has resolved yet is simply absent; a warm classify pass fills it
+    in from cached embeddings, and consumers fall back to view 0 (a real
+    render, just not necessarily the front) until it does.
+
+    The shape is trusted because every caller — `Done._score`,
+    `Collection.pose_of`, `cluster_models.py`, `test_categories.py` — reads
+    entries that came through `load_pose_cache`, which drops the ones carrying
+    the legacy spelling (a bare int) rather than passing them on."""
+    return (entry or {}).get("front_view", {}).get(cfg)
 
 
 def front_view_index(view_embeds, front_embeds, back_embeds):

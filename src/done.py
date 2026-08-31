@@ -168,11 +168,9 @@ class Done:
                 fv = front_view_index(view_np, self.front_embeds, self.back_embeds)
                 if entry is not None:
                     # The front_view merge writes through the canonical entry
-                    # (D9), exactly main's shape (:1203-1206); a legacy int
-                    # carries no config record and is replaced.
-                    old = entry.get("front_view")
-                    entry["front_view"] = \
-                        {**(old if isinstance(old, dict) else {}), self.view_cfg: fv}
+                    # (D9): other configs' indices stay, this run's is added.
+                    entry["front_view"] = {**entry.get("front_view", {}),
+                                           self.view_cfg: fv}
             view_sims = (img_embeds @ self.text_embeds.T).float().cpu().numpy()
             sims = torch.from_numpy(pool_sims(view_sims, self.ctx.args.pool))
             order = sims.argsort(descending=True)
