@@ -109,8 +109,67 @@ class Done:
     def record_pose(self, file: Path, index: int, pose: Pose) -> None:
         """The Poser's write path — a Pose, never a dict reference. `index` is
         the caller's identity for the file; the store keys on file_identity,
-        which Done derives itself (J6: the Poser has no root)."""
-        self.poses[file_identity(file, self.ctx.root)] = pose.to_cache()
+        which Done derives itself (J6: the Poser has no root).
+
+        **A record that claims no judgment does not overwrite one.** An
+        incoming `arbitrated` of `False` or absent says "asked and not
+        answered *yet*", or "never asked at all" — neither is a verdict, and
+        the judgment a stored entry carries is replaced only by another
+        judgment. So an entry whose `arbitrated` is `True` or `"rejected"` is
+        left byte-untouched by such a record; an incoming `True`/`"rejected"`
+        replaces it exactly as before.
+
+        The guard lives here rather than in the Poser because Done owns the
+        store and the Poser may not read it (J6) — which is precisely why the
+        Poser cannot see that it is about to park over a judgment. The owner
+        is the only actor in a position to refuse.
+
+        What it prevents (adversarial review, 2026-08-31): `--repose` re-opens
+        a settled entry *before* it has secured the replacement. The Poser
+        records the ensemble's answer at park time — `arbitrated=False`, no
+        arbiter, `poser.on_tile_embeds` — and that record used to replace the
+        stored judgment wholesale. So anything going wrong after the park
+        downgraded the paid judgment to the very answer the old judge had
+        overruled: a `VLMUnavailable`, a 429, a Ctrl-C, the breaker tripping,
+        each of which records `arbitrated=False` and used to land. Worse, a
+        fresh margin that cleared this run's gate made *no call at all* and
+        wrote `arbitrated=None` over the judgment — erased permanently, with
+        nothing bought in exchange. `--repose` re-judges a judgment; it must
+        never spend one.
+
+        Outside `--repose` the refused case is unreachable, so this changes no
+        existing behaviour: an entry with `arbitrated` truthy is always
+        sufficient (`pose.pose_is_sufficient` returns True on it), so `route`
+        never re-opens it, so the Poser never resolves that file and never
+        writes over it. Pinned by test, since "unreachable" is a claim about
+        another module and nothing here can enforce it.
+
+        The in-run consequence of holding the old entry — nothing inconsistent,
+        and worth stating because the run has already re-rendered by then.
+        **Safe because `settled` skips only the sufficiency check: `route`
+        re-reads the store either way** (`src/cache_checker.py`, the
+        `settled or pose_is_sufficient(...)` short-circuit sits *after* the
+        `ctx.poses.get`). So the re-route sees the **preserved** entry and the
+        rest of the run runs on the judged pose: the views are rendered under
+        its up, the `.npy` is keyed on its up, the CSV row reports it, and the
+        `_score` front_view merge below writes an index computed from renders
+        of that same judged pose back into the judged entry — where it belongs.
+        The fresh ensemble answer is discarded where it was made and never
+        reaches this stage, so there is no orphan embedding either. A failed
+        re-judgment therefore behaves as if the re-open never happened; the
+        entry is re-opened again by the next `--repose` run, which is the
+        intended retry. The cost is one wasted pose-tile render and ensemble
+        pass, plus — under `--save-renders` — a redraw of already-correct
+        views, forced by a `pose_changed` that came from the discarded answer.
+
+        A future refactor of `route` that "optimizes away" that second store
+        read is what breaks this; `tests/test_cache_checker.py` pins it."""
+        ident = file_identity(file, self.ctx.root)
+        stored = self.poses.get(ident)
+        if not pose.arbitrated and stored is not None \
+                and stored.get("arbitrated") in (True, "rejected"):
+            return
+        self.poses[ident] = pose.to_cache()
 
     # --- The one entry point -------------------------------------------------
 

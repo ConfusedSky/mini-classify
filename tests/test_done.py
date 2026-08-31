@@ -296,6 +296,107 @@ def test_record_pose_writes_the_canonical_store(tmp_path):
     assert rig.done.poses is rig.ctx.poses
 
 
+# --- the guard: a no-claim record never overwrites a judgment ----------------
+# (adversarial review, 2026-08-31). The records below are built by the
+# production builder, `Poser._make_pose`, rather than hand-rolled: the guard
+# reads `arbitrated`, and what the Poser puts there per call site is exactly
+# what is under test. A Poser costs nothing to construct — __init__ stores its
+# arguments and computes one id — and nothing here feeds it tiles.
+
+def a_poser(rig, backend="gemini", model=None):
+    from src.poser import Poser, VlmConfig
+    return Poser(np.zeros((1, 1)), np.zeros((1, 1)), None,
+                 rig.done.record_pose, VlmConfig(backend=backend, model=model))
+
+
+def judged(rig, f, state=True, backend="gemini"):
+    """A settled entry in the store, exactly as a judging run left it."""
+    p = a_poser(rig, backend).\
+        _make_pose((1.0, 0.0, 0.0), 1.0, "vlm", 0.2, arbitrated=state)
+    rig.done.record_pose(f, 0, p)
+    # deep, so an in-place mutation of the stored entry fails the comparison
+    return copy.deepcopy(rig.ctx.poses[pose.file_identity(f, rig.root)])
+
+
+def test_a_park_record_never_overwrites_a_judgment(tmp_path):
+    """`--repose` re-opens a settled entry *before* it has secured the
+    replacement: `poser.on_tile_embeds` records the fresh ensemble answer —
+    `arbitrated=False`, no arbiter — the moment before it submits the call.
+    That record used to replace the judgment wholesale, so a transient failure
+    afterwards (VLMUnavailable, a 429, a Ctrl-C, the breaker) left the store
+    holding the very answer the old judge had overruled."""
+    rig = make_rig(tmp_path)
+    f = stl(rig)
+    before = judged(rig, f, True, backend="glm")     # a *different* judge
+    park = a_poser(rig)._make_pose((0.0, 0.0, 1.0), 0.9, "siglip", 0.2,
+                                   arbitrated=False)
+    rig.done.record_pose(f, 0, park)
+    assert rig.ctx.poses[pose.file_identity(f, rig.root)] == before  # untouched
+
+
+def test_a_failed_fold_never_overwrites_a_judgment(tmp_path):
+    """The other two falsy records, and the other two call sites. `_fold`
+    writes `arbitrated=False` for a transient failure, an unparseable answer
+    and a cancellation, and `settle` writes it for an abandoned call; the
+    ungated ensemble exit writes `None`, which is the case that erased a
+    judgment with no call made at all — a fresh margin over this run's gate.
+
+    `"rejected"` is protected too: it is a judgment, and re-opening it under a
+    different judge is the point of --repose, not a licence to spend it."""
+    rig = make_rig(tmp_path)
+    for i, (stored, incoming) in enumerate(
+            [(True, False), (True, None), ("rejected", False),
+             ("rejected", None)]):
+        f = stl(rig, name=f"g{i}.stl")
+        before = judged(rig, f, stored, backend="glm")
+        rig.done.record_pose(f, 0, a_poser(rig)._make_pose(
+            (0.0, 0.0, 1.0), 0.9, "siglip", 0.9, arbitrated=incoming))
+        assert rig.ctx.poses[pose.file_identity(f, rig.root)] == before
+
+
+def test_a_genuine_new_judgment_still_replaces_the_old_one(tmp_path):
+    """The guard refuses records that claim nothing, not the re-judgment
+    --repose exists to buy. Both settled states replace, and the replacement
+    carries the new judge — otherwise the flag would be a no-op."""
+    rig = make_rig(tmp_path)
+    for state in (True, "rejected"):
+        f = stl(rig, name=f"j{state}.stl")
+        judged(rig, f, True, backend="glm")
+        fresh = a_poser(rig)._make_pose((0.0, 1.0, 0.0), 1.0, "vlm", 0.2,
+                                        arbitrated=state)
+        rig.done.record_pose(f, 0, fresh)
+        entry = rig.ctx.poses[pose.file_identity(f, rig.root)]
+        assert entry == fresh.to_cache()
+        assert entry["arbiter"] == pose.arbiter_id("gemini", None)
+
+
+def test_outside_repose_the_guard_changes_nothing(tmp_path):
+    """The no-behaviour-change claim, pinned because it is a claim about
+    another module. Two halves:
+
+    * a stored entry that carries no judgment is replaced by a park record
+      exactly as before — every non-`--repose` re-resolution goes through
+      this, and it is the write the tri-state's `false` depends on;
+    * the case the guard *does* refuse is unreachable without `--repose`,
+      because a truthy-`arbitrated` entry is always sufficient, so `route`
+      never re-opens it and the Poser never resolves that file at all."""
+    rig = make_rig(tmp_path)
+    f = stl(rig)
+    for stored in (False, None):
+        old = a_poser(rig)._make_pose((1.0, 0.0, 0.0), 0.5, "siglip", 0.2,
+                                      arbitrated=stored)
+        rig.done.record_pose(f, 0, old)
+        park = a_poser(rig)._make_pose((0.0, 0.0, 1.0), 0.9, "siglip", 0.2,
+                                       arbitrated=False)
+        rig.done.record_pose(f, 0, park)
+        assert rig.ctx.poses[pose.file_identity(f, rig.root)] == park.to_cache()
+    # ...and route never hands the Poser a judged entry to begin with
+    for state in (True, "rejected"):
+        entry = dict(a_poser(rig)._make_pose((1.0, 0.0, 0.0), 1.0, "vlm", 0.01,
+                                             arbitrated=state).to_cache())
+        assert pose.pose_is_sufficient(entry, True, pose.MARGIN_THRESHOLD)
+
+
 def test_front_view_resolved_once_and_merged_into_entry(tmp_path):
     rig = make_rig(tmp_path)
     f, img, p = stl(rig), img_embeds(), a_pose()

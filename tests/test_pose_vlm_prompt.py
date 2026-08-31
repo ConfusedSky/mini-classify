@@ -216,6 +216,34 @@ def test_repose_without_an_arbiter_stops_and_names_the_problem(tmp_path):
     assert "loading" not in out.stdout           # stopped before SigLIP
 
 
+def test_repose_refuses_an_auto_that_degraded(tmp_path):
+    """`--repose auto` is the one way to re-judge with a backend nobody typed
+    (adversarial review finding 3, 2026-08-31). `auto` degrades silently by
+    design, so a morning when ADC has expired would have the run walk the
+    collection *replacing* gemini's judgments (+4 -> 42/44) with the
+    measured-worse OpenRouter arbiter's (+3 -> 41/44) and report it as
+    progress — spending exactly the judgments the flag exists to buy.
+    Re-judging with the fallback has to be typed."""
+    key = tmp_path / "or-key"
+    key.write_text("sk-or-not-a-real-key\n")
+    out = run_piped(tmp_path, "--repose", or_key=key)       # --pose-vlm auto
+    assert out.returncode != 0
+    assert "auto degraded to glm" in out.stderr
+    assert "--pose-vlm glm" in out.stderr        # the way to mean it
+    assert "42/44" in out.stderr and "41/44" in out.stderr
+    assert "loading" not in out.stdout           # stopped before SigLIP
+
+
+def test_repose_with_an_explicit_fallback_is_allowed(tmp_path):
+    """The refusal is about the *undeclared* backend, not about glm: typing it
+    is the decision, and the run continues."""
+    key = tmp_path / "or-key"
+    key.write_text("sk-or-not-a-real-key\n")
+    out = run_piped(tmp_path, "--pose-vlm", "glm", "--repose", or_key=key)
+    assert "auto degraded" not in out.stderr
+    assert "loading no-such-org/no-such-model" in out.stdout
+
+
 def test_repose_with_an_arbiter_announces_the_judge_it_will_compare_against(tmp_path):
     """The comparison value is the run's whole `backend/model` string, and a
     reader has to be able to see which one it is: two gemini runs on different

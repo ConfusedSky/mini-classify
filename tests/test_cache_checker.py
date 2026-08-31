@@ -340,6 +340,66 @@ def test_a_settled_entry_is_never_re_rendered(tmp_path):
         assert type(route(f, 0, ctx, arbiter_available=True)) is EmbedRenderTask
 
 
+def test_repose_reaches_route_through_the_namespace_attribute(tmp_path):
+    """The seam `--repose` actually crosses (adversarial review finding 4,
+    2026-08-31). `main` sets `args.repose_arbiter`; `route` reads it back as
+    `getattr(ctx.args, "repose_arbiter", None)` and passes it on as the
+    `repose_arbiter=` keyword. Three names have to agree and none of them is
+    checked by anything — a rename on either side, or on the keyword, degrades
+    silently into "the flag does nothing", which is indistinguishable from a
+    cache with no foreign judgments in it.
+
+    Both directions, because only the pair is evidence: the attribute present
+    and naming a different judge re-opens a settled entry, and the attribute
+    *absent* — every namespace built before the flag existed, the tools' and
+    the tests' — still means off."""
+    f, ctx = marked(tmp_path, True, arbiter=pose.arbiter_id("glm", None))
+    assert not hasattr(ctx.args, "repose_arbiter")       # as `main` leaves it
+    assert type(route(f, 0, ctx, arbiter_available=True)) is EmbedRenderTask
+
+    ctx.args.repose_arbiter = pose.arbiter_id("gemini", None)
+    assert type(route(f, 0, ctx, arbiter_available=True)) is PoseRenderTask
+    # ...and this run's own judge is not re-opened, or every run would re-buy
+    # its own work
+    ctx.args.repose_arbiter = pose.arbiter_id("glm", None)
+    assert type(route(f, 0, ctx, arbiter_available=True)) is EmbedRenderTask
+
+
+def test_the_settled_reroute_re_reads_the_store(tmp_path):
+    """The hinge the `Done.record_pose` guard rests on (adversarial review,
+    2026-08-31). When that guard refuses a no-claim record — a `--repose`
+    re-open whose replacement judgment never arrived — the store keeps the old
+    judged entry while the Poser hands back a `Resolved` carrying a *different*
+    ensemble answer. The run stays self-consistent only because `settled`
+    skips the sufficiency **check** and not the store **read**: the re-route
+    resolves the preserved entry, so the views, the embedding token and the
+    CSV row all describe the judged pose and the fresh answer is discarded.
+
+    Pinned here because it is invisible from `done.py`: an "optimization" that
+    carried the Poser's pose through the re-route instead of re-reading, or
+    that skipped the lookup under `settled`, would silently start rendering and
+    embedding under an up the store never accepted."""
+    case = Case("hinge", PoseRenderTask, pose_state="siglip-gated")
+    f, ctx, _, _ = build(tmp_path, case)
+    ident = pose.file_identity(f, ctx.root)
+    judged_up = [1.0, 0.0, 0.0]
+    ctx.poses[ident] = dict(ctx.poses[ident], up=judged_up, source="vlm",
+                            arbitrated=True,
+                            arbiter=pose.arbiter_id("glm", None))
+    ctx.args.repose_arbiter = pose.arbiter_id("gemini", None)
+    # re-opened: this is the state the Poser is handed
+    assert type(route(f, 0, ctx, arbiter_available=True)) is PoseRenderTask
+
+    # the guard held, so the store still says "judged"; the driver re-routes
+    # the Resolved the ensemble produced, which moved the pose
+    out = route(f, 0, ctx, pose_changed=True, settled=True,
+                arbiter_available=True)
+    assert out.pose.up == tuple(judged_up)      # NOT the ensemble's answer
+    assert out.pose.source == "vlm"
+    assert pose.embed_cache_token(ctx.poses[ident], ctx.args.up_axis) == \
+        pose.up_str(out.pose.up)                # the .npy keys on it too
+
+
 def test_route_demands_the_arbiter_flag(tmp_path):
     """No default (the `Resolved.pose_changed` precedent): a caller that has
     not thought about it fails loudly rather than silently un-pinning W1."""

@@ -308,6 +308,13 @@ def main():
                              "collection. Flag-gated on purpose: doing this on "
                              "every run would make two backends re-buy each "
                              "other's entries forever whenever `auto` degrades. "
+                             "Run it WITHOUT --skip-embed: a re-opened entry is "
+                             "rewritten without its front_view, and only the "
+                             "scoring path recomputes and merges that back "
+                             "(S8). The judge's identity is backend/model and "
+                             "deliberately not the serving provider — the same "
+                             "model on a different provider is the same judge, "
+                             "and no re-judgment is owed. "
                              "To re-pose everything instead, delete pose-cache.json")
     parser.add_argument("--embed-batch", type=int, default=0,
                         help="images per SigLIP call (0 = the whole view list at once). "
@@ -406,6 +413,23 @@ def main():
             "--repose needs an arbiter — it exists to re-judge, and this run "
             "has none (--pose-vlm off, or auto found neither gcloud nor an "
             "OpenRouter key)")
+    if args.repose and args.pose_vlm == "auto" and vlm_backend != "gemini":
+        # A degraded `auto` is the one arbiter nobody typed. Re-judging the
+        # better judge's work with the measured-worse backend has to be a
+        # decision, not a morning when ADC happened to expire: gemini rescues
+        # +4 -> 42/44 where the OpenRouter arbiter rescues +3 -> 41/44
+        # (LEARNINGS 2026-08-30, the 44-model labelled subset), so an
+        # auto-degraded --repose run would walk the collection *replacing*
+        # gemini judgments with glm ones and report it as progress. Explicit
+        # `--pose-vlm glm` is still allowed — then it is what was asked for
+        # (adversarial review, 2026-08-31).
+        raise SystemExit(
+            f"--repose with --pose-vlm auto, but auto degraded to "
+            f"{vlm_backend}: re-judging with the fallback would replace "
+            f"gemini's judgments (+4 -> 42/44) with the measured-worse "
+            f"backend's (+3 -> 41/44), for every entry gemini settled. Fix "
+            f"the gemini credentials, or pass `--pose-vlm {vlm_backend}` "
+            f"explicitly if re-judging with the fallback is what you mean")
     args.repose_arbiter = (pose.arbiter_id(vlm_backend, args.pose_vlm_model)
                            if args.repose else None)
     if args.repose:

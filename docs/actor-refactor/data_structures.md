@@ -324,7 +324,9 @@ dicts — what `load_pose_cache` returns and `json.dumps` takes back — not
 `Pose` objects, so there is no frozen object at that point to replace.
 `Done._score` merges the `front_view` config token into the entry dict in
 place (`entry["front_view"] = {**old, view_cfg: fv}`), and `record_pose`
-replaces a whole entry with `pose.to_cache()`. `Pose` stays frozen where it is
+replaces a whole entry with `pose.to_cache()` — unless the incoming record
+claims no judgment and the stored one carries one, the guard below. `Pose`
+stays frozen where it is
 a Pose — in flight, in the messages — which is what this section is actually
 about.*
 
@@ -426,6 +428,43 @@ class Pose:
   for pre-provenance caches; and the whole check is gated on
   `arbiter_available`, the same C3 doctrine that keeps a degraded run from
   re-rendering what it cannot re-judge.
+* **A record that claims no judgment does not overwrite one** — the guard in
+  `Done.record_pose` (adversarial review, 2026-08-31). An incoming `Pose` whose
+  `arbitrated` is falsy (`False`, or absent) leaves a stored entry whose
+  `arbitrated` is `true` or `"rejected"` **byte-untouched**; an incoming
+  `true`/`"rejected"` replaces it as always. It lives in `Done` because Done
+  owns the store and the Poser may not read it (J6) — which is exactly why the
+  Poser cannot tell it is about to park over a judgment, and why the owner is
+  the only actor that can refuse.
+
+  What it prevents: `--repose` re-opens a settled entry *before* securing its
+  replacement. The park-time record (`poser.on_tile_embeds`: the fresh ensemble
+  answer, `arbitrated=False`, no arbiter) used to replace the stored judgment
+  wholesale, so any later failure — `VLMUnavailable`, a 429, a Ctrl-C, the
+  breaker tripping — downgraded the paid judgment to the answer the old judge
+  had overruled, and a fresh margin that cleared this run's gate made no call
+  at all and erased it permanently. Outside `--repose` the refused case is
+  unreachable (a truthy-`arbitrated` entry is always sufficient, so `route`
+  never re-opens it), so the guard changes no pre-existing behaviour; a test
+  pins that, since it is a claim about another module.
+
+  **The in-run consequence, once the guard holds an entry** (traced
+  2026-08-31): nothing inconsistent. `route` re-reads the store on the
+  *second* call too — `settled` skips only the sufficiency check, and the
+  `settled or pose_is_sufficient(...)` short-circuit sits **after** the
+  `ctx.poses.get` — so the re-route resolves the **preserved** judged entry and
+  the rest of the run runs on the judged pose: views rendered under its up, the
+  `.npy` keyed on its up, the CSV row reporting it, and `Done._score`'s
+  `front_view` merge writing an index computed from renders of that same judged
+  pose back into that entry. The fresh ensemble answer is discarded in the
+  Poser and never reaches `Done`, so there is no orphan embedding. A failed
+  re-judgment therefore behaves as though the re-open never happened, and the
+  next `--repose` run re-opens the entry again — the intended retry. The costs
+  are one wasted pose-tile render and ensemble pass, and, under
+  `--save-renders`, a redraw of already-correct views forced by a
+  `pose_changed` that came from the discarded answer. That second store read is
+  the load-bearing hinge; `tests/test_cache_checker.py` pins it against a
+  refactor that "optimizes" it away.
 * **The freeze is shallow, and `Pose` is unhashable** (R4): `front_view` is a
   dict, so `hash(pose)` raises and mutation through the field is still
   possible. Nothing may key on a `Pose`; `index` is the identity, everywhere.
