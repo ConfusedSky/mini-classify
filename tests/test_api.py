@@ -787,6 +787,28 @@ def test_a_superseded_warmup_says_what_it_discarded(caplog, tmp_path):
     assert not api_lines(caplog, logging.ERROR)   # a supersede is not a failure
 
 
+def test_a_blank_first_line_reads_the_same_in_the_log_and_in_status(caplog,
+                                                                    tmp_path):
+    """The envelope and the terminal name one reason, not two.
+
+    `/status` used to take the literal first line of the exception, so the
+    multi-line case `_why` was written for — a missing-backend `ImportError`,
+    whose message opens with a blank line — answered `reason: ""` to the
+    client polling while the log carried the real text (adversarial review,
+    2026-08-31)."""
+    def boom():
+        raise ImportError("\nSiglipModel requires the PyTorch library but it "
+                          "was not found in your environment.")
+
+    client, state, _ = serve(tmp_path, ready=False)
+    with caplog.at_level(logging.INFO, logger="mini_classify.api"):
+        state.warm(boom, lambda: (None, None, None))
+
+    reason = client.get("/status").json()["failure"]["reason"]
+    assert reason.startswith("SiglipModel requires")   # not "", not "ImportError"
+    assert reason in api_lines(caplog, logging.ERROR)[0]
+
+
 # --- bind once --------------------------------------------------------------
 
 class CountingState(ServerState):

@@ -433,9 +433,12 @@ def save_run_params(args):
     cache rather than in a committed config so the description cannot drift
     from what the embeddings actually are.
 
-    Called at startup, before the run writes an entry: every key here is
-    settled by argument parsing, and a cache whose run died mid-pass still has
-    to say what its .npy files are keyed under (see `classify_stls.main`).
+    Called once the run is poised to write entries — past the model load and
+    the child spawn, before the first one lands. Both halves of that timing are
+    load-bearing: a cache whose run is still filling it, or was killed
+    mid-pass, has to say what its .npy files are keyed under, and a run that
+    dies before it can add anything must leave the previous description alone
+    (see the call site in `classify_stls.main` for the two failures).
 
     Only `classify_stls.py` calls this — every other tool reads. It lives here
     anyway, with the readers: the three things a writer and a reader must agree

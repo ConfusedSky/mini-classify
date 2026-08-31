@@ -68,21 +68,27 @@ POSES_MAX = 1024
 log = logging.getLogger("mini_classify.api")
 
 
+def _reason(e: BaseException) -> str:
+    """A failure's reason: its first *non-empty* line.
+
+    One function because there is one answer — `ServerState.failure` renders
+    it into the `/status` envelope and `_why` into the log, and they must not
+    differ. Non-empty rather than first: an `ImportError` from a missing
+    backend leads with a blank line, so `ImportError:` with nothing after it
+    was all either side had to say (seen live, 2026-08-31)."""
+    return next((ln for ln in str(e).splitlines() if ln.strip()), "")
+
+
 def _why(e: BaseException) -> str:
     """The three fields `/status` reports a failure with, on one line.
 
-    The same kind/reason/hint `ServerState.failure` reports, so the terminal
-    and the polled envelope cannot disagree — the hint included, because it
-    is the actionable half ("run: migrate_cache_keys.py --apply") and an
-    operator reading the terminal is exactly who it is for.
-
-    The first *non-empty* line, where `failure` takes the first: an
-    `ImportError` from a missing backend leads with a blank one, and
-    `warmup failed — ImportError:` with nothing after it is the silence this
-    line exists to end (seen live, 2026-08-31)."""
-    reason = next((ln for ln in str(e).splitlines() if ln.strip()), "")
+    The same kind/reason/hint `ServerState.failure` reports, through the same
+    `_reason`, so the terminal and the polled envelope cannot disagree — the
+    hint included, because it is the actionable half ("run:
+    migrate_cache_keys.py --apply") and an operator reading the terminal is
+    exactly who it is for."""
     hint = getattr(e, "hint", None)
-    return f"{type(e).__name__}: {reason}" + (f" — {hint}" if hint else "")
+    return f"{type(e).__name__}: {_reason(e)}" + (f" — {hint}" if hint else "")
 
 
 def _tb(e: BaseException | None) -> BaseException | None:
@@ -307,11 +313,20 @@ class ServerState:
     @property
     def failure(self) -> dict | None:
         """One shape for every reason a load did not complete, so a consumer
-        branches on `ready` and reads one field rather than three."""
+        branches on `ready` and reads one field rather than three.
+
+        `reason` is `_reason`'s first non-empty line, the log's line. Taking
+        the literal first line made the two disagree in exactly the case
+        `_why` was written for — a multi-line exception opening with a blank
+        line answered `reason: ""` here while the terminal carried the real
+        text (adversarial review, 2026-08-31). Deliberately a better *value*
+        in a field that already existed, never a change of shape: the three
+        keys and their types are what surface.md pins and what a consumer
+        branches on."""
         e = self.load_error
         if e is None:
             return None
-        return {"reason": str(e).split("\n")[0],
+        return {"reason": _reason(e),
                 "hint": getattr(e, "hint", None),
                 "kind": type(e).__name__}
 
@@ -610,7 +625,14 @@ def create_app(state: ServerState) -> FastAPI:
             state.collection = fresh
             state.supersede_warm()          # a warm finding older than this
             state.loaded_at = time.time()   # bind must not overwrite it
-            if state.is_ready(fresh):
+            # Read once, under the lock that decides `load_error`: the
+            # recorded failure, the log level and the returned `ready` are
+            # three reports of one instant, and reading again outside the
+            # lock let a bind landing in between label them differently —
+            # "still not ready" logged over a body saying `ready: true`
+            # (adversarial review, 2026-08-31).
+            ready = state.is_ready(fresh)
+            if ready:
                 # clear only what is repaired: with the embed still missing,
                 # erasing the recorded failure would leave `/status` at
                 # `ready: false, failure: null`
@@ -622,8 +644,13 @@ def create_app(state: ServerState) -> FastAPI:
         # whose collection half worked and whose model half did not leaves a
         # server that answers 503 to every query, and that is not an info.
         # `retry_embed`'s own `except Exception` reports by *returning* the
-        # failure, so this is where its traceback reaches a log at all.
-        if state.is_ready(fresh):
+        # failure, so this is where its traceback reaches a log at all — and
+        # a None from it is two states, not one: nothing ever loaded the
+        # model, or another load holds `embed_loading` right now and this
+        # call declined to double the VRAM. "not resident yet" is true of
+        # both, and distinguishing them would cost state neither this line
+        # nor anything else needs.
+        if ready:
             log.info("reload rescan=%s -> %d models, %d missing in %.1f s",
                      req.rescan, len(fresh.files), fresh.missing,
                      time.monotonic() - t0)
@@ -631,9 +658,9 @@ def create_app(state: ServerState) -> FastAPI:
             log.error("reload rescan=%s -> %d models, still not ready — %s",
                       req.rescan, len(fresh.files),
                       _why(embed_error) if embed_error is not None
-                      else "SigLIP never loaded", exc_info=_tb(embed_error))
+                      else "SigLIP not resident yet", exc_info=_tb(embed_error))
         return {"n_models": len(fresh.files), "missing": fresh.missing,
                 "volume": fresh.volume, "loaded_at": state.loaded_at,
-                "ready": state.is_ready(fresh)}
+                "ready": ready}
 
     return app

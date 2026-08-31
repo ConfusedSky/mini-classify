@@ -391,20 +391,6 @@ def main():
           f"{', '.join(f'{e:g}' for e in args.elevations)} degrees")
     categories = [l.strip() for l in open(args.categories) if l.strip()]
 
-    # The manifest before the model load, not after the run: an OOM or a
-    # kill -9 inside Embedder construction must still leave a cache that says
-    # what its .npy files are keyed under. Written at exit it did not, and a
-    # cache being filled by a live run — or by one that was killed — held real
-    # entries under keys no reader could reconstruct, so every tool fell back
-    # to parser defaults (--model, --views), missed every key, and reported a
-    # half-built cache as unusable (hit live, 2026-08-31). Every
-    # RUN_PARAMS_KEYS value is settled by argparse plus `collection_root`
-    # above and none of them changes during the run, so this writes the bytes
-    # the exit-time write did. Last before the run commits to work, and after
-    # the checks above, so a typo'd empty directory or an unreadable
-    # --categories still exits without overwriting a good manifest.
-    save_run_params(args)
-
     # Every import below is deferred, and for one reason: src.done, src.embedder
     # and src.poser own torch, this module is re-imported by the spawned render
     # child (module docstring), and none of this runs there.
@@ -514,6 +500,34 @@ def main():
         # totals back on EndOfInput (F-7); without this the flag reports only
         # what the parent does, which since the refactor is mostly waiting
         instrument_path=args.instrument))
+    # The manifest goes here: after everything that can die pre-flight — the
+    # model load and the child spawn included — and before the first entry can
+    # land. Both neighbouring placements have been wrong in production, on the
+    # same day:
+    #
+    #   * written at *exit*, in a `finally` around `driver.run`, it did not
+    #     exist while the run was in flight, and never at all if the run was
+    #     killed. A cache half-filled by a live run — or by one that took a
+    #     kill -9 or an OOM — held real .npy files under keys no reader could
+    #     reconstruct: every tool fell back to parser defaults (--model,
+    #     --views), missed every key, and called a mid-build cache unusable
+    #     (hit live, 2026-08-31);
+    #   * written at *startup*, before the Embedder, a run that died pre-flight
+    #     overwrote a good manifest with params describing zero entries. The
+    #     repro: a cache seeded views:4 / the 512 checkpoint, rerun as `--model
+    #     no-such-org/no-such-model --views 6` offline, dead inside
+    #     load_siglip, manifest left saying views:6 and the bogus model — so
+    #     every reader now missed every key of a *fully built* cache
+    #     (adversarial review, 2026-08-31).
+    #
+    # Here both hold: the manifest exists from the moment entries can start
+    # landing, and it is rewritten only by a run poised to add entries under
+    # it. Every RUN_PARAMS_KEYS value is settled by argparse plus
+    # `collection_root` above and none of them changes during the run, so these
+    # are the bytes the exit-time write produced. The negative half is pinned
+    # by test_run_params.py::test_a_preflight_death_leaves_the_manifest_alone;
+    # the positive half needs a real model load, so it is not pinned.
+    save_run_params(args)
     driver.run(DriverConfig(
         # the bar advances on admission, so it runs at most WINDOW files
         # ahead of what has actually retired
