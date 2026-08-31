@@ -19,6 +19,7 @@ exports nothing. The app itself is `src/api.py:create_app`, which takes a
 `ServerState` and so is testable without a GPU.
 """
 import argparse
+import logging
 import sys
 import threading
 
@@ -68,18 +69,21 @@ def main():
 
         return embed, args.model, device
 
-    threading.Thread(target=state.warm,
-                     args=(lambda: Collection.load(args), load_embed),
-                     daemon=True, name="warmup").start()
-
-    import logging
-    import uvicorn
     # uvicorn configures only its own loggers, so `mini_classify.api`'s records
     # reach no handler and the per-request lines vanish — verified against a
     # live server, where the access lines appeared and ours did not. A root
     # handler fixes it: uvicorn's dictConfig sets disable_existing_loggers
     # False and adds no root handler of its own, so this survives its setup.
+    # Before the warm thread, not after: warm logs its first line immediately,
+    # and a record emitted with no handler installed is dropped (below
+    # WARNING, `lastResort` does not even print it).
     logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(message)s")
+
+    threading.Thread(target=state.warm,
+                     args=(lambda: Collection.load(args), load_embed),
+                     daemon=True, name="warmup").start()
+
+    import uvicorn
     print(f"serving on http://{args.host}:{args.port} — /status answers now, "
           f"queries once ready")
     # One worker, no reload: the matrix and SigLIP load once (surface.md §Stack).

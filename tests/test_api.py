@@ -12,6 +12,8 @@ server is ready. The scoring itself belongs to tests/test_query.py and the
 scoping to tests/test_collection.py; duplicating them here would pin the same
 formula twice.
 """
+import logging
+
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
@@ -686,6 +688,103 @@ def test_a_late_warm_failure_does_not_clobber_a_successful_reload(tmp_path):
                lambda: (stub_embed(), "stub-model", "cpu"))
     assert state.load_error is None        # the reload's clean state stands
     assert client.get("/status").json()["failure"] is None
+
+
+# --- what the terminal says -------------------------------------------------
+#
+# Every state `/status` reports gets exactly one line at the moment it
+# changes. The operator report these exist for (2026-08-31): a serve_api
+# started against a cache this code cannot read sat at `ready: false` for
+# 300+ s with a silent terminal — the failure was visible only to a client
+# polling `/status`, which is not who was watching. The fragments asserted
+# here are the load-bearing ones (the kind, the reason, the counts); the
+# wording around them is free to change.
+
+def api_lines(caplog, level=None):
+    """The `mini_classify.api` records, rendered — nothing else's."""
+    return [r.getMessage() for r in caplog.records
+            if r.name == "mini_classify.api"
+            and (level is None or r.levelno == level)]
+
+
+def test_a_failed_warmup_says_why_in_the_log(caplog, tmp_path):
+    """The reported case. `/status` had the whole story and said it to
+    whoever asked; the terminal said nothing at all."""
+    from src.collection import CacheUnusable
+
+    def boom():
+        raise CacheUnusable("cache_version 1, this code expects 2",
+                            "run: migrate_cache_keys.py --apply")
+
+    _, state, _ = serve(tmp_path, ready=False)
+    with caplog.at_level(logging.INFO, logger="mini_classify.api"):
+        state.warm(boom, lambda: (None, None, None))
+
+    failed = api_lines(caplog, logging.ERROR)
+    assert len(failed) == 1                       # one line, not a banner
+    assert "CacheUnusable" in failed[0]           # the kind /status reports
+    assert "cache_version" in failed[0]           # ...and its reason
+    assert "migrate_cache_keys" in failed[0]      # ...and the actionable half
+
+
+def test_a_failed_reload_says_why_in_the_log(caplog, tmp_path):
+    """The same for the retry path: a reload that cannot complete answers the
+    caller with a 409 and the terminal with a reason."""
+    import shutil
+    client, state, c = serve(tmp_path, layout=["a/one.stl"])
+    shutil.rmtree(c.root)
+
+    with caplog.at_level(logging.INFO, logger="mini_classify.api"):
+        assert client.post("/reload", json={}).status_code == 409
+
+    failed = api_lines(caplog, logging.ERROR)
+    assert len(failed) == 1
+    assert "VolumeUnavailable" in failed[0]
+    assert str(c.root) in failed[0]               # *which* volume is gone
+    # and a reload that never returned would still be visible as one that ran
+    assert any("reload" in ln for ln in api_lines(caplog, logging.INFO))
+
+
+def test_a_finished_warmup_logs_one_line_at_info(caplog, tmp_path):
+    """The healthy transition: what loaded, where, how long."""
+    args, root, _ = build(tmp_path, ["a/one.stl", "a/two.stl"])
+    state = ServerState(args)
+
+    with caplog.at_level(logging.INFO, logger="mini_classify.api"):
+        state.warm(lambda: Collection.load(args),
+                   lambda: (stub_embed(), "stub-model", "cpu"))
+
+    assert state.ready
+    info = api_lines(caplog, logging.INFO)
+    assert len(info) == 2                         # started, then finished
+    assert "2 models" in info[-1] and "cpu" in info[-1]
+    assert not [r for r in caplog.records         # nothing louder on a good day
+                if r.name == "mini_classify.api" and r.levelno > logging.INFO]
+
+
+def test_a_superseded_warmup_says_what_it_discarded(caplog, tmp_path):
+    """The generation counter's whole job, and until now invisible: warm
+    finished, wrote nothing over the reload that beat it, and left no trace
+    of having run at all (the interleaving of
+    `test_a_finished_warmup_does_not_revert_a_reload_that_landed_inside_it`)."""
+    args, root, _ = build(tmp_path, ["a/one.stl"])
+    stale = Collection.load(args)
+    state = ServerState(args)
+    client = TestClient(create_app(state), raise_server_exceptions=False)
+
+    def load_collection_with_reload_inside():
+        assert client.post("/reload", json={}).status_code == 200
+        return stale
+
+    with caplog.at_level(logging.INFO, logger="mini_classify.api"):
+        state.warm(load_collection_with_reload_inside,
+                   lambda: (stub_embed(), "stub-model", "cpu"))
+
+    warned = api_lines(caplog, logging.WARNING)
+    assert len(warned) == 1
+    assert "superseded" in warned[0]
+    assert "collection" in warned[0]              # what was thrown away
+    assert not api_lines(caplog, logging.ERROR)   # a supersede is not a failure
 
 
 # --- bind once --------------------------------------------------------------

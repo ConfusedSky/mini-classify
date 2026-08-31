@@ -59,8 +59,38 @@ POSES_MAX = 1024
 # is uvicorn's to configure, and a print bypasses whatever level, format or
 # sink the operator chose. One line per scoring request — enough to answer
 # "why was that slow" and "what did it actually search" without turning the
-# query text into a permanent record of what someone looked for.
+# query text into a permanent record of what someone looked for — and one
+# line per *state* transition, which is the other half and was missing: a
+# warmup that failed on a post-bump cache said so only to a client polling
+# `/status`, so the serve terminal sat silent through 300 s of
+# `ready: false` (operator report, 2026-08-31). Per-request lines belong to
+# the routes; the load's lines belong to whichever thread wrote the state.
 log = logging.getLogger("mini_classify.api")
+
+
+def _why(e: BaseException) -> str:
+    """The three fields `/status` reports a failure with, on one line.
+
+    The same kind/reason/hint `ServerState.failure` reports, so the terminal
+    and the polled envelope cannot disagree — the hint included, because it
+    is the actionable half ("run: migrate_cache_keys.py --apply") and an
+    operator reading the terminal is exactly who it is for.
+
+    The first *non-empty* line, where `failure` takes the first: an
+    `ImportError` from a missing backend leads with a blank one, and
+    `warmup failed — ImportError:` with nothing after it is the silence this
+    line exists to end (seen live, 2026-08-31)."""
+    reason = next((ln for ln in str(e).splitlines() if ln.strip()), "")
+    hint = getattr(e, "hint", None)
+    return f"{type(e).__name__}: {reason}" + (f" — {hint}" if hint else "")
+
+
+def _tb(e: BaseException | None) -> BaseException | None:
+    """`exc_info` for a failure log: a traceback only where the kind does not
+    already explain itself. `CacheUnusable` and `VolumeUnavailable` carry
+    their own reason and hint; anything else reaching a load's `except
+    Exception` is unexpected here and the stack is the whole report."""
+    return None if isinstance(e, (CacheUnusable, VolumeUnavailable)) else e
 
 
 class ServerState:
@@ -157,10 +187,17 @@ class ServerState:
         load — this thread is one-shot and was the only thing that ever ran
         it. The embed bind itself is *not* generation-guarded: the model is
         process state, not a cache finding, and a resident model is right
-        under any generation."""
+        under any generation.
+
+        Every exit logs exactly one line — ready, superseded, or failed. This
+        thread is the only witness to a startup, and without the failure line
+        a server that could not read its cache reported it to a polling
+        client and to nothing else (operator report, 2026-08-31)."""
         self._load_embed = load_embed
         gen = self._generation
         bound = False
+        t0 = time.monotonic()
+        log.info("warmup loading %s", getattr(self.args, "cache_dir", "?"))
         try:
             fresh = load_collection()
             with self.bind:
@@ -180,12 +217,32 @@ class ServerState:
                 # successful mid-warm reload stamped its own
                 if bound:
                     self.loaded_at = time.time()
-                if self._generation == gen:
+                superseded = self._generation != gen
+                if not superseded:
                     self.load_error = None
+            # outside `bind`: a handler blocking on the writers' lock for a
+            # log record would be this module's one avoidable stall
+            if superseded:
+                log.warning("warmup superseded by a newer /reload — discarded "
+                            "its %s", "clean state" if bound
+                            else "collection and clean state")
+            else:
+                log.info("warmup ready: %d models on %s in %.1f s",
+                         len(fresh.files), self.device or "no device",
+                         time.monotonic() - t0)
         except Exception as e:              # noqa: BLE001 - reported, not swallowed
             with self.bind:
-                if self._generation == gen:
+                superseded = self._generation != gen
+                if not superseded:
                     self.load_error = e
+            # the reported silent case: recorded for `/status` *and* said out
+            # loud, because nothing else in the process will say it
+            if superseded:
+                log.warning("warmup failed after a newer /reload — discarded "
+                            "%s", _why(e))
+            else:
+                log.error("warmup failed after %.1f s — %s",
+                          time.monotonic() - t0, _why(e), exc_info=_tb(e))
 
     def supersede_warm(self) -> None:
         """Called (under `bind`) by every `/reload` that writes state, the
@@ -522,6 +579,12 @@ def create_app(state: ServerState) -> FastAPI:
         had `/reload` return 200 while every query kept 503ing — worse, the
         route used to clear `load_error` it had not repaired, leaving
         `/status` at `ready: false, failure: null` forever."""
+        t0 = time.monotonic()
+        # the one route whose *request* is logged: it is an operator action
+        # that rewrites the server's state, not traffic (uvicorn's access log
+        # covers traffic), and a reload that never returns has to be visible
+        # as one that started
+        log.info("reload requested rescan=%s", req.rescan)
         c = state.collection                # bound once, like every handler
         try:
             fresh = Collection.load_with(state.args, rescan=req.rescan)
@@ -534,6 +597,7 @@ def create_app(state: ServerState) -> FastAPI:
             with state.bind:
                 state.load_error = e
                 state.supersede_warm()
+            log.error("reload failed — %s", _why(e), exc_info=_tb(e))
             if state.is_ready(c):
                 raise HTTPException(status_code=409, detail={
                     "reloaded": False, "ready": True,
@@ -554,8 +618,20 @@ def create_app(state: ServerState) -> FastAPI:
             elif embed_error is not None:
                 state.load_error = embed_error
         state.cache_version = cache_version(getattr(state.args, "cache_dir", ""))
-        log.info("reload rescan=%s -> %d models, %d missing",
-                 req.rescan, len(fresh.files), fresh.missing)
+        # The level follows the `ready` this is about to return: a reload
+        # whose collection half worked and whose model half did not leaves a
+        # server that answers 503 to every query, and that is not an info.
+        # `retry_embed`'s own `except Exception` reports by *returning* the
+        # failure, so this is where its traceback reaches a log at all.
+        if state.is_ready(fresh):
+            log.info("reload rescan=%s -> %d models, %d missing in %.1f s",
+                     req.rescan, len(fresh.files), fresh.missing,
+                     time.monotonic() - t0)
+        else:
+            log.error("reload rescan=%s -> %d models, still not ready — %s",
+                      req.rescan, len(fresh.files),
+                      _why(embed_error) if embed_error is not None
+                      else "SigLIP never loaded", exc_info=_tb(embed_error))
         return {"n_models": len(fresh.files), "missing": fresh.missing,
                 "volume": fresh.volume, "loaded_at": state.loaded_at,
                 "ready": state.is_ready(fresh)}
