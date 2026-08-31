@@ -9,6 +9,7 @@ import io
 import json
 import os
 import tempfile
+import threading
 import time
 import subprocess
 from dataclasses import dataclass, field
@@ -741,6 +742,26 @@ class RateLimited(VLMUnavailable):
     will hit the same limit."""
 
 
+class DeadlineExceeded(VLMUnavailable):
+    """The wall clock ran out before the provider answered. Transient across
+    runs, final within the call.
+
+    Transient because the API never judged the request: `_fold` records
+    `arbitrated=False` and the next run asks again, which is the whole reason
+    it is a `VLMUnavailable` rather than a type of its own — the permanent
+    side of the retry split is the enumerated one
+    (docs/archive/tri-state-pass-2.md, 2026-08-21) and a deadline is not a
+    verdict.
+
+    Final because the loop that blew the deadline is *reproducible*: the
+    provider keeps generating server-side after the client abandons the
+    socket, so a retry re-runs the same reasoning loop and pays for it twice
+    (measured 2026-08-30: `Floor` at max effort exhausted six 120 s attempts,
+    ~17k billed output tokens each; one abandoned call was completed and
+    billed anyway). `ask_vlm_up` therefore breaks out of its retry loop on
+    this type instead of spending the second attempt on it."""
+
+
 # Waits before each retry after a rate-limit refusal. Two attempts, so one
 # wait; the list documents the shape for when a third is wanted. Small on
 # purpose — the Arbiter's `min_interval` is what paces the *pool*, and this
@@ -843,7 +864,181 @@ def _ask_gemini(png_bytes, n_tiles, model, project=None):
     return parse_tile_answer("".join(p.get("text", "") for p in parts), n_tiles)
 
 
-DEFAULT_VLM_MODELS = {"ollama": "gemma4:26b", "gemini": GEMINI_MODEL, "claude": None}
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+GLM_MODEL = "z-ai/glm-5.3-flash"
+GLM_PROVIDER = "DeepInfra"
+"""The one standard-price OpenRouter provider that serves this request shape.
+
+Pins are request-shape specific (measured 2026-08-30): with image + strict
+JSON schema + reasoning, Relace, Z.AI and Novita all answer `404 No endpoints
+found` though each advertises structured outputs — only DeepInfra ($0.075/M)
+and Modal ($0.15/M) serve it. Auto-routing is worse than a bad pin: it sent
+vision requests to providers that never finished them and to one that returned
+7 output tokens at `effort: max`. Provider health flips hour to hour, so the
+pin is overridable per run (`OPENROUTER_PROVIDER`)."""
+
+GLM_DEADLINE_S = 120.0
+"""Wall clock per call, enforced from outside the socket read — see
+`_fetch_with_deadline` for why no socket timeout can do it. 120 s is the cap
+the 2026-08-30 sweeps ran under; at `low` effort the median call is 3 s, so
+only the pathological shapes ever approach it."""
+
+_GLM_SCHEMA = {"type": "object", "properties": {"tile": {"type": "integer"}},
+               "required": ["tile"], "additionalProperties": False}
+
+
+def openrouter_key_path():
+    """Where the OpenRouter bearer token lives. `OPENROUTER_KEY_FILE` overrides."""
+    env = os.environ.get("OPENROUTER_KEY_FILE")
+    return Path(env) if env else Path.home() / ".config/openrouter/key"
+
+
+def openrouter_key():
+    """The bearer token, read per call — and the backend's startup probe.
+
+    A missing, unreadable or empty key file is `VLMUnavailable` for the same
+    reason a missing gcloud token is: the environment being broken is not the
+    request being judged, so it must not land on the permanent side of the
+    retry split (docs/archive/tri-state-pass-2.md, 2026-08-21)."""
+    path = openrouter_key_path()
+    try:
+        key = path.read_text().strip()
+    except OSError as e:
+        raise VLMUnavailable(f"no OpenRouter key at {path}: {e}") from e
+    if not key:
+        raise VLMUnavailable(f"OpenRouter key file is empty: {path}")
+    return key
+
+
+def openrouter_provider():
+    return os.environ.get("OPENROUTER_PROVIDER") or GLM_PROVIDER
+
+
+def _fetch_with_deadline(req, deadline=None):
+    """`urlopen(...).read()` on a daemon thread, abandoned at the deadline.
+
+    Two things the code cannot say, both measured 2026-08-30:
+
+    * **No socket timeout can do this job.** OpenRouter keeps a request alive
+      with heartbeat bytes — ~1 packet every 150 ms — while the upstream
+      provider hangs, so the socket is never idle long enough for `urlopen`'s
+      own timeout to fire: workers sat idle 46 minutes on connections that
+      were, as far as the socket knew, perfectly healthy. The wall clock has
+      to be enforced from outside the read.
+    * **`ThreadPoolExecutor` cannot host it.** Its workers are non-daemon and
+      `concurrent.futures` registers an *untimed* atexit join of every one of
+      them (CPython 3.9+), so an abandoned reader holds the interpreter open
+      until its read finally ends — measured on 3.12.13, one 10 s abandoned
+      call delayed process exit by 10.037 s, and under the heartbeat
+      pathology above it would not end at all. That is CLAUDE.md's "every
+      join on the render child is bounded" wearing another hat. A daemon
+      thread is simply never joined at exit.
+
+    The inner timeout is the deadline itself rather than something longer, so
+    an ordinary stall reaps its own thread and being un-joinable at exit stays
+    the backstop rather than the mechanism."""
+    import urllib.request
+
+    deadline = GLM_DEADLINE_S if deadline is None else deadline
+    slot = []
+
+    def read():
+        try:
+            slot.append((urllib.request.urlopen(req, timeout=deadline).read(), None))
+        except BaseException as e:   # carried out and re-raised, never swallowed
+            slot.append((None, e))
+
+    worker = threading.Thread(target=read, name="or-deadline", daemon=True)
+    worker.start()
+    worker.join(timeout=deadline)
+    if not slot:                     # still reading: abandon it and say so
+        raise DeadlineExceeded(
+            f"no answer within {deadline:g}s — unanswered, not retried")
+    raw, err = slot[0]
+    if err is not None:
+        raise err
+    return raw
+
+
+def _ask_glm(tile_pngs, n_tiles, model):
+    """OpenRouter arbiter (GLM-5.3-Flash), the measured fallback for a run with
+    no gcloud (LEARNINGS, "Arbiter backends, sheet sizes, presentations and
+    effort", 2026-08-30: +3 -> 41/44 against gemini's +4 -> 42/44, $0.06 a run
+    against $2.7, 3 s median, and no GPU where the gemma/ollama fallback would
+    evict SigLIP).
+
+    Takes the tiles **separately**, not a contact sheet: presentation is worth
+    nothing to gemini (±1 either way) and up to +3 to GLM, whose arbiter tier
+    goes from +0/+2 on a sheet to +3 on six captioned images. Effort stays
+    `low` — `max` scores no better standalone, nets +0 as the tier, and is
+    where the deadline problem was measured."""
+    import http.client
+    import urllib.error
+    import urllib.request
+
+    key = openrouter_key()
+    content = []
+    for i, png in enumerate(tile_pngs, 1):
+        content.append({"type": "text", "text": f"Tile {i}:"})
+        content.append({"type": "image_url", "image_url": {
+            "url": "data:image/png;base64," + base64.b64encode(png).decode()}})
+    content.append({"type": "text", "text": UP_PROMPT})
+    body = json.dumps({
+        "model": model,
+        "temperature": 0,
+        "reasoning": {"effort": "low"},
+        "response_format": {"type": "json_schema", "json_schema": {
+            "name": "tile", "strict": True, "schema": _GLM_SCHEMA}},
+        "provider": {"order": [openrouter_provider()], "allow_fallbacks": False},
+        "messages": [{"role": "user", "content": content}],
+    }).encode()
+    req = urllib.request.Request(OPENROUTER_URL, body,
+                                 {"Authorization": f"Bearer {key}",
+                                  "Content-Type": "application/json"})
+    # Same ordering rule as `_ask_gemini`: HTTPError above OSError, because it
+    # subclasses OSError. `DeadlineExceeded` is a RuntimeError and passes both.
+    try:
+        raw = _fetch_with_deadline(req)
+    except urllib.error.HTTPError as e:
+        detail = f"HTTP {e.code}: {e.read()[:200].decode(errors='replace')}"
+        if e.code in (429, 503):
+            raise RateLimited(detail) from e
+        if e.code in TRANSIENT_HTTP_STATUS or e.code >= 500:
+            raise VLMUnavailable(detail) from e
+        raise VLMRejected(detail) from e
+    except (OSError, http.client.HTTPException) as e:
+        raise VLMUnavailable(f"network failure: {e}") from e
+    try:
+        d = json.loads(raw)
+    except ValueError as e:
+        raise VLMUnavailable(f"unparseable 200 body: {raw[:200]!r}") from e
+    # OpenRouter reports upstream failures as an HTTP **200** carrying an
+    # error envelope, so the same split has to be run twice — once on the
+    # transport status and once on this. A code it does not state, or one that
+    # is not a verdict, is transient: permanent stays the enumerated side.
+    err = d.get("error")
+    if err is not None:
+        code = err.get("code") if isinstance(err, dict) else None
+        detail = f"200 with embedded error {code!r}: {raw[:200]!r}"
+        if code in (429, 503):
+            raise RateLimited(detail)
+        if (isinstance(code, int) and 400 <= code < 500
+                and code not in TRANSIENT_HTTP_STATUS):
+            raise VLMRejected(detail)
+        raise VLMUnavailable(detail)
+    choice = (d.get("choices") or [{}])[0]
+    reason = choice.get("finish_reason")
+    if reason == "content_filter":       # the only verdict this envelope states
+        raise VLMRejected(f"blocked ({reason}): {raw[:200]!r}")
+    text = (choice.get("message") or {}).get("content")
+    if not text:
+        raise VLMUnavailable(
+            f"200 with no answer (finish_reason={reason!r}): {raw[:200]!r}")
+    return parse_tile_answer(text, n_tiles)
+
+
+DEFAULT_VLM_MODELS = {"ollama": "gemma4:26b", "gemini": GEMINI_MODEL,
+                      "glm": GLM_MODEL, "claude": None}
 
 
 def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None,
@@ -863,6 +1058,11 @@ def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None
     * `VLMUnavailable` (including `RateLimited`, which additionally backs off
       here) — the API never judged the request: worth asking again on a
       later run;
+    * `DeadlineExceeded` — a `VLMUnavailable`, so it is asked again next run,
+      but it is the one type that does **not** get this call's second
+      attempt: the reasoning loop that ran out the clock is reproducible and
+      is still generating server-side, so the retry pays for the same
+      non-answer twice (see the type's docstring for the measurement);
     * `VLMRejected` — the API judged the request, which cannot succeed on a
       retry and would pay a call per run forever. It gets no arm of its own
       here: the generic arm below already retries once and re-raises under
@@ -885,9 +1085,11 @@ def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None
     thread pool, where a raise loses every result in the sweep — keeps
     today's behaviour.
 
-    save_to keeps a per-model copy of the sheet next to the saved renders. It
-    is the same image the VLM was shown, written whether or not the answer
-    parses, so a wrong pose can be read back off disk."""
+    save_to keeps a per-model copy of the sheet next to the saved renders,
+    written whether or not the answer parses, so a wrong pose can be read back
+    off disk. It is the image the VLM was shown for every backend except
+    `glm`, which is sent the same six tiles separately — the sheet is the
+    human's view of the call, not a transcript of it."""
     try:
         sheet = make_contact_sheet(tiles)
     except Exception as e:
@@ -920,6 +1122,18 @@ def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None
                 buf = io.BytesIO()
                 sheet.save(buf, format="PNG")
                 idx = _ask_gemini(buf.getvalue(), len(tiles), vlm_model, project)
+            elif backend == "glm":
+                # The sheet above is built and saved, and then not sent: GLM
+                # answers +3 as the arbiter tier on six captioned tiles and
+                # +0/+2 on the same tiles as one sheet (measured 2026-08-30).
+                # The sheet is what a human reads back off disk; the tiles are
+                # what the model is asked about.
+                pngs = []
+                for im in tiles:
+                    buf = io.BytesIO()
+                    im.save(buf, format="PNG")
+                    pngs.append(buf.getvalue())
+                idx = _ask_glm(pngs, len(tiles), vlm_model)
             else:  # claude
                 # A unique name per call: the arbiter pool runs 4+ of these
                 # concurrently against one scratch_dir, and a shared filename
@@ -937,6 +1151,15 @@ def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None
                     idx = _ask_claude(sheet_path, len(tiles))
                 finally:
                     sheet_path.unlink(missing_ok=True)
+        except DeadlineExceeded as e:
+            # The one failure that is not worth a second attempt: the loop
+            # that blew the deadline is reproducible and still running (and
+            # billing) server-side, so the retry buys another 120 s and
+            # another bill for the same non-answer. Still recorded retryable
+            # across runs — it is a VLMUnavailable.
+            print(f"  pose VLM deadline ({backend}): {e}")
+            last_error = e
+            break
         except RateLimited as e:
             backoff = VLM_BACKOFF[min(attempt, len(VLM_BACKOFF) - 1)]
             print(f"  pose VLM rate-limited ({backend}), waiting {backoff:g}s: {e}")

@@ -1,3 +1,5 @@
+import base64
+import io
 import json
 import subprocess
 import sys
@@ -379,6 +381,182 @@ def test_the_captured_vertex_envelopes_classify_as_designed(monkeypatch):
                                  "probability": "MEDIUM", "blocked": True}]}]})
 
 
+def openrouter_key_file(monkeypatch, tmp_path, text="or-key\n"):
+    """A real key file, so no test can reach the developer's own."""
+    path = tmp_path / "openrouter-key"
+    path.write_text(text)
+    monkeypatch.setenv("OPENROUTER_KEY_FILE", str(path))
+    return path
+
+
+def glm_body(monkeypatch, tmp_path, payload):
+    import urllib.request
+
+    openrouter_key_file(monkeypatch, tmp_path)
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda req, timeout=None: http_body(payload))
+    return pose._ask_glm([b"png"], 6, "m")
+
+
+def test_glm_sends_six_captioned_tiles_and_the_pinned_request_shape(monkeypatch,
+                                                                   tmp_path):
+    """The request shape IS the measured result, so it is pinned part by part.
+
+    Presentation is the whole reason this backend exists: six separately
+    captioned tiles move GLM's arbiter tier from +0/+2 to +3, where the same
+    tiles as one contact sheet leave it at +0/+2 and gemini does not care
+    either way (±1). The provider pin, the strict schema and `effort: low`
+    are the other three measured choices — auto-routing sent vision requests
+    to providers that never finished them, Relace/Z.AI/Novita 404 on
+    image+strict-schema+reasoning, and `max` effort nets +0 while looping
+    (LEARNINGS, "Arbiter backends, sheet sizes, presentations and effort",
+    2026-08-30)."""
+    import urllib.request
+
+    openrouter_key_file(monkeypatch, tmp_path)
+    monkeypatch.setenv("OPENROUTER_PROVIDER", "SomeOtherProvider")
+    seen = {}
+
+    def fake_urlopen(req, timeout=None):
+        seen["req"] = req
+        return http_body({"choices": [{"message": {"content": '{"tile": 2}'}}]})
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    pngs = [f"png{i}".encode() for i in range(1, 7)]
+    assert pose._ask_glm(pngs, 6, "m") == 1
+
+    req = seen["req"]
+    assert req.full_url == pose.OPENROUTER_URL
+    assert req.get_header("Authorization") == "Bearer or-key"
+    body = json.loads(req.data)
+    assert body["model"] == "m"
+    assert body["temperature"] == 0
+    assert body["reasoning"] == {"effort": "low"}
+    schema = body["response_format"]["json_schema"]
+    assert body["response_format"]["type"] == "json_schema"
+    assert schema["name"] == "tile" and schema["strict"] is True
+    assert schema["schema"]["additionalProperties"] is False
+    assert schema["schema"]["required"] == ["tile"]
+    # pinned, and no fallbacks: a provider that silently cannot serve this
+    # shape is a wrong answer, not a slower one
+    assert body["provider"] == {"order": ["SomeOtherProvider"],
+                                "allow_fallbacks": False}
+
+    # 6 x ["Tile i:", image] then the prompt last — 13 parts, this order
+    content = body["messages"][0]["content"]
+    assert len(content) == 13
+    for i, png in enumerate(pngs, 1):
+        assert content[2 * i - 2] == {"type": "text", "text": f"Tile {i}:"}
+        assert content[2 * i - 1] == {
+            "type": "image_url",
+            "image_url": {"url": "data:image/png;base64,"
+                          + base64.b64encode(png).decode()}}
+    assert content[-1] == {"type": "text", "text": pose.UP_PROMPT}
+
+
+def test_glm_maps_each_transport_failure_to_the_retry_split(monkeypatch, tmp_path):
+    """Same split as `_ask_gemini`'s, against OpenRouter's envelope — and the
+    envelope is the reason this needs its own test: OpenRouter reports an
+    upstream failure as an HTTP **200** whose body carries an error code, so
+    the classification has to run twice over the same status space. A 200
+    that flattened to "no answer" would record every rate-limited call as an
+    unparseable answer instead of a rate limit."""
+    import socket
+    import urllib.error
+    import urllib.request
+
+    openrouter_key_file(monkeypatch, tmp_path)
+
+    def with_urlopen(exc):
+        def fake_urlopen(req, timeout=None):
+            raise exc
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+        try:
+            pose._ask_glm([b"png"], 6, "m")
+        except Exception as e:              # noqa: BLE001 - the type is the assertion
+            return type(e)
+        return None
+
+    def http_error(code):
+        return urllib.error.HTTPError("http://x", code, "boom", None,
+                                      io.BytesIO(b"detail"))
+
+    assert with_urlopen(http_error(429)) is pose.RateLimited
+    assert with_urlopen(http_error(503)) is pose.RateLimited
+    assert with_urlopen(http_error(500)) is pose.VLMUnavailable
+    assert with_urlopen(http_error(502)) is pose.VLMUnavailable
+    for code in pose.TRANSIENT_HTTP_STATUS:
+        assert with_urlopen(http_error(code)) is pose.VLMUnavailable, code
+    assert with_urlopen(http_error(400)) is pose.VLMRejected
+    assert with_urlopen(http_error(422)) is pose.VLMRejected
+    assert with_urlopen(urllib.error.URLError("dns down")) is pose.VLMUnavailable
+    assert with_urlopen(socket.timeout("timed out")) is pose.VLMUnavailable
+
+    # ...and now the same table again, embedded in a 200
+    def with_error_code(code):
+        try:
+            glm_body(monkeypatch, tmp_path, {"error": {"code": code, "message": "x"}})
+        except Exception as e:              # noqa: BLE001 - the type is the assertion
+            return type(e)
+        return None
+
+    assert with_error_code(429) is pose.RateLimited
+    assert with_error_code(503) is pose.RateLimited
+    assert with_error_code(502) is pose.VLMUnavailable
+    for code in pose.TRANSIENT_HTTP_STATUS:
+        assert with_error_code(code) is pose.VLMUnavailable, code
+    assert with_error_code(400) is pose.VLMRejected
+    # a code the envelope does not state, or one that is not a status at all,
+    # stays transient: permanent is the enumerated side, never the fallthrough
+    assert with_error_code(None) is pose.VLMUnavailable
+    assert with_error_code("rate_limit_exceeded") is pose.VLMUnavailable
+    with pytest.raises(pose.VLMUnavailable, match="embedded error"):
+        glm_body(monkeypatch, tmp_path, {"error": {"message": "no code at all"}})
+
+    # the one verdict this envelope states, and the only permanent 200
+    with pytest.raises(pose.VLMRejected, match="content_filter"):
+        glm_body(monkeypatch, tmp_path, {"choices": [
+            {"finish_reason": "content_filter", "message": {"content": ""}}]})
+
+    # everything else that carries no answer is transient
+    with pytest.raises(pose.VLMUnavailable, match="no answer"):
+        glm_body(monkeypatch, tmp_path, {})
+    with pytest.raises(pose.VLMUnavailable, match="no answer"):
+        glm_body(monkeypatch, tmp_path, {"choices": []})
+    with pytest.raises(pose.VLMUnavailable, match="length"):
+        glm_body(monkeypatch, tmp_path, {"choices": [
+            {"finish_reason": "length", "message": {"content": ""}}]})
+    with pytest.raises(pose.VLMUnavailable, match="unparseable"):
+        glm_body(monkeypatch, tmp_path, b"<html>502 Bad Gateway</html>")
+
+    # the unchanged lane: an answer that will not parse flattens to None,
+    # which `_fold` records retryable
+    assert glm_body(monkeypatch, tmp_path,
+                    {"choices": [{"message": {"content": "no json here"}}]}) is None
+    assert glm_body(monkeypatch, tmp_path, {"choices": [
+        {"message": {"content": '{"tile": 3}'}}]}) == 2
+
+
+def test_a_missing_openrouter_key_is_transient(monkeypatch, tmp_path):
+    """The environment being broken is not the request being judged — the same
+    doctrine as the gcloud helpers. A permanent record here would pin every
+    gated model in the collection on one unreadable file, and no later run
+    could clear it (docs/archive/tri-state-pass-2.md, 2026-08-21)."""
+    import urllib.request
+
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda *a, **k: pytest.fail("called with no key"))
+    monkeypatch.setenv("OPENROUTER_KEY_FILE", str(tmp_path / "nope"))
+    with pytest.raises(pose.VLMUnavailable, match="no OpenRouter key"):
+        pose._ask_glm([b"png"], 6, "m")
+
+    empty = openrouter_key_file(monkeypatch, tmp_path, text="   \n")
+    with pytest.raises(pose.VLMUnavailable, match="empty"):
+        pose._ask_glm([b"png"], 6, "m")
+    assert str(empty) in str(pytest.raises(
+        pose.VLMUnavailable, lambda: pose.openrouter_key()).value)
+
+
 def test_claude_cli_failures_are_transient(monkeypatch):
     """The claude backend could never say `RateLimited` at all: a timed-out
     CLI raised TimeoutExpired into the permanent branch, and a non-zero exit
@@ -511,6 +689,108 @@ def test_gemini_backend_is_dispatched_and_degrades(monkeypatch, tmp_path):
 
     monkeypatch.setattr(pose, "_ask_gemini", boom)
     assert pose.ask_vlm_up(tiles, "gemini", tmp_path, "gemini-3.5-flash") is None
+
+
+def test_glm_backend_is_dispatched_with_solo_tiles_not_a_sheet(monkeypatch, tmp_path):
+    """The backend exists *because* of its presentation, so the dispatch has to
+    prove the presentation.
+
+    Six separately captioned tiles take GLM's arbiter tier from +0/+2 to +3
+    (40/44 standalone, +3 -> 41/44) where the identical tiles pasted into one
+    contact sheet leave it at +0/+2 — the measured reason it is the fallback
+    at all (LEARNINGS, "Arbiter backends, sheet sizes, presentations and
+    effort", 2026-08-30). Send the sheet and the backend quietly becomes the
+    configuration that was measured and rejected, with every test still
+    green, so this asserts on the pixels rather than on the call count."""
+    colors = ["white", "red", "green", "blue", "yellow", "black"]
+    tiles = [Image.new("RGB", (64, 64), c) for c in colors]
+    seen = {}
+
+    def fake(tile_pngs, n_tiles, model):
+        seen.update(model=model, n_tiles=n_tiles, pngs=tile_pngs)
+        return 3
+
+    monkeypatch.setattr(pose, "_ask_glm", fake)
+    assert pose.ask_vlm_up(tiles, "glm", tmp_path, pose.GLM_MODEL) == 3
+    assert seen["model"] == pose.GLM_MODEL and seen["n_tiles"] == 6
+    assert len(seen["pngs"]) == 6
+
+    # each is one 64x64 tile, not the 1536x1024 sheet make_contact_sheet
+    # would have built from the same six — and they arrive in tile order
+    got = [Image.open(io.BytesIO(p)) for p in seen["pngs"]]
+    assert [im.size for im in got] == [(64, 64)] * 6
+    assert [im.getpixel((0, 0)) for im in got] == [t.getpixel((0, 0)) for t in tiles]
+
+    # an arbiter that fails must never fail the run — the geometry guess stands
+    def boom(*a, **k):
+        raise RuntimeError("HTTP 403")
+
+    monkeypatch.setattr(pose, "_ask_glm", boom)
+    assert pose.ask_vlm_up(tiles, "glm", tmp_path, pose.GLM_MODEL) is None
+
+
+def test_the_sheet_is_still_built_and_saved_for_the_glm_backend(monkeypatch, tmp_path):
+    """Sent and saved are different jobs. The tiles go to the model; the sheet
+    goes next to the renders, because it is the artefact a human reads back
+    off disk when a pose came out wrong."""
+    tiles = [Image.new("RGB", (64, 64), "white") for _ in range(6)]
+    monkeypatch.setattr(pose, "_ask_glm", lambda *a, **k: 0)
+    sheet = tmp_path / "renders" / "m_pose.png"
+    assert pose.ask_vlm_up(tiles, "glm", tmp_path, pose.GLM_MODEL,
+                           save_to=sheet) == 0
+    assert sheet.exists()
+    assert Image.open(sheet).size == (3 * pose.SHEET_THUMB, 2 * pose.SHEET_THUMB)
+
+
+def test_a_deadline_is_the_verdict_not_an_attempt(monkeypatch, tmp_path):
+    """Two halves, and the type carries both.
+
+    Transient ACROSS runs: `DeadlineExceeded` is a `VLMUnavailable`, so
+    `_fold` records `arbitrated=False` and a later run asks again — a clock
+    running out is not the API judging the request, and the permanent side of
+    the split is the enumerated one.
+
+    Final WITHIN the call: the loop that ran out the clock is reproducible and
+    is still generating server-side after the client lets go, so a second
+    attempt buys another deadline and another bill for the same non-answer
+    (measured 2026-08-30: `Floor` at max effort exhausted six 120 s attempts
+    at ~17k billed output tokens each). Every other transient failure gets
+    two attempts here; this one gets one.
+
+    And the worker thread must be a **daemon**: it is abandoned still reading,
+    and a non-daemon one is joined untimed at interpreter exit — which under
+    the heartbeat pathology this helper exists for never returns."""
+    import threading
+    import urllib.request
+
+    openrouter_key_file(monkeypatch, tmp_path)
+    monkeypatch.setattr(pose, "GLM_DEADLINE_S", 0.05)
+    release = threading.Event()
+    threads, attempts = [], []
+
+    def hanging_urlopen(req, timeout=None):
+        attempts.append(1)
+        threads.append(threading.current_thread())
+        release.wait(30)             # still "reading" when the deadline fires
+        raise AssertionError("the deadline should have abandoned this read")
+
+    monkeypatch.setattr(urllib.request, "urlopen", hanging_urlopen)
+    try:
+        with pytest.raises(pose.DeadlineExceeded) as caught:
+            pose._ask_glm([b"png"], 6, "m")
+        assert isinstance(caught.value, pose.VLMUnavailable)   # asked again next run
+        # the read is abandoned mid-flight, so nothing may join it at exit
+        assert threads and all(t.daemon for t in threads)
+        assert all(t.is_alive() for t in threads)
+
+        # ...and ask_vlm_up spends ONE attempt on it, where every other
+        # transient failure gets two (pinned by the tests above)
+        attempts.clear()
+        tiles = [Image.new("RGB", (8, 8), "white") for _ in range(6)]
+        assert pose.ask_vlm_up(tiles, "glm", tmp_path, "m") is None
+        assert len(attempts) == 1
+    finally:
+        release.set()
 
 
 def test_geometry_vote_is_scaled_by_its_base_evidence():

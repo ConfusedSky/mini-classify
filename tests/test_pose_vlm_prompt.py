@@ -1,5 +1,6 @@
-"""`resolve_pose_vlm`'s auto-failure prompt (C6, docs/archive/tri-state-pass-2.md,
-2026-08-21), driven as a **subprocess**.
+"""`resolve_pose_vlm`'s auto-failure path — the OpenRouter fallback, and the
+prompt for when there is no key for that either (C6,
+docs/archive/tri-state-pass-2.md, 2026-08-21) — driven as a **subprocess**.
 
 Nothing may import `classify_stls.py` — tests included (CLAUDE.md): `spawn`
 re-imports it as `__mp_main__` in the render child, so its module scope is the
@@ -30,10 +31,18 @@ REPO = Path(__file__).resolve().parent.parent
 TIMEOUT = 120
 
 
-def cli(tmp_path, *extra, model="no-such-org/no-such-model"):
+def cli(tmp_path, *extra, model="no-such-org/no-such-model", or_key=None):
     """The command and the environment: one STL, an empty cache, and no
     `gcloud` on PATH — which is how the auto probe is made to fail without
-    touching the machine's real ADC state."""
+    touching the machine's real ADC state.
+
+    `OPENROUTER_KEY_FILE` is pinned for the same reason `PATH` is. These runs
+    use a real HOME, so once `auto` gained its GLM fallback the default key
+    path would find the developer's own key and degrade to the arbiter instead
+    of prompting — every prompt test below would pass on this machine and fail
+    on a machine without one, or the other way round. `or_key=None` points it
+    at a path that does not exist, which is the no-fallback world these tests
+    were written for; a test that wants the fallback passes a real file."""
     stls = tmp_path / "stls"
     stls.mkdir()
     (stls / "a.stl").write_bytes(b"solid x\nendsolid x\n")
@@ -43,7 +52,8 @@ def cli(tmp_path, *extra, model="no-such-org/no-such-model"):
     empty.mkdir()
 
     env = dict(os.environ, PATH=str(empty), HF_HUB_OFFLINE="1",
-               TRANSFORMERS_OFFLINE="1")
+               TRANSFORMERS_OFFLINE="1",
+               OPENROUTER_KEY_FILE=str(or_key or tmp_path / "no-openrouter-key"))
     for var in ("GOOGLE_CLOUD_PROJECT", "GCLOUD_PROJECT"):
         env.pop(var, None)
     cmd = [sys.executable, "classify_stls.py", str(stls),
@@ -52,8 +62,8 @@ def cli(tmp_path, *extra, model="no-such-org/no-such-model"):
     return cmd, env
 
 
-def run_piped(tmp_path, *extra):
-    cmd, env = cli(tmp_path, *extra)
+def run_piped(tmp_path, *extra, or_key=None):
+    cmd, env = cli(tmp_path, *extra, or_key=or_key)
     return subprocess.run(cmd, cwd=REPO, env=env, capture_output=True,
                           text=True, stdin=subprocess.DEVNULL, timeout=TIMEOUT)
 
@@ -114,6 +124,36 @@ def test_accepting_the_prompt_continues_degraded(tmp_path):
     rc, stdout = run_tty(tmp_path, b"y\n")
     assert "continue without the arbiter? [y/N]" in stdout
     assert "loading no-such-org/no-such-model" in stdout
+
+
+def test_auto_takes_the_openrouter_fallback_instead_of_asking(tmp_path):
+    """The prompt is the last resort, not the second one.
+
+    A run that degrades to no arbiter defers every gated pose in it; a run
+    that degrades to GLM-5.3-Flash still rescues +3 -> 41/44 against gemini's
+    +4 -> 42/44, for $0.06 and no GPU (LEARNINGS, "Arbiter backends, sheet
+    sizes, presentations and effort", 2026-08-30). So when there is a key,
+    `auto` announces the fallback and carries on — reaching the model load,
+    the line after the decision — and never reaches the question."""
+    key = tmp_path / "or-key"
+    key.write_text("sk-or-not-a-real-key\n")
+    out = run_piped(tmp_path, or_key=key)
+    assert "gemini unavailable" in out.stdout
+    assert "falling back to the OpenRouter arbiter" in out.stdout
+    assert "z-ai/glm-5.3-flash on OpenRouter" in out.stdout
+    assert "continue without the arbiter" not in out.stdout + out.stderr
+    assert "loading no-such-org/no-such-model" in out.stdout
+
+
+def test_explicit_glm_without_a_key_fails_at_startup(tmp_path):
+    """Symmetric with the gemini arm: asking for an arbiter by name and not
+    getting one is an error, and the message names the file to fix."""
+    out = run_piped(tmp_path, "--pose-vlm", "glm")
+    assert out.returncode != 0
+    assert "--pose-vlm glm:" in out.stderr
+    assert "no-openrouter-key" in out.stderr        # the path it looked at
+    assert "continue without the arbiter" not in out.stdout + out.stderr
+    assert "loading" not in out.stdout
 
 
 def test_explicit_off_asks_nothing(tmp_path):

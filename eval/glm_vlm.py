@@ -40,7 +40,15 @@ for _e in ("low", "high"):
 # provider hangs never trips urlopen's socket timeout (measured 2026-08-30:
 # workers idle 46 min on connections receiving ~1 packet/150 ms). So the wall
 # clock is enforced from outside: the read runs on a helper thread and is
-# abandoned at the deadline; the thread and its socket die with the process.
+# abandoned at the deadline.
+#
+# The abandoned thread does NOT die with the process on demand: a
+# ThreadPoolExecutor's workers are non-daemon and concurrent.futures joins
+# every one of them, untimed, at interpreter exit (CPython 3.9+; measured on
+# 3.12.13, one 10 s abandoned call delayed exit by 10.037 s). Harmless here —
+# the sweep exits when it is done and a few seconds of hang cost nothing — but
+# not in the pipeline, so `pose._fetch_with_deadline` is the load-bearing
+# version and uses a daemon thread instead. Copy that one, not this one.
 _DEADLINE_S = float(__import__("os").environ.get("OR_DEADLINE", 120))
 _deadline_pool = __import__("concurrent.futures").futures.ThreadPoolExecutor(max_workers=64)
 

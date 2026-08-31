@@ -44,7 +44,7 @@ from src.messages import EmbedTilesRequest, Failure, PoseTiles, Resolved, \
     TileEmbeds
 from src.pose import Pose
 
-VLM_BACKENDS = (None, "gemini", "claude")
+VLM_BACKENDS = (None, "gemini", "glm", "claude")
 """What `--pose-vlm` may be. `ollama` is retired at construction (C-R1-4):
 the Arbiter has no inline arm, and a pooled ollama call would overlap SigLIP
 on the 4060 — 10.1 s of model reload against 0.49 s of inference (CLAUDE.md's

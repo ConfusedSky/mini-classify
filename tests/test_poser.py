@@ -132,8 +132,12 @@ def test_vlm_config_rejects_ollama_at_construction():
         VlmConfig(backend="ollama")
 
 
-def test_vlm_config_accepts_the_two_remote_backends_and_none():
-    for backend in (None, "gemini", "claude"):
+def test_vlm_config_accepts_the_remote_backends_and_none():
+    # `glm` joined them 2026-08-30 as the measured fallback for a run with no
+    # gcloud (LEARNINGS, "Arbiter backends, sheet sizes, presentations and
+    # effort"); the Poser needs no other change for it — it is one more remote
+    # call behind the same `ask_vlm_up`.
+    for backend in (None, "gemini", "glm", "claude"):
         assert VlmConfig(backend=backend).backend == backend
 
 
@@ -341,6 +345,10 @@ def test_the_real_call_path_maps_each_failure_to_its_own_record(monkeypatch):
     assert outcome(exc=pose.RateLimited("HTTP 429")) is False   # retry later
     assert outcome(exc=pose.VLMUnavailable("HTTP 502")) is False  # retry later
     assert outcome(exc=pose.VLMRejected("HTTP 400")) == "rejected"  # judged
+    # a blown deadline needs no arm of its own: it is a VLMUnavailable, so it
+    # folds retryable here and is re-asked next run. Only `ask_vlm_up`'s own
+    # retry treats it specially, and that is a different question from this one
+    assert outcome(exc=pose.DeadlineExceeded("120s")) is False
     # an unknown type is retryable now, not permanent (C1)
     assert outcome(exc=RuntimeError("HTTP 418")) is False
     # an unparseable answer stays retryable — a judgement, not a leftover

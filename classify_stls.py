@@ -128,18 +128,31 @@ def _confirm_degraded(why):
     return None
 
 
+def _openrouter_ready():
+    """Is there an OpenRouter key for `auto` to fall back to? Reading it is
+    the probe — `pose.openrouter_key` raises for missing, unreadable and empty
+    alike, and reading is what the backend does per call anyway."""
+    from src import pose
+    try:
+        pose.openrouter_key()
+        return True
+    except pose.VLMUnavailable:
+        return False
+
+
 def resolve_pose_vlm(args):
     """--pose-vlm to the backend the Poser is built with, announcing the choice.
 
     `ollama` is retired (2026-08-17, C-R1-4): the Arbiter is a thread pool with
     no inline arm, and a pooled ollama call would overlap SigLIP on the 4060 —
     10.1 s of model reload against 0.49 s of inference, this repo's one hard
-    GPU constraint. So `auto` is gemini or nothing, and `VlmConfig` refuses the
-    name at construction if it ever reaches it another way.
+    GPU constraint. `VlmConfig` refuses the name at construction if it ever
+    reaches it another way.
 
-    `auto` finding nothing is a question now rather than a shrug
-    (`_confirm_degraded`); the explicit choices are unchanged — `gemini` is an
-    error if unavailable, `off` is silent."""
+    `auto` degrades before it asks: gemini, then the OpenRouter arbiter if a
+    key is readable, and only then the question (`_confirm_degraded`). The
+    explicit choices are unchanged in shape — `gemini` and `glm` are errors if
+    unavailable, `off` is silent."""
     from src import pose        # module-local: pose pulls open3d (docstring)
     backend = args.pose_vlm
     if backend == "off":
@@ -154,7 +167,17 @@ def resolve_pose_vlm(args):
             pose.gcloud_token()
             backend = "gemini"
         except Exception as e:
-            return _confirm_degraded(e)
+            # A measured second choice beats a prompt: GLM-5.3-Flash on solo
+            # tiles rescues +3 -> 41/44 where gemini rescues +4 -> 42/44
+            # (LEARNINGS, "Arbiter backends, sheet sizes, presentations and
+            # effort", 2026-08-30), for $0.06 a run and no GPU. Degrading to
+            # no arbiter at all — which defers a whole run's escalations — is
+            # only the question to ask when there is no key either.
+            if not _openrouter_ready():
+                return _confirm_degraded(e)
+            backend = "glm"
+            print(f"pose VLM: gemini unavailable ({e}) — falling back to the "
+                  f"OpenRouter arbiter")
     vlm_model = args.pose_vlm_model or pose.DEFAULT_VLM_MODELS.get(backend)
     if backend == "gemini":
         # Fail here rather than on the first ambiguous model, thousands of
@@ -169,6 +192,17 @@ def resolve_pose_vlm(args):
             raise SystemExit(f"--pose-vlm gemini: {e}")
         print(f"pose VLM: {vlm_model} on Vertex AI, project {args.gemini_project} "
               f"— billed per escalation")
+    elif backend == "glm":
+        # Symmetric with the gemini arm: the one thing that goes wrong is the
+        # key, and checking it costs nothing against finding out thousands of
+        # renders into a run. `auto` reaches this having already probed —
+        # cheap, and it keeps the announcement in one place.
+        try:
+            pose.openrouter_key()
+        except pose.VLMUnavailable as e:
+            raise SystemExit(f"--pose-vlm glm: {e}")
+        print(f"pose VLM: {vlm_model} on OpenRouter via "
+              f"{pose.openrouter_provider()} — billed per escalation")
     else:
         print(f"pose VLM: {vlm_model or backend}")
     # The arbiter sheet scales each tile to SHEET_THUMB, and Image.thumbnail
@@ -177,8 +211,9 @@ def resolve_pose_vlm(args):
     # saying out loud: sheet size is the knob that moved sonnet 10 of 44.
     if args.render_size < pose.SHEET_THUMB:
         print(f"  note: --render-size {args.render_size} is below the {pose.SHEET_THUMB}px "
-              f"sheet tile, so the arbiter sees {args.render_size}px tiles padded into "
-              f"{pose.SHEET_THUMB}px cells, not a {pose.SHEET_THUMB}px sheet")
+              f"arbiter tile, so the arbiter sees {args.render_size}px tiles, not "
+              f"{pose.SHEET_THUMB}px ones — on the sheet backends they sit padded into "
+              f"{pose.SHEET_THUMB}px cells")
     return backend
 
 
@@ -216,14 +251,17 @@ def main():
     # the backends this CLI will accept — `ollama` is not among them (C-R1-4),
     # which is also what --pose-vlm-model's help below filters on: advertising
     # a default for a backend argparse rejects is worse than saying nothing
-    pose_vlm_choices = ["auto", "claude", "gemini", "off"]
+    pose_vlm_choices = ["auto", "claude", "gemini", "glm", "off"]
     parser.add_argument("--pose-vlm", choices=pose_vlm_choices,
                         default="auto",
                         help="arbiter for uncertain up detection: gemini on Vertex AI, "
-                             "claude CLI, or off. auto (default) = gemini if gcloud ADC "
-                             "resolves, else none. gemini-3.5-flash is the only arbiter "
-                             "measured to beat the ensemble (43/44 against 40/44) and "
-                             "bills ~$0.30 per full-collection run. `ollama` is retired: "
+                             "glm on OpenRouter, claude CLI, or off. auto (default) = "
+                             "gemini if gcloud ADC resolves, else glm if an OpenRouter "
+                             "key is readable, else ask. gemini-3.5-flash is the best "
+                             "arbiter measured (43/44 standalone, +4 -> 42/44 as the "
+                             "tier) and bills ~$0.30 per full-collection run; "
+                             "GLM-5.3-Flash is the measured fallback (+3 -> 41/44) at "
+                             "~1/40th the cost and no GPU. `ollama` is retired: "
                              "the arbiter is a thread pool with no inline arm, and a "
                              "pooled ollama call would share the 4060 with SigLIP")
     parser.add_argument("--pose-vlm-model", default=None,
