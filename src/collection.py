@@ -32,12 +32,13 @@ per-file identity, render key and display name is computed once at load; and
 
 To be exact about the budget, since an earlier version of this docstring
 claimed "a single stat" and was wrong by an order of magnitude (review,
-2026-08-19): **`pose_of` and `hit` do no I/O at all**, and `resolve` costs one
-`Path.resolve()` plus one `exists()` on the scope path — which is a handful of
-`lstat`s, proportional to that path's *depth* and never to the size of the
-collection. `tests/test_collection.py` asserts both as budgets, because the
-first version of that guard patched four walk functions and missed `hit`
-resolving a path nine times per result.
+2026-08-19): **`pose_of`, `hit` and `row_of` do no I/O at all** — `row_of`
+deliberately, so that a 1024-path batch lookup costs none either — and
+`resolve` costs one `Path.resolve()` plus one `exists()` on the scope path,
+which is a handful of `lstat`s, proportional to that path's *depth* and never
+to the size of the collection. `tests/test_collection.py` asserts each as a
+budget, because the first version of that guard patched four walk functions
+and missed `hit` resolving a path nine times per result.
 
 `reload` returns a **new instance** rather than mutating this one, which is
 what lets the server rebind a name and never lock a reader (implementation.md
@@ -45,8 +46,9 @@ phase 2: bind once at handler entry).
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePath
 
 import numpy as np
 
@@ -209,6 +211,14 @@ class Collection:
         self._ident = [pose.file_identity(f, root) for f in files]
         self._keys = [identity.render_key(f, root) for f in files]
         self._names = [self._display_name(f) for f in files]
+        # path -> row, so `row_of` is a dict get rather than a scan of `_rel`
+        # per path: `POST /poses` asks about up to 1024 of them at once. Two
+        # keys because a caller holds either spelling — the absolute `path` a
+        # hit carries (walked from `_inp`, so a symlinked input keeps its own
+        # spelling here) or a root-relative one it built itself.
+        self._row_by_path = {os.path.normpath(str(f)): i
+                             for i, f in enumerate(files)}
+        self._row_by_rel = {rel: i for i, rel in enumerate(self._rel)}
 
     # --- loading ------------------------------------------------------------
 
@@ -354,6 +364,46 @@ class Collection:
         return Scope(str(path), rows, len(rows), n_scanned, list(COVERS))
 
     # --- per-model detail ---------------------------------------------------
+
+    def row_of(self, path: str) -> int | None:
+        """The row a real path names, or None when this index does not hold it.
+
+        `resolve`'s counterpart for a *batch*: a lookup answers about many
+        paths at once (`POST /poses`), where the three `ScopeError`s are the
+        wrong shape entirely — one unaddressable member must not cost the
+        other 1023 their answer. So nothing raises and nothing is a state:
+        outside the root, a zip virtual path, a directory, a model no
+        classify run has walked all read as None, and the handler turns that
+        into a null pose under the caller's own key.
+
+        Matched **lexically**, which is the one place this differs from
+        `resolve`. A batch of realpaths would cost `lstat`s proportional to
+        the request on a volume that may be an HDD, and request cost here is
+        independent of the storage by construction (see the module
+        docstring). The absolute `path` a hit carries therefore always
+        matches, being the key it was built from; a root-relative path
+        matches by parts; and an absolute path is stripped of the root as
+        recorded *and* as resolved, since a library reached through a
+        symlinked mount spells those two differently and a caller may hold
+        either. Anything reached through some third alias is not this index's
+        path, which is what `/status`'s `collection_root` exists for the
+        caller to check."""
+        # Total on any string, with no guard needed and none pretended: every
+        # step below is string arithmetic. `resolve` has to catch four
+        # exception types because `Path.resolve()` goes to the filesystem;
+        # nothing here does, so an embedded null or an over-long name is
+        # simply a path that matches nothing.
+        norm = os.path.normpath(str(path))
+        i = self._row_by_path.get(norm)
+        if i is not None:
+            return i
+        p = PurePath(norm)
+        if not p.is_absolute():
+            return self._row_by_rel.get(p.parts)
+        for base in (self.root, self._real_root):
+            if p.is_relative_to(base):
+                return self._row_by_rel.get(p.relative_to(base).parts)
+        return None
 
     def pose_of(self, i: int) -> dict | None:
         """The pose block for row `i`, or None when nothing is resolved.

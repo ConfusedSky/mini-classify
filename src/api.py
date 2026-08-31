@@ -48,6 +48,13 @@ from src.collection import (CacheUnusable, Collection, NoSuchPath,
 
 POOL = Literal["mean", "max", "softmax"]
 
+# The batch bound on `POST /poses`, stated in docs/api/surface.md and enforced
+# by the schema so the refusal is pydantic's own 422 rather than a shape this
+# route invented. Sized as a listing's worth of models with room to spare —
+# the caller asks about one directory at a time — and it is what keeps the
+# response dict bounded by the request rather than by the collection.
+POSES_MAX = 1024
+
 # `logging`, not the `print` the rest of this project uses: a server's output
 # is uvicorn's to configure, and a print bypasses whatever level, format or
 # sink the operator chose. One line per scoring request — enough to answer
@@ -276,6 +283,10 @@ class SimilarRequest(BaseModel):
     pool: POOL | None = None
 
 
+class PosesRequest(BaseModel):
+    paths: list[str] = Field(..., max_length=POSES_MAX)
+
+
 class ReloadRequest(BaseModel):
     rescan: bool = False
 
@@ -447,6 +458,45 @@ def create_app(state: ServerState) -> FastAPI:
         return {"scope": scope.as_dict(),
                 "results": [c.hit(int(rows[j]), sims[j], ranked.z[j])
                             for j in ranked.order]}
+
+    @app.post("/poses")
+    def post_poses(req: PosesRequest) -> dict:
+        """The pose a hit carries, for models the caller found without one.
+
+        A store lookup and nothing else: `Collection.row_of` then `pose_of`,
+        both dict gets against the pose cache loaded at startup. **No
+        embedding, no GPU, no `state.gpu`** — so none of surface.md's
+        GPU-lock deliberation applies here, and a listing's batch can never
+        queue behind a query's text forward.
+
+        It shares `_live()`'s gate anyway, answering 503 while warming in the
+        same envelope as the scoring routes. The poses are resident before
+        SigLIP is and this could serve earlier; one warming state the
+        consumer polls and branches on once is worth more than the seconds.
+
+        A path this index does not hold is `null` under its own key, never an
+        error — the caller's library legitimately holds files no classify run
+        has walked, and one of those must not cost the batch (`row_of`)."""
+        t0 = time.monotonic()
+        c = _live()
+        out, known = {}, 0
+        for p in req.paths:
+            i = c.row_of(p)
+            if i is None:
+                out[p] = None
+            else:
+                known += 1
+                out[p] = c.pose_of(i)
+        # `known` separately from the posed count because they fail
+        # differently: a batch that is all-unknown is the two repos
+        # disagreeing about the path space, which nothing else in this
+        # surface would report, while known-but-unposed is just an index that
+        # has not resolved those models.
+        log.info("poses %d asked, %d known, %d posed in %.1f ms",
+                 len(req.paths), known,
+                 sum(v is not None for v in out.values()),
+                 (time.monotonic() - t0) * 1000)
+        return {"poses": out}
 
     @app.post("/reload")
     def post_reload(req: ReloadRequest) -> dict:

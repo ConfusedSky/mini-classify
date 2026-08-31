@@ -8,8 +8,8 @@ run-params.json, exactly as test_categories.py does, so the server reads the
 cache the classifier wrote without being told twice.
 
 The port binds **before** SigLIP is resident and `/status` answers throughout,
-with `ready: false` and `elapsed` until the model lands; `/query` and
-`/similar` answer 503 meanwhile. That is deliberate (docs/api/surface.md
+with `ready: false` and `elapsed` until the model lands; `/query`, `/similar`
+and `/poses` answer 503 meanwhile. That is deliberate (docs/api/surface.md
 §`GET /status`): loading before binding makes a warming server
 indistinguishable from a dead one, and the consumer's semantic-search
 affordance would flicker off across every restart.

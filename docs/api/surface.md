@@ -84,7 +84,8 @@ SigLIP takes real seconds to load. If the process binds the port only after
 the model is resident, a probe cannot tell warming from not-running, and the
 consumer's semantic affordance flickers off and on across every restart. So:
 bind first, warm in the background, answer `/status` throughout with
-`ready: false`, and reject `/query` and `/similar` with **503** until it flips.
+`ready: false`, and reject `/query`, `/similar` and `/poses` with **503**
+until it flips.
 A caller that sees a reply at all knows the server exists.
 
 Bind-before-warm is load-bearing rather than polite: it is what makes warming
@@ -179,6 +180,55 @@ median 3.3). Model-to-model cosines run 0.85–0.99 where text-query cosines run
 around 0.1, so the threshold `/query` uses was fitted to a different
 distribution entirely. A flag that is always `false` invites a consumer to
 branch on something that cannot happen.
+
+### `POST /poses`
+
+The orientation half of what this surface exists for, without the search that
+normally carries it. Every `hit` has a `pose` on it, so a consumer that
+*searched* knows how to stand a model up — and a consumer that merely listed a
+directory knew nothing, which is the gap this call closes.
+
+| field | type | default | note |
+|---|---|---|---|
+| `paths` | string[] | required | real paths, absolute or root-relative; at most **1024** per request |
+
+Returns `{"poses": {"<path>": pose | null, …}}`. **Every requested path is a
+key, echoed exactly as it was sent**, so the caller joins on the string it
+already holds rather than on one this side normalised; `pose` is the shared
+shape below, the same block `hit.pose` carries for the same model.
+
+**`null` is an answer here, not an error, and that is the one departure from
+`/query`'s `path`.** There an unindexed or unaddressable path is a 404/400/422
+because it *is* the request; here it is one member of a batch, and the
+caller's library legitimately holds files no classify run has walked — a
+`.3mf`, a model added yesterday, a zip entry (§scope, §path space). One of
+those must not cost the other 1023 their answer, so everything this index does
+not hold reads as `null` under its own key. The bound is the only refusal, and
+it is **422**, pydantic's own, the same answer a malformed path already gets.
+1024 is a directory listing's worth of models with room to spare; it is what
+keeps the response dict bounded by the request rather than by the collection.
+
+**No GPU and no lock.** This is a dict lookup per path against the pose cache
+loaded at startup (`collection.row_of`, then the `pose_of` a hit already
+calls) — no text forward, no matmul, nothing that touches the 4060. So none of
+§Deliberately not decided here's GPU-lock deliberation reaches this route, and
+a listing's batch can never queue behind a query.
+
+It does share the readiness gate: **503 while warming**, in the same
+`{ready, elapsed, failure}` envelope `/query` and `/similar` use. The poses
+are resident before SigLIP is and this could answer sooner; it deliberately
+does not, because one warming state a consumer polls and branches on once is
+worth more than the seconds.
+
+**Paths are matched as the index recorded them**, lexically. That is a
+decision, not a shortcut: a realpath per path would be ~1024 × depth `lstat`s
+on a volume that may be an HDD, and request cost here is independent of the
+storage by construction (§scope). What always matches is the absolute `path` a
+hit carries and its `rel_path`; an absolute path is also matched under
+`collection_root` as recorded and as resolved, which differ when the library
+is reached through a symlinked mount. A path reached through some third alias
+is not this index's path, and `/status`'s `collection_root` is where the
+caller checks that the two sides mean one tree.
 
 ### `POST /reload`
 
@@ -481,7 +531,9 @@ this section describes.
 ## Deliberately not decided here
 
 - **The GPU lock.** Starlette's threadpool means handlers really do run
-  concurrently, so text embedding needs a lock around the 4060. (ollama and
+  concurrently, so text embedding needs a lock around the 4060. (`/poses` is
+  outside this entirely — a store lookup takes no lock, so nothing below
+  bounds how fast a listing gets its poses.) (ollama and
   SigLIP cannot share the card; an HTTP surface makes that easier to violate
   than the REPL did.) Whether the lock wraps the forward or the whole handler
   is open. Less pressing than an earlier draft of this document assumed:

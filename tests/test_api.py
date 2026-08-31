@@ -1,4 +1,4 @@
-"""src/api.py: the four routes, their status codes, and the warmup gate.
+"""src/api.py: the five routes, their status codes, and the warmup gate.
 
 No GPU and no SigLIP anywhere here — `ServerState.embed` is a callable, so the
 whole HTTP surface runs against a stub that returns deterministic vectors. That
@@ -51,6 +51,11 @@ def serve(tmp_path, layout=("a/one.stl", "a/two.stl", "b/three.stl"), *,
     return TestClient(create_app(state), raise_server_exceptions=False), state, c
 
 
+def client_of(tmp_path, **kw):
+    """`serve` when the test wants only the client."""
+    return serve(tmp_path, **kw)[0]
+
+
 # --- /status ----------------------------------------------------------------
 
 def test_status_reports_the_cache_and_the_collection_root(tmp_path):
@@ -75,7 +80,8 @@ def test_status_answers_while_warming_and_queries_do_not(tmp_path):
     # false a failed load reports. Saying false while warming would be a lie
     assert s["volume"]["present"] is None and s["failure"] is None
 
-    for route, body in (("/query", {"text": "x"}), ("/similar", {"path": "a"})):
+    for route, body in (("/query", {"text": "x"}), ("/similar", {"path": "a"}),
+                        ("/poses", {"paths": ["a/one.stl"]})):
         r = client.post(route, json=body)
         assert r.status_code == 503, route
         assert r.json()["detail"]["ready"] is False
@@ -346,6 +352,88 @@ def test_similar_with_no_other_candidate_returns_empty(tmp_path):
     client, _, _ = serve(tmp_path, layout=["a/one.stl"])
     body = client.post("/similar", json={"path": "a/one.stl"}).json()
     assert body["results"] == []
+
+
+# --- /poses -----------------------------------------------------------------
+
+def test_poses_returns_exactly_the_block_a_hit_carries(tmp_path):
+    """The whole point of the call: a listing gets the pose a search would
+    have carried for the same model, byte for byte. Compared against a real
+    hit rather than against a hand-written block, because "the shared shape"
+    is a claim about these two agreeing and a literal would only agree with
+    itself."""
+    client, _, c = serve(tmp_path, ups={"a/one.stl": [0.0, 1.0, 0.0]},
+                         front={"a/one.stl": 1})
+    hit = next(h for h in client.post("/query", json={"text": "x"}).json()["results"]
+               if h["rel_path"] == "a/one.stl")
+    body = client.post("/poses", json={"paths": [hit["path"]]}).json()
+    assert body["poses"][hit["path"]] == hit["pose"]
+    assert hit["pose"]["up"] == [0.0, 1.0, 0.0]      # not the default: a real pose
+
+
+def test_poses_takes_absolute_and_root_relative_alike(tmp_path):
+    """`/similar`'s rule for its one path, applied per member of the batch."""
+    client, _, c = serve(tmp_path)
+    abs_path = next(str(f) for f in c.files if f.name == "one.stl")
+    body = client.post("/poses", json={"paths": [abs_path, "a/one.stl"]}).json()
+    assert body["poses"][abs_path] == body["poses"]["a/one.stl"] is not None
+
+
+@pytest.mark.parametrize("path", [
+    "a/nowhere.stl",                        # never walked
+    "a",                                    # a directory, not a model
+    "/etc/passwd",                          # outside the collection
+    "a/pack.zip!/inner.stl",                # a zip virtual path
+    "",                                     # nothing at all
+])
+def test_an_unaddressable_path_is_null_not_an_error(tmp_path, path):
+    """The difference from `/query`'s `path`, where these are 404/400/422:
+    here each is one member of a batch, and the caller's library legitimately
+    holds files this index has never seen. One of them must not cost the
+    others their answer."""
+    r = client_of(tmp_path).post("/poses", json={"paths": [path]})
+    assert r.status_code == 200
+    assert r.json()["poses"] == {path: None}
+
+
+def test_a_mixed_batch_keys_every_path_it_was_given(tmp_path):
+    """Every requested path present as a key, echoed as it was sent — the
+    caller joins on the string it already holds, not on one this side
+    normalised."""
+    asked = ["a/one.stl", "a/nowhere.stl", "b/three.stl", "/etc"]
+    body = client_of(tmp_path).post("/poses", json={"paths": asked}).json()
+    assert list(body["poses"]) == asked
+    assert [body["poses"][p] is None for p in asked] == [False, True, False, True]
+
+
+def test_the_batch_is_bounded_and_the_refusal_is_the_schemas_own(tmp_path):
+    """1024, stated in surface.md. The bound is a pydantic constraint so the
+    refusal is a 422 in the same shape a malformed path already gets — this
+    route invents no error of its own — and so the response dict is bounded
+    by the request rather than by the collection."""
+    from src.api import POSES_MAX
+    assert POSES_MAX == 1024, "surface.md states the number; change both"
+    client = client_of(tmp_path)
+    at = client.post("/poses", json={"paths": ["a/one.stl"] * POSES_MAX})
+    over = client.post("/poses", json={"paths": ["a/one.stl"] * (POSES_MAX + 1)})
+    assert (at.status_code, over.status_code) == (200, 422)
+
+
+def test_poses_never_touches_the_gpu_lock(tmp_path):
+    """A store lookup: no text forward, so nothing to serialise. If this ever
+    took the lock a listing's batch could queue behind a query, which is the
+    cost the whole no-GPU framing in surface.md promises it cannot pay."""
+    client, state, _ = serve(tmp_path)
+    state.embed = lambda *a, **k: pytest.fail("/poses embedded something")
+    held = []
+
+    class Watching:
+        def __enter__(self): held.append(1)
+        def __exit__(self, *a): pass
+
+    state.gpu = Watching()
+    assert client.post("/poses", json={"paths": ["a/one.stl"]}).status_code == 200
+    assert held == []
 
 
 # --- /reload ----------------------------------------------------------------
@@ -625,6 +713,8 @@ class CountingState(ServerState):
     pytest.param(lambda cl: cl.post("/query", json={"text": "x"}), id="query"),
     pytest.param(lambda cl: cl.post("/similar", json={"path": "a/one.stl"}),
                  id="similar"),
+    pytest.param(lambda cl: cl.post("/poses", json={"paths": ["a/one.stl"]}),
+                 id="poses"),
     pytest.param(lambda cl: cl.post("/reload", json={}), id="reload"),
 ])
 def test_every_handler_binds_the_collection_at_most_once(tmp_path, call):
@@ -662,3 +752,12 @@ def test_every_response_is_json_serialisable_without_numpy_types(tmp_path):
         for hit in payload["results"]:
             assert type(hit["score"]) is float and type(hit["z"]) is float
             assert type(hit["id"]) is str
+    # the same pose block through a different envelope: `up` and
+    # `azimuth_zero` come off numpy and a stringified float would be worse
+    # than a missing one
+    payload = client.post("/poses", json={"paths": ["a/one.stl"]}).json()
+    json.dumps(payload)
+    block = payload["poses"]["a/one.stl"]
+    assert type(block["confidence"]) is float
+    for field in ("up", "azimuth_zero"):
+        assert all(type(x) is float for x in block[field]), field

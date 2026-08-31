@@ -313,6 +313,76 @@ def test_front_out_of_range_for_this_config_is_dropped(tmp_path):
     assert c.pose_of(0)["front"] is None
 
 
+# --- row_of: the batch lookup behind POST /poses ----------------------------
+
+def test_row_of_finds_a_model_by_the_path_a_hit_carries(tmp_path):
+    """The guarantee that makes the join work: a consumer holding a hit's
+    `path` can ask about that model again without normalising anything."""
+    args, root, files = build(tmp_path, ["Kits/Baal/x.stl", "b/two.stl"])
+    c = Collection.load(args)
+    h = c.hit(0, 0.1, 1.0)
+    assert c.row_of(h["path"]) == 0
+    assert c.row_of(h["rel_path"]) == 0          # root-relative too
+
+
+def test_row_of_finds_a_symlink_walked_model_by_its_own_spelling(tmp_path):
+    """Why the lookup is keyed twice. A run walked through a symlink to the
+    library produces files spelled under the link, so that is the absolute
+    `path` every hit carries — and it is lexically under neither the recorded
+    root nor the resolved one. Stripping a root would answer None for the very
+    path this side handed the caller; the root-relative spelling has to keep
+    working alongside it. Same fixture as
+    `test_a_symlinked_input_still_produces_root_relative_paths`."""
+    args, root, _ = build(tmp_path, ["Kits/Baal/x.stl"])
+    link = tmp_path / "link"
+    link.symlink_to(root)
+    c = Collection.load(_replace(args, input=str(link)))
+    h = c.hit(0, 0.1, 1.0)
+    assert h["path"].startswith(str(link))       # the fixture's premise
+    assert c.row_of(h["path"]) == 0
+    assert c.row_of(h["rel_path"]) == 0
+    assert c.row_of(str(root / "Kits" / "Baal" / "x.stl")) == 0
+
+
+def test_row_of_normalises_the_spellings_of_one_path(tmp_path):
+    args, root, _ = build(tmp_path, ["a/one.stl"])
+    c = Collection.load(args)
+    for spelling in ("a/one.stl", "./a/one.stl", "a//one.stl", "a/b/../one.stl",
+                     str(root / "a" / "one.stl"), str(root) + "//a/./one.stl"):
+        assert c.row_of(spelling) == 0, spelling
+
+
+@pytest.mark.parametrize("path", [
+    "a/nowhere.stl",                    # never walked
+    "a",                                # a directory, not a model
+    "/etc/passwd",                      # outside the collection
+    "a/pack.zip!/inner.stl",            # a zip virtual path
+    "",                                 # nothing at all
+    "a/\x00one.stl",                    # a null from the wire
+])
+def test_row_of_answers_none_where_resolve_would_raise(tmp_path, path):
+    """`resolve`'s three ScopeErrors are the wrong shape for a batch: one
+    unaddressable member must not cost the rest of the request its answer, so
+    everything this index does not hold is None rather than an exception."""
+    args, *_ = build(tmp_path, ["a/one.stl"])
+    c = Collection.load(args)
+    assert c.row_of(path) is None
+
+
+def test_a_full_batch_of_lookups_touches_the_filesystem_not_at_all(tmp_path):
+    """The bound on `POST /poses` is 1024 paths, and the whole design rests on
+    that costing no I/O: a realpath per path would be ~1024 * depth `lstat`s
+    on a volume that may be an HDD, which is exactly the storage-proportional
+    request cost this module refuses (module docstring). Asserted as a budget
+    rather than as the absence of named calls — that is what let `hit`'s nine
+    lstats per result through once."""
+    args, root, _ = build(tmp_path, ["a/one.stl", "b/two.stl"])
+    c = Collection.load(args)
+    batch = ([str(root / "a" / "one.stl"), "b/two.stl", "b/missing.stl"] * 342)[:1024]
+    calls = count_syscalls(lambda: [c.row_of(p) for p in batch])
+    assert sum(calls.values()) == 0, dict(calls)
+
+
 # --- hit --------------------------------------------------------------------
 
 def test_hit_has_the_documented_shape(tmp_path):

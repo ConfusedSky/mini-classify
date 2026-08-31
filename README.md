@@ -67,12 +67,17 @@ refusal until you do:
 It answers `/status` immediately with `ready: false` and serves queries once
 SigLIP is resident (16.0 s measured against `embed-cache2`, 2801 models,
 SigLIP on the 4060 — the model load is nearly all of it; LEARNINGS,
-2026-08-19); `/query` and `/similar` return 503 in between, so a consumer can
-tell warming from not-running.
+2026-08-19); `/query`, `/similar` and `/poses` return 503 in between, so a
+consumer can tell warming from not-running.
 
-Four routes over the same code the REPL uses — `GET /status`, `POST /query`,
-`POST /similar`, `POST /reload`. It is loopback-only and unauthenticated by
+Five routes over the same code the REPL uses — `GET /status`, `POST /query`,
+`POST /similar`, `POST /poses`, `POST /reload`. It is loopback-only and unauthenticated by
 design: the intended caller is another local service, not a browser.
+
+`/poses` is the one that carries no search: paths in, the same pose block a
+hit carries out (`null` for anything this index has not walked), so a consumer
+listing a directory can orient models it never searched for. It is a lookup in
+the pose cache — no GPU, no lock.
 
 `/query` takes a `path` to search within, and reports what it could not cover
 — a directory that exists but has never been classified answers `200` with
