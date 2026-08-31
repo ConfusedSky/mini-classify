@@ -106,6 +106,10 @@ def feed(poser, win=0, geo=GEO_CONFIDENT, index=7, n_az=2, file=F):
 ESCALATE = dict(backend="gemini", margin_threshold=5.0,   # everything parks;
                 ask=lambda tiles: None)                   # never really called
 
+# what ESCALATE's backend and the per-backend default model make of
+# `pose.arbiter_id` — the stamp every judgment under ESCALATE carries
+GEMINI_ID = pose.arbiter_id("gemini", None)
+
 
 # --- on_tiles ---------------------------------------------------------------
 
@@ -372,15 +376,28 @@ def test_arbitrated_round_trips_as_four_states_on_disk(tmp_path):
     assert mk(arbitrated="rejected").to_cache()["arbitrated"] == "rejected"
     assert "arbitrated" not in mk().to_cache()          # no claim
 
+    # `arbiter` — who judged (2026-08-31) — rides with the two settled states
+    # and only those. A stamp on a `false` record would name a judge for a
+    # judgment that never happened, and the next --repose run would compare
+    # against it and skip an entry that is still owed a call.
+    assert mk(arbitrated=True, arbiter=GEMINI_ID).to_cache()["arbiter"] == GEMINI_ID
+    assert mk(arbitrated="rejected", arbiter=GEMINI_ID).to_cache()["arbiter"] \
+        == GEMINI_ID
+    assert "arbiter" not in mk(arbitrated=False, arbiter=GEMINI_ID).to_cache()
+    assert "arbiter" not in mk(arbiter=GEMINI_ID).to_cache()
+    assert "arbiter" not in mk(arbitrated=True).to_cache()   # judged, judge unknown
+
     cache = {f"model-{i}|0|0": mk(**kw).to_cache() for i, kw in enumerate(
-        [{"arbitrated": True}, {"arbitrated": False},
-         {"arbitrated": "rejected"}, {}])}
+        [{"arbitrated": True, "arbiter": GEMINI_ID}, {"arbitrated": False},
+         {"arbitrated": "rejected", "arbiter": GEMINI_ID}, {}])}
     pose.save_pose_cache(tmp_path, cache)
     loaded = pose.load_pose_cache(tmp_path)
     assert [e.get("arbitrated") for e in loaded.values()] == \
         [True, False, "rejected", None]
     assert [pose.Pose.from_cache(e).arbitrated for e in loaded.values()] == \
         [True, False, "rejected", None]
+    assert [pose.Pose.from_cache(e).arbiter for e in loaded.values()] == \
+        [GEMINI_ID, None, GEMINI_ID, None]
 
     # a legacy entry has no such key. It reads as `false` now — absence is no
     # claim, and the gate check is what keeps that affordable — but it must
@@ -388,6 +405,81 @@ def test_arbitrated_round_trips_as_four_states_on_disk(tmp_path):
     legacy = {"up": [0, 0, 1], "confidence": 0.5, "source": "siglip",
               "margin": 0.2, "v": pose.POSE_CACHE_VERSION}
     assert pose.Pose.from_cache(legacy).arbitrated is None
+    # ...and a *judged* entry written before provenance existed is at the
+    # current version with no `arbiter` key, which `from_cache` must read
+    # rather than reject: no version bump came with the field
+    assert pose.Pose.from_cache(dict(legacy, arbitrated=True)).arbiter is None
+
+
+def test_every_judgment_records_who_judged():
+    """`arbiter` is what `--repose` compares: it re-opens a settled entry only
+    when a *different* judge settled it, so the stamp has to land on exactly
+    the records that carry a judgment and nowhere else.
+
+    The park-time and unavailable records carry none — not for want of an id
+    (this Poser has one) but because `false` claims no judgment, and a judge's
+    name on one would tell the next --repose run to skip an entry that is
+    still owed its call."""
+    def fold(result=None, exc=None):
+        poser, done, arb = make_poser(**ESCALATE)
+        feed(poser)
+        # the park-time record (I15's floor), written before the call is even
+        # submitted: gated, unanswered, unattributed
+        assert (done.poses[0][2].arbitrated, done.poses[0][2].arbiter) == \
+            (False, None)
+        if exc is not None:
+            arb.futures[0].set_exception(exc)
+        else:
+            arb.futures[0].set_result(result)
+        poser.poll()
+        return done.poses[-1][2].arbiter
+
+    assert fold(result=3) == GEMINI_ID                          # moved
+    assert fold(result=0) == GEMINI_ID                          # confirmed
+    assert fold(exc=pose.VLMRejected("HTTP 400")) == GEMINI_ID  # judged
+    assert fold(exc=pose.VLMUnavailable("HTTP 502")) is None    # never judged
+    assert fold(exc=RuntimeError("HTTP 418")) is None
+    assert fold(result=None) is None            # unparseable: still owed a call
+
+    # the model half is the config's, not the backend's default: two gemini
+    # runs on different models are different judges, and --repose says so
+    poser, done, arb = make_poser(**{**ESCALATE, "model": "gemini-3.5-pro"})
+    feed(poser)
+    arb.futures[0].set_result(0)
+    poser.poll()
+    assert done.poses[-1][2].arbiter == "gemini/gemini-3.5-pro"
+
+    # a run that never escalates makes no claim and names no judge
+    poser, done, _ = make_poser()
+    feed(poser)
+    assert (done.poses[-1][2].arbitrated, done.poses[-1][2].arbiter) == (None, None)
+
+    # `ask` with no backend is the fake path, and the one way a truthy
+    # `arbitrated` can meet a missing id. A judgment with no recorded judge is
+    # what that writes — acceptable, and it must not raise
+    poser, _, _ = make_poser(ask=lambda tiles: 0)
+    assert poser._make_pose((0, 0, 1), 0.5, "geometry", 0.2,
+                            arbitrated=True).arbiter is None
+
+
+def test_a_fold_stamps_this_run_so_the_re_route_cannot_loop():
+    """W1's shape under `--repose`. The driver re-routes a just-folded pose
+    with `settled=True`, which short-circuits the sufficiency check — but
+    `--repose` must not be relying on that to converge. It does not: the fold
+    records THIS run's arbiter, so the entry the re-route reads is a
+    same-arbiter entry and sufficient on its own terms."""
+    poser, done, arb = make_poser(**ESCALATE)
+    feed(poser)
+    arb.futures[0].set_result(3)               # the arbiter moves the pose
+    poser.poll()
+    entry = done.poses[-1][2].to_cache()       # through the production writer
+    assert entry["arbiter"] == GEMINI_ID
+    assert pose.pose_is_sufficient(entry, True, 5.0, repose_arbiter=GEMINI_ID)
+    # ...while a different judge re-opens that very same entry — including
+    # this one, which the arbiter MOVED (source == "vlm")
+    assert entry["source"] == "vlm"
+    assert not pose.pose_is_sufficient(entry, True, 5.0,
+                                       repose_arbiter=pose.arbiter_id("glm", None))
 
 
 def test_poll_failed_call_keeps_the_ensemble_pose(capsys):

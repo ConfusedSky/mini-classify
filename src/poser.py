@@ -129,6 +129,12 @@ class Poser:
         self.arbiter = arbiter
         self.record_pose = record_pose
         self.cfg = vlm_cfg
+        # Who this run's judgments are attributable to, stamped on every
+        # arbitrated record so `--repose` can re-open the ones a *different*
+        # arbiter settled. Computed once: it cannot change within a run.
+        # None under the `ask` test seam, which sets no backend — a judgment
+        # with no recorded judge, which the fake path is welcome to write.
+        self._arbiter_id = pose.arbiter_id(vlm_cfg.backend, vlm_cfg.model)
         self._clock = clock            # injection seam: the breaker's window
         # continuation state, written only here — the abort pair owns its
         # emptying — and READ by the driver (P4): quiescence and the M4/N1
@@ -328,6 +334,9 @@ class Poser:
         The `VLMUnavailable` arm is mandatory rather than cosmetic even though
         its record matches the generic arm's: it is where the breaker counts.
 
+        The two settled records also carry `arbiter` — who judged — which is
+        what `--repose` compares against (`_make_pose`).
+
         "A later run", not this one: the driver re-routes the Resolved with
         `settled=True`, so an `arbitrated=False` record cannot re-escalate
         inside the run that just wrote it (review, 2026-08-20).
@@ -416,10 +425,17 @@ class Poser:
     def _make_pose(self, up, ratio, source, margin, arbitrated=None) -> Pose:
         # A fresh entry's shape, matching `Pose.to_cache`: rounded
         # confidence/margin, explicit POSE_CACHE_VERSION (D10)
+        #
+        # The arbiter stamp rides on `arbitrated` being truthy — True or
+        # "rejected", the two states that record a judgment — so it is decided
+        # here once rather than per `_fold` arm, and the park-time and
+        # gate-fired-no-call records (False) and the un-escalated ones (None)
+        # cannot acquire a judge they never had.
         return Pose(up=tuple(float(v) for v in up),
                     confidence=round(float(ratio), 4), source=source,
                     margin=None if margin is None else round(float(margin), 4),
                     arbitrated=arbitrated,
+                    arbiter=self._arbiter_id if arbitrated else None,
                     v=pose.POSE_CACHE_VERSION)
 
     def _vlm_call(self, file: Path, sheet_tiles: list) -> Callable[[], int | None]:

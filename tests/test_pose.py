@@ -826,8 +826,14 @@ def test_margin_gate_escalates_only_the_unsure():
 GATE = pose.MARGIN_THRESHOLD
 
 
-def sufficient(entry, arbiter_available=True, margin_threshold=GATE):
-    return pose.pose_is_sufficient(entry, arbiter_available, margin_threshold)
+def sufficient(entry, arbiter_available=True, margin_threshold=GATE,
+               repose_arbiter=None):
+    return pose.pose_is_sufficient(entry, arbiter_available, margin_threshold,
+                                   repose_arbiter=repose_arbiter)
+
+
+GEMINI = pose.arbiter_id("gemini", None)
+GLM = pose.arbiter_id("glm", None)
 
 
 def test_geometry_only_pose_is_a_miss():
@@ -885,6 +891,70 @@ def test_a_settled_entry_is_never_re_asked():
                                "arbitrated": state})
     # and a vlm answer is sufficient however the flag reads — it moved the pose
     assert sufficient({"source": "vlm", "margin": 0.2, "arbitrated": False})
+
+
+def test_repose_re_opens_only_what_a_different_arbiter_judged():
+    """`--repose` (2026-08-31), per-entry provenance. A run that degraded to
+    GLM answers +3 -> 41/44 where gemini is +4 -> 42/44 (LEARNINGS,
+    2026-08-30); this is how a later gemini run buys that difference for the
+    glm-stamped entries alone, without re-posing the collection."""
+    judged = {"source": "geometry", "margin": 0.2, "arbitrated": True,
+              "arbiter": GLM}
+    assert sufficient(judged)                              # flag off: settled
+    assert sufficient(judged, repose_arbiter=GLM)          # the same judge
+    assert not sufficient(judged, repose_arbiter=GEMINI)   # a different one
+    # the gate is not the question here: an entry far above this run's
+    # threshold is re-judged all the same, because what is being re-opened is
+    # the judgment, not the escalation that bought it
+    assert not sufficient(dict(judged, margin=1.9), repose_arbiter=GEMINI)
+    # and an answer the other arbiter MOVED is the most valuable re-buy of
+    # all, so `source == "vlm"` must not shortcut past the check
+    assert not sufficient(dict(judged, source="vlm"), repose_arbiter=GEMINI)
+
+
+def test_repose_re_arbitrates_and_does_not_re_pose():
+    """It re-opens judgments; a geometry or ensemble answer nobody judged is
+    exactly as sufficient as it was. `false` and absent keep the gate rules
+    above and gain nothing from this flag."""
+    for unjudged in ({"source": "siglip", "margin": 0.61},
+                     {"source": "siglip", "margin": 0.61, "arbitrated": False}):
+        assert sufficient(unjudged, repose_arbiter=GEMINI)
+
+
+def test_repose_re_opens_a_rejection_only_under_a_different_judge():
+    """The correction `--repose` carries: `"rejected"` is one API's verdict on
+    one request, not a fact about the model — GLM refusing a sheet says
+    nothing about whether gemini will. Under the *same* arbiter it stays as
+    permanent as it has always been, and the equality check is what holds
+    that line."""
+    rejected = {"source": "geometry", "margin": 0.2, "arbitrated": "rejected",
+                "arbiter": GLM}
+    assert sufficient(rejected)                             # flag off
+    assert sufficient(rejected, repose_arbiter=GLM)         # same judge: final
+    assert not sufficient(rejected, repose_arbiter=GEMINI)  # another may answer
+
+
+def test_repose_backfills_the_judgments_written_before_provenance():
+    """`arbiter` shipped without a POSE_CACHE_VERSION bump — the same
+    write-through introduction `arbitrated` had — so every judgment written
+    before 2026-08-31 has the key absent. `None != <this run's id>` makes each
+    one a miss, which is the backfill: they are re-bought once, and carry a
+    stamp afterwards."""
+    for state in (True, "rejected"):
+        legacy = {"source": "geometry", "margin": 0.2, "arbitrated": state}
+        assert sufficient(legacy)                             # flag off
+        assert not sufficient(legacy, repose_arbiter=GEMINI)  # once, then done
+
+
+def test_repose_still_needs_an_arbiter_to_re_judge_with():
+    """C3 again: a run that cannot escalate must not re-render. Without this
+    guard a `--repose` run whose arbiter probe failed would re-pose every
+    judged entry and re-record it under no judge at all — the laundering bug
+    with a flag on it. (`main` refuses the combination outright; the function
+    holds the line anyway, because the breaker can revoke an arbiter mid-run.)"""
+    judged = {"source": "geometry", "margin": 0.2, "arbitrated": True,
+              "arbiter": GLM}
+    assert sufficient(judged, arbiter_available=False, repose_arbiter=GEMINI)
 
 
 def test_no_entry_is_never_sufficient():

@@ -369,6 +369,8 @@ class Pose:
                                    # (`bool("rejected") is True` collapsed the
                                    # schema on disk while every in-memory test
                                    # passed — review 2, 2026-08-21)
+    arbiter: str | None = None     # WHICH judge answered (2026-08-31), as one
+                                   # string, `pose.arbiter_id`
     front_view: dict[str, int] = field(default_factory=dict)   # view_cfg -> index
 
     @classmethod
@@ -402,6 +404,28 @@ class Pose:
   `source` for anything but `== "vlm"` and the CSV column, so it does not
   crash a run — it just reports the name it was written with. The names above
   are what this project means; the map was only for the transition.
+* **`arbiter` is per-entry provenance for the two settled states** (2026-08-31,
+  the `--repose` flag). `f"{backend}/{model}"` — `"gemini/gemini-3.5-flash"`,
+  `"glm/z-ai/glm-5.3-flash"` — built by `pose.arbiter_id` so the Poser's stamp
+  and the CLI's comparison value cannot drift; the model half may contain its
+  own `/`, which needs no escaping because the string is only ever compared
+  whole. `to_cache` writes the key **only** when `arbitrated` is `true` or
+  `"rejected"`: an arbiter is the record of a judgment, and `false`/absent
+  carry none to attribute. It shipped with **no `POSE_CACHE_VERSION` bump** —
+  written through, ignored by older readers, the same introduction `arbitrated`
+  itself had — so an entry judged before it exists is at the current version
+  with the key absent, and `from_cache` reads it with `.get`. Its one reader is
+  `--repose`: `pose_is_sufficient(..., repose_arbiter=<this run's id>)` makes a
+  settled entry a **miss** when `entry.get("arbiter") != repose_arbiter`, on the
+  `arbitrated` field alone and regardless of the entry's margin against today's
+  gate — a judgment is being re-judged, not an escalation re-checked. Three
+  consequences worth stating: `"rejected"` re-opens under a *different* judge
+  (a rejection is one API's verdict on one request, not a fact about the model)
+  and stays permanent under the same one; an unstamped judgment compares as
+  `None != <id>` and so is re-bought exactly once, which is the backfill path
+  for pre-provenance caches; and the whole check is gated on
+  `arbiter_available`, the same C3 doctrine that keeps a degraded run from
+  re-rendering what it cannot re-judge.
 * **The freeze is shallow, and `Pose` is unhashable** (R4): `front_view` is a
   dict, so `hash(pose)` raises and mutation through the field is still
   possible. Nothing may key on a `Pose`; `index` is the identity, everywhere.
@@ -426,7 +450,11 @@ class Pose:
   one, the *arbiter's*, plus this run's gate. Neither new parameter has a
   default, deliberately: the `Resolved.pose_changed` precedent, since a
   default silently un-pins the W1 regression test and every caller breaking
-  loudly is the point. See docs/archive/tri-state-pass-2.md §C4, 2026-08-21.)
+  loudly is the point. See docs/archive/tri-state-pass-2.md §C4, 2026-08-21.
+  Since 2026-08-31 there is a fourth, `*, repose_arbiter=None` — keyword-only
+  and defaulted, unlike the other two, because it is a flag nobody is obliged
+  to pass: `route` reads it as `getattr(ctx.args, "repose_arbiter", None)` so
+  every namespace built before `--repose` existed still means "off".)
 * **`pose_is_sufficient` stays a module function over the raw entry
   `dict | None`** (D11, corrected 2026-08-17 — B's review proved the
   earlier `Pose | None` wording wrong: the store holds what

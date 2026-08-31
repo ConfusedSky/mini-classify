@@ -84,8 +84,12 @@ def route(f: Path, index: int, ctx: CacheContext, pose_changed: bool = False,
         # insufficient and is upgraded in place. The availability flag
         # `pose_is_sufficient` takes is a different one: the *arbiter's*, plus
         # this run's gate (docs/archive/tri-state-pass-2.md, 2026-08-21).
+        # `repose_arbiter` via getattr: it is `main`'s, set on the namespace
+        # only when --repose is given, and every other namespace that reaches
+        # here — the tools', the tests' — predates the flag and means "off".
         if entry is None or not (settled or pose.pose_is_sufficient(
-                entry, arbiter_available, args.up_margin)):
+                entry, arbiter_available, args.up_margin,
+                repose_arbiter=getattr(args, "repose_arbiter", None))):
             return PoseRenderTask(file=f, index=index)
         resolved = pose.Pose.from_cache(entry)
 

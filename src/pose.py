@@ -76,6 +76,11 @@ class Pose:
                                     # string enum would force load-time mapping
                                     # of every true/false written since
                                     # 2026-08-19 for no semantic gain.
+    arbiter: str | None = None      # which judge answered: "backend/model"
+                                    # (`arbiter_id`). Only ever compared as a
+                                    # whole string, so the model half being an
+                                    # OpenRouter org/model id — a second "/" —
+                                    # needs no escaping and no parsing.
     front_view: dict[str, int] = field(default_factory=dict)   # view_cfg -> index
 
     @classmethod
@@ -92,13 +97,19 @@ class Pose:
         `margin` as a miss and re-resolves the model instead.
 
         `arbitrated` absent is not a legacy shape but a live state: no claim,
-        read as `false` (see `to_cache`)."""
+        read as `false` (see `to_cache`). `arbiter` is `.get` for the same
+        reason and one more: it was introduced without a version bump
+        (2026-08-31), so an entry written before it is at the *current*
+        version and absent — legal, not a shape the rebuild deleted. The
+        plain-constructor doctrine above forbids absorbing dead shapes, not
+        reading a field the live schema makes optional."""
         return cls(up=tuple(float(x) for x in d["up"]),
                    confidence=float(d.get("confidence", 0.0)),
                    source=d["source"],
                    v=d["v"],
                    margin=d["margin"],
                    arbitrated=d.get("arbitrated"),
+                   arbiter=d.get("arbiter"),
                    front_view=dict(d.get("front_view", {})))
 
     def to_cache(self):
@@ -132,7 +143,15 @@ class Pose:
 
         The string passes through rather than being coerced: `bool("rejected")
         is True`, which collapsed the schema to three states on disk while
-        every in-memory test passed (review 2 blocker B1)."""
+        every in-memory test passed (review 2 blocker B1).
+
+        `arbiter` — "backend/model", `arbiter_id` — rides along with the two
+        settled states and **only** those: it is the record of who judged, and
+        `false`/absent carry no judgment to attribute. Written through with no
+        `POSE_CACHE_VERSION` bump, the way `arbitrated` itself was introduced
+        (docs/archive/tri-state-pass-2.md): older readers ignore the key, and a
+        bump would instead wipe every one of the four states it annotates.
+        `--repose` is its one reader — see `pose_is_sufficient`."""
         d = {"up": [float(x) for x in self.up],
              "confidence": self.confidence,
              "source": self.source,
@@ -141,6 +160,8 @@ class Pose:
         if self.arbitrated is not None:
             d["arbitrated"] = (self.arbitrated if isinstance(self.arbitrated, str)
                                else bool(self.arbitrated))
+        if self.arbiter and self.arbitrated in (True, "rejected"):
+            d["arbiter"] = self.arbiter
         if self.front_view:
             d["front_view"] = dict(self.front_view)
         return d
@@ -268,7 +289,8 @@ def save_pose_cache(cache_dir, cache):
     p.write_text(json.dumps(cache))
 
 
-def pose_is_sufficient(entry, arbiter_available, margin_threshold):
+def pose_is_sufficient(entry, arbiter_available, margin_threshold,
+                       *, repose_arbiter=None):
     """Is this cached pose good enough for the current run, or a miss?
 
     `margin` is None exactly when the SigLIP ensemble did not run — a
@@ -298,8 +320,38 @@ def pose_is_sufficient(entry, arbiter_available, margin_threshold):
     with no gate and erase the marker, and production runs `off`.
     `margin_threshold` is this run's gate: an entry whose margin clears it is
     not owed a call at all, so a threshold change cannot launder markers
-    either."""
+    either.
+
+    `repose_arbiter` (`--repose`, 2026-08-31) is the run's own `arbiter_id`,
+    and the one thing that re-opens a *settled* entry: a judgment recorded by
+    a different judge is a miss, so the model re-poses and re-escalates to
+    this run's arbiter. It fires on the `arbitrated` field alone, whatever the
+    entry's margin does against today's gate — the point is re-judging a
+    judgment, not re-checking the gate that bought it. Three notes:
+
+    * it deliberately re-opens `"rejected"` too. A rejection is one API's
+      verdict on one request, not a fact about the model: GLM refusing a sheet
+      says nothing about whether gemini will. Under the *same* arbiter
+      `"rejected"` stays as permanent as it has always been — the equality
+      check is what makes that hold.
+    * an entry with `arbitrated` truthy and no `arbiter` key compares as
+      `None != repose_arbiter` and so is a miss. That is the deliberate
+      backfill path: every judgment written before provenance existed gets
+      re-bought once, by the first `--repose` run, and carries a stamp
+      afterwards.
+    * the `arbiter_available` guard is the same C3 doctrine as above — a
+      degraded run must not re-render entries it cannot re-judge. Without it,
+      `--repose` on a run whose arbiter probe failed would re-pose the
+      collection and re-record it under no judge at all."""
     if entry is None:
+        return False
+    if (repose_arbiter is not None and arbiter_available
+            and entry.get("arbitrated") in (True, "rejected")
+            and entry.get("arbiter") != repose_arbiter):
+        # Above the `source == "vlm"` hit deliberately: an answer a *different*
+        # arbiter MOVED is the most valuable thing --repose re-buys, since the
+        # measured backends disagree (glm +3 -> 41/44 where gemini is +4 ->
+        # 42/44, LEARNINGS 2026-08-30) exactly on the poses one of them moved.
         return False
     if entry["source"] == "vlm":
         return True
@@ -1049,6 +1101,20 @@ def _ask_glm(tile_pngs, n_tiles, model):
 
 DEFAULT_VLM_MODELS = {"ollama": "gemma4:26b", "gemini": GEMINI_MODEL,
                       "glm": GLM_MODEL, "claude": None}
+
+
+def arbiter_id(backend, model):
+    """Who judged, as one string: `"gemini/gemini-3.5-flash"`,
+    `"glm/z-ai/glm-5.3-flash"`. None when there is no arbiter at all.
+
+    One function because two callers must produce byte-identical strings or
+    `--repose` re-poses the whole collection every run: `poser.Poser` stamps
+    what it writes, `classify_stls.main` computes what to compare against.
+    The model half can itself contain "/" (OpenRouter ids are org/model) and
+    can be None (the claude backend has no model id) — neither matters,
+    because nothing ever splits this string; the only operation on it is
+    whole-string equality."""
+    return f"{backend}/{model or DEFAULT_VLM_MODELS.get(backend)}" if backend else None
 
 
 def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None,

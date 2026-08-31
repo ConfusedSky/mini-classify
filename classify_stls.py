@@ -297,6 +297,18 @@ def main():
     parser.add_argument("--gemini-project", default=None,
                         help="GCP project for --pose-vlm gemini (default: "
                              "$GOOGLE_CLOUD_PROJECT or `gcloud config get-value project`)")
+    parser.add_argument("--repose", action="store_true",
+                        help="re-arbitrate cached poses whose recorded arbiter "
+                             "differs from this run's. Provenance-selective: it "
+                             "re-buys only entries a *different* backend/model "
+                             "judged (and entries judged before provenance was "
+                             "recorded), not geometry or ensemble answers — a run "
+                             "that degraded to GLM (+3 -> 41/44) can be re-judged "
+                             "by gemini (+4 -> 42/44) without re-posing the "
+                             "collection. Flag-gated on purpose: doing this on "
+                             "every run would make two backends re-buy each "
+                             "other's entries forever whenever `auto` degrades. "
+                             "To re-pose everything instead, delete pose-cache.json")
     parser.add_argument("--embed-batch", type=int, default=0,
                         help="images per SigLIP call (0 = the whole view list at once). "
                              "Raise to keep the GPU busier on long lists; lower if "
@@ -384,6 +396,21 @@ def main():
     from src.poser import Poser, VlmConfig
 
     vlm_backend = resolve_pose_vlm(args)
+    # --repose's comparison value, on the namespace because `route` reads the
+    # run's flags through `CacheContext.args` and nothing else crosses. It must
+    # be built the same way the Poser builds its stamp, which is why both go
+    # through `pose.arbiter_id` — and after `resolve_pose_vlm`, which is where
+    # an `auto` degrade settles both the backend and the model pin.
+    if args.repose and vlm_backend is None:
+        raise SystemExit(
+            "--repose needs an arbiter — it exists to re-judge, and this run "
+            "has none (--pose-vlm off, or auto found neither gcloud nor an "
+            "OpenRouter key)")
+    args.repose_arbiter = (pose.arbiter_id(vlm_backend, args.pose_vlm_model)
+                           if args.repose else None)
+    if args.repose:
+        print(f"--repose: re-arbitrating cached poses not judged by "
+              f"{args.repose_arbiter}")
     print(f"loading {args.model} ...")
     with stage("model-load"):
         # the Embedder is the only owner of torch models: the fp16 load, the

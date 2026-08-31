@@ -202,3 +202,28 @@ def test_explicit_gemini_still_fails_at_startup(tmp_path):
     assert "--pose-vlm gemini:" in out.stderr
     assert "continue without the arbiter" not in out.stdout + out.stderr
     assert "loading" not in out.stdout
+
+
+def test_repose_without_an_arbiter_stops_and_names_the_problem(tmp_path):
+    """`--repose` exists to re-judge cached judgments, so a run with nothing
+    to judge with is a typo rather than a no-op. Ignoring it silently would
+    report success while leaving every entry the wrong arbiter answered
+    exactly as it was — which is the whole thing the flag was asked for."""
+    out = run_piped(tmp_path, "--pose-vlm", "off", "--repose")
+    assert out.returncode != 0
+    assert "--repose needs an arbiter" in out.stderr
+    assert "--pose-vlm off" in out.stderr        # and which choice caused it
+    assert "loading" not in out.stdout           # stopped before SigLIP
+
+
+def test_repose_with_an_arbiter_announces_the_judge_it_will_compare_against(tmp_path):
+    """The comparison value is the run's whole `backend/model` string, and a
+    reader has to be able to see which one it is: two gemini runs on different
+    models re-buy each other's entries, and that is only obvious if the run
+    says whose judgments it is keeping."""
+    key = tmp_path / "or-key"
+    key.write_text("sk-or-not-a-real-key\n")
+    out = run_piped(tmp_path, "--pose-vlm", "glm", "--repose", or_key=key)
+    assert "--repose: re-arbitrating cached poses not judged by " \
+        "glm/z-ai/glm-5.3-flash" in out.stdout
+    assert "loading no-such-org/no-such-model" in out.stdout
