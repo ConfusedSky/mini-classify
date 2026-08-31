@@ -429,9 +429,13 @@ def load_run_params(cache_dir):
 
 
 def save_run_params(args):
-    """Record this run's parameters next to the cache it just wrote. Kept with
-    the cache rather than in a committed config so the description cannot drift
+    """Record this run's parameters next to the cache they key. Kept with the
+    cache rather than in a committed config so the description cannot drift
     from what the embeddings actually are.
+
+    Called at startup, before the run writes an entry: every key here is
+    settled by argument parsing, and a cache whose run died mid-pass still has
+    to say what its .npy files are keyed under (see `classify_stls.main`).
 
     Only `classify_stls.py` calls this — every other tool reads. It lives here
     anyway, with the readers: the three things a writer and a reader must agree

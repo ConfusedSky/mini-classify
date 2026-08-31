@@ -391,6 +391,20 @@ def main():
           f"{', '.join(f'{e:g}' for e in args.elevations)} degrees")
     categories = [l.strip() for l in open(args.categories) if l.strip()]
 
+    # The manifest before the model load, not after the run: an OOM or a
+    # kill -9 inside Embedder construction must still leave a cache that says
+    # what its .npy files are keyed under. Written at exit it did not, and a
+    # cache being filled by a live run — or by one that was killed — held real
+    # entries under keys no reader could reconstruct, so every tool fell back
+    # to parser defaults (--model, --views), missed every key, and reported a
+    # half-built cache as unusable (hit live, 2026-08-31). Every
+    # RUN_PARAMS_KEYS value is settled by argparse plus `collection_root`
+    # above and none of them changes during the run, so this writes the bytes
+    # the exit-time write did. Last before the run commits to work, and after
+    # the checks above, so a typo'd empty directory or an unreadable
+    # --categories still exits without overwriting a good manifest.
+    save_run_params(args)
+
     # Every import below is deferred, and for one reason: src.done, src.embedder
     # and src.poser own torch, this module is re-imported by the spawned render
     # child (module docstring), and none of this runs there.
@@ -500,17 +514,13 @@ def main():
         # totals back on EndOfInput (F-7); without this the flag reports only
         # what the parent does, which since the refactor is mostly waiting
         instrument_path=args.instrument))
-    try:
-        driver.run(DriverConfig(
-            # the bar advances on admission, so it runs at most WINDOW files
-            # ahead of what has actually retired
-            walker=tqdm(files, desc="classifying"), ctx=ctx,
-            tasks=tasks, results=results, child=child, poser=poser,
-            embedder=embedder, done=done, arbiter=arbiter,
-            skip_embed=args.skip_embed))
-    finally:
-        # still describes the cache a partial pass partly filled
-        save_run_params(args)
+    driver.run(DriverConfig(
+        # the bar advances on admission, so it runs at most WINDOW files
+        # ahead of what has actually retired
+        walker=tqdm(files, desc="classifying"), ctx=ctx,
+        tasks=tasks, results=results, child=child, poser=poser,
+        embedder=embedder, done=done, arbiter=arbiter,
+        skip_embed=args.skip_embed))
     errors = sum(1 for r in done.rows.values() if isinstance(r, Failure))
     print(f"wrote {args.out} ({len(done.rows)} rows"
           + (f", {errors} of them render errors" if errors else "") + ")")
