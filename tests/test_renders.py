@@ -23,15 +23,22 @@ def args(render_size=2048, views=8, elevations=(20.0, -20.0)):
                               elevations=list(elevations))
 
 
+# The `-ev2` tail every expectation below carries is `view_config`'s embed
+# version (identity.EMBED_CACHE_VERSION 2, the tight per-view framing of
+# 2026-08-31). It is the point of the token, not noise: renders drawn under a
+# new framing must not land in the directory holding the old ones, which is the
+# same claim `test_subdir_separates_configs_that_share_filenames` makes about
+# camera angles.
+
 def test_subdir_names_the_camera_config():
-    assert render_subdir(args()) == "2048px-8v-e20,-20"
-    assert render_subdir(args(512, 4, [20.0])) == "512px-4v-e20"
+    assert render_subdir(args()) == "2048px-8v-e20,-20-ev2"
+    assert render_subdir(args(512, 4, [20.0])) == "512px-4v-e20-ev2"
 
 
 def test_subdir_formats_elevations_like_the_cache_key():
     # cache_key writes elevations as f"{e:g}" — the two must never disagree
     # about what one config is, or a config change silently reuses a directory
-    assert render_subdir(args(512, 4, [20.0, -10.5])) == "512px-4v-e20,-10.5"
+    assert render_subdir(args(512, 4, [20.0, -10.5])) == "512px-4v-e20,-10.5-ev2"
 
 
 def test_subdir_separates_configs_that_share_filenames():
@@ -82,7 +89,7 @@ def test_the_cache_holds_both_derived_directories(tmp_path):
     # wrong cache would show one run's images beside another's embeddings
     assert embeds_dir(tmp_path) == tmp_path / "embeds"
     assert renders_dir(tmp_path, args(384, 8, [20.0, -20.0])) == \
-        tmp_path / "renders" / "384px-8v-e20,-20"
+        tmp_path / "renders" / "384px-8v-e20,-20-ev2"
 
 
 def test_a_camera_config_change_is_a_different_render_directory(tmp_path):

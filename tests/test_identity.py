@@ -1,10 +1,11 @@
 import argparse
+import hashlib
 import os
 
 from src import identity
 from src import pose
 from src.cachedir import cache_key
-from src.identity import render_key
+from src.identity import cache_key_from_identity, render_key
 
 
 def args(**kw):
@@ -177,3 +178,41 @@ def test_growing_upward_only_needs_a_prefix_on_the_old_keys(tmp_path):
     f = collection(kit, "Kit/model.stl")
     assert identity.rel_path(f, lib.resolve()) == \
         "Loot Studios/" + identity.rel_path(f, kit.resolve())
+
+
+# --- EMBED_CACHE_VERSION: the elision, and what version 2 says ---------------
+
+def test_the_version_token_is_invisible_at_1_and_visible_otherwise(tmp_path, monkeypatch):
+    """The elision is what lets a bump exist at all: every key written before
+    `|evN` was invented must keep hashing the same, so version 1 appends
+    nothing and every other version appends something distinct."""
+    root = tmp_path / "STL"
+    f = collection(root)
+    keys = {}
+    for v in (1, 2, 3):
+        monkeypatch.setattr(identity, "EMBED_CACHE_VERSION", v)
+        keys[v] = cache_key(f, args(), "auto", root)
+    assert len({*keys.values()}) == 3
+
+    # and version 1 is byte-identical to the pre-`|evN` format itself, spelled
+    # out here because that literal *is* the promise — the caches it protects
+    # cannot be regenerated to match a drifted one
+    ident = pose.file_identity(f, root)
+    a = args()
+    raw = f"{ident}|{a.views}|{a.render_size}|auto|{a.model}|pv|e:20,-20"
+    assert keys[1] == hashlib.sha1(raw.encode()).hexdigest()
+
+
+def test_tight_framing_ships_as_version_2(tmp_path):
+    """The bump is the change: `renderer.views` fits each camera to the mesh's
+    projected vertices (LEARNINGS 2026-08-29), which moves every
+    classification-view pixel under a key that hashes no part of the framing.
+    Version 2 is what stops the new pixels landing in the old entries."""
+    assert identity.EMBED_CACHE_VERSION == 2
+    root = tmp_path / "STL"
+    f = collection(root)
+    a = args()
+    ident = pose.file_identity(f, root)
+    raw = f"{ident}|{a.views}|{a.render_size}|auto|{a.model}|pv|e:20,-20|ev2"
+    assert cache_key_from_identity(ident, a, "auto") == \
+        hashlib.sha1(raw.encode()).hexdigest()

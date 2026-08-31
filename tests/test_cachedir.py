@@ -7,6 +7,7 @@ here is the idiom itself, because both hand-rolled copies of it got half
 wrong: a fixed `.tmp` name that two concurrent writers tore, and no unlink on
 a failed replace (review, 2026-08-20).
 """
+import argparse
 import json
 import os
 from pathlib import Path
@@ -14,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from src import cachedir
-from src.cachedir import cache_version, write_atomic
+from src.cachedir import cache_version, view_config, write_atomic
 
 
 def test_write_atomic_publishes_and_leaves_no_tmp(tmp_path):
@@ -86,3 +87,30 @@ def test_cache_version_with_caching_disabled_reads_nothing(tmp_path, monkeypatch
         json.dumps({"cache_version": 7}))
     assert cache_version("") == 0
     assert cache_version(None) == 0
+
+
+# --- view_config: the front_view token, and its version suffix ---------------
+
+def cfg_args(views=8, elevations=(20.0, -20.0)):
+    return argparse.Namespace(views=views, elevations=list(elevations))
+
+
+def test_view_config_carries_the_embed_version_the_key_does(monkeypatch):
+    """`front_view` is an index resolved from view *embeddings*, so a change
+    that moves every view's pixels invalidates it exactly as it invalidates the
+    embedding — the two tokens have to bump together or the pose cache starts
+    naming the hero view of a framing nothing renders any more.
+
+    Same elision as the embedding key: nothing at version 1, so every
+    front_view entry already on disk keeps its meaning."""
+    monkeypatch.setattr(cachedir.identity, "EMBED_CACHE_VERSION", 1)
+    assert view_config(cfg_args()) == "8v-e20,-20"
+    monkeypatch.setattr(cachedir.identity, "EMBED_CACHE_VERSION", 2)
+    assert view_config(cfg_args()) == "8v-e20,-20-ev2"
+
+
+def test_the_shipped_view_config_says_version_2():
+    # the tight-framing bump (identity.EMBED_CACHE_VERSION 2, 2026-08-31): the
+    # old entry is simply absent under the new token, and Done._score
+    # recomputes the index from embeddings it already holds — no render
+    assert view_config(cfg_args()) == "8v-e20,-20-ev2"

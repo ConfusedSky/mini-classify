@@ -35,7 +35,10 @@ Hard constraints this module is built around (CLAUDE.md):
   the path exactly. Its *framing* is exact — resolved ups are the six signed
   axis candidates (pose.UP_CANDIDATES), and a signed axis permutation maps
   the AABB to the permuted box, so the rotated centre is `R @ center` with
-  the radius unchanged.
+  the radius unchanged. It also keeps the fixed 1.4x extent-norm radius that
+  `views` gave up for a per-view tight fit (`tight_view_cams`, 2026-08-31):
+  one radius across all six candidates is what lets them share an upload, and
+  pose accuracy measures insensitive to framing where classification does not.
 
 Rendering extraction source: `classify_stls.py` (make_renderer, orbit_camera,
 view_angles, render_up_candidate_grid's camera trick, save_renders,
@@ -91,6 +94,13 @@ UP_TILE_AZIMUTHS = 2
 # per visit: the copy is never resident — the mesh it was rotated from is.
 ROTATED_NAME = "_rot"
 
+# Above this many vertices `views` fits its cameras to a sample: the fit
+# projects every vertex once per view, and this collection holds meshes in the
+# millions. A sample can only *miss* an extreme, which frames slightly tighter
+# than exact rather than looser — the 5% margin is the tolerance that covers
+# it, and the fixed seed is what makes it the same miss every time.
+TIGHT_FIT_VERTS = 200_000
+
 # Encodings for saved renders. Written and never read back — the classifier
 # always embeds the in-memory render — so a lossy format costs only what a
 # human eye needs. Measured at 2048 px: jpg 0.13 s / 205 KB, png 3.83 s /
@@ -117,6 +127,35 @@ def orbit_camera(center, radius, az, elev):
     # space so shading is consistent with "up" from every orbit angle
     sun = (center - eye) / np.linalg.norm(center - eye) + np.array([0, 0, -0.6])
     return eye, up, sun / np.linalg.norm(sun)
+
+
+def tight_view_cams(verts, center, angles, fov_deg=45.0, margin=1.05):
+    """Per-view camera tuples framed to the mesh's own silhouette.
+
+    One orbit distance per (az, elev): project every vertex into that view's
+    frame and back the camera off until the widest of |x|,|y| just fits the
+    frustum. `fov_deg` must match the FOV `_shoot` passes to `setup_camera` —
+    a fit computed at one FOV and shot at another is not tight, it is wrong in
+    whichever direction the two differ.
+
+    Pure numpy, and `verts` is an array rather than a mesh: the fit is
+    geometry, not rendering, so it is testable without a GPU."""
+    t = np.tan(np.radians(fov_deg / 2))
+    rel = verts - center
+    cams = []
+    for az, elev in angles:
+        eye0, up, _ = orbit_camera(center, 1.0, az, elev)
+        d = eye0 - center                        # unit, center -> eye
+        right = np.cross(-d, up)
+        right /= np.linalg.norm(right)
+        x, y, z = rel @ right, rel @ up, rel @ d
+        # z is depth toward the camera, so the vertex that decides the
+        # distance is the one whose half-extent plus its own depth reaches
+        # furthest — not simply the widest or the nearest.
+        dist = float(np.max(z + np.maximum(np.abs(x), np.abs(y)) / t)) * margin
+        eye, up, sun = orbit_camera(center, dist, az, elev)
+        cams.append((center, eye, up, sun))
+    return cams
 
 
 def rotated_cams(R, center, radius, angles):
@@ -224,6 +263,10 @@ class Renderer:
             rm = ResidentMesh(
                 mesh=lm.mesh,
                 center=np.asarray(bounds.get_center(), dtype=float),
+                # The pose path's framing, and only its: fixed 1.4x extent
+                # norm, deliberately not the tight fit `views` uses. Pose
+                # accuracy was tuned on these pixels and measures insensitive
+                # to framing, so there is nothing to buy and a cache to lose.
                 radius=float(np.linalg.norm(bounds.get_extent()) * 1.4),
                 nbytes=lm.nbytes, in_flight=False)
             self.resident[name] = rm
@@ -323,11 +366,23 @@ class Renderer:
         rot.rotate(pose.rotation_to_z_up(np.asarray(up, dtype=float)),
                    center=(0, 0, 0))
         bounds = rot.get_axis_aligned_bounding_box()        # framing from the
-        center = np.asarray(bounds.get_center(), dtype=float)   # rotated copy,
-        radius = float(np.linalg.norm(bounds.get_extent()) * 1.4)  # as today's
-        angles = pose.view_angles(self.cfg.views, list(self.cfg.elevations))  # path
-        cams = [(center, *orbit_camera(center, radius, az, elev))
-                for az, elev in angles]
+        center = np.asarray(bounds.get_center(), dtype=float)  # rotated copy
+        verts = np.asarray(rot.vertices)
+        if len(verts) > TIGHT_FIT_VERTS:
+            # A fixed seed, not a convenience: renders are reproducible for a
+            # fixed sequence and not otherwise (CLAUDE.md, draw history), and a
+            # varying subsample would move the framing too and put a second
+            # source of drift under the same cache key.
+            verts = verts[np.random.default_rng(0).choice(
+                len(verts), TIGHT_FIT_VERTS, replace=False)]
+        angles = pose.view_angles(self.cfg.views, list(self.cfg.elevations))
+        # Tight per-view fit, not one orbit radius: the mesh's own silhouette
+        # sets each view's distance, so an elongated model is seen close end-on
+        # and far broadside. Worth ~1.7x the pixels on the mesh after SigLIP's
+        # 512 resize against the 1.4x extent-norm orbit this replaced
+        # (LEARNINGS 2026-08-29, the renderer pilot). Every classification-view
+        # pixel changes, which is what identity.EMBED_CACHE_VERSION 2 keys.
+        cams = tight_view_cams(verts, center, angles)
         self._hide_visible()                     # only the copy in the shot
         scene = self._renderer.scene
         scene.add_geometry(ROTATED_NAME, rot, self._material)

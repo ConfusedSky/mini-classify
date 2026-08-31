@@ -14,7 +14,8 @@ from src import pose as pose_mod
 from src import renderer as renderer_mod
 from src.loader import LoadedMesh
 from src.messages import RenderConfig
-from src.renderer import ROTATED_NAME, Renderer, render_key
+from src.renderer import (ROTATED_NAME, TIGHT_FIT_VERTS, Renderer,
+                          render_key, tight_view_cams)
 
 
 class FakeInnerScene:
@@ -52,9 +53,13 @@ class FakeOffscreen:
 
     def __init__(self, log):
         self.scene = FakeScene(log)
+        self.cams = []                       # not in the op log: framing is a
+                                             # separate claim from what the
+                                             # scene was asked to hold
 
     def setup_camera(self, fov, center, eye, up):
-        pass
+        self.cams.append((fov, np.asarray(center), np.asarray(eye),
+                          np.asarray(up)))
 
     def render_to_image(self):
         return np.zeros((4, 4, 3), dtype=np.uint8)
@@ -123,6 +128,150 @@ def test_views_count_is_views_times_elevations(rig):
     views = r.views(lm(), 0, (0.0, 0.0, 1.0))
     assert len(views) == 8 * 2
     assert all(isinstance(v, np.ndarray) for v in views)
+
+
+# --- the tight per-view fit (LEARNINGS 2026-08-29, the renderer pilot) -------
+#
+# Pure numpy against `tight_view_cams`: the fit is geometry, and geometry is
+# the half that can be checked without a GPU. What it buys in pixels is the
+# pilot's measurement, not a unit test's.
+
+FOV = 45.0                                   # what `_shoot` passes setup_camera
+T = np.tan(np.radians(FOV / 2))
+
+
+def cloud(sx, sy, sz, n=2000, seed=1):
+    """A box-shaped vertex cloud, corners included so the extremes are real."""
+    rng = np.random.default_rng(seed)
+    half = np.array([sx, sy, sz], dtype=float) / 2
+    corners = np.array([[a, b, c] for a in (-1, 1) for b in (-1, 1)
+                        for c in (-1, 1)], dtype=float) * half
+    return np.vstack([corners, rng.uniform(-1, 1, (n, 3)) * half])
+
+
+def old_radius(verts):
+    """The framing this replaced: 1.4x the norm of the AABB extent."""
+    return float(np.linalg.norm(verts.max(0) - verts.min(0)) * 1.4)
+
+
+def worst_fill(verts, center, cams, angles):
+    """Largest fraction of the half-frustum any vertex reaches, per view.
+
+    1.0 means a vertex sits exactly on the frame edge; above 1.0 it is cropped.
+    """
+    out = []
+    for (_, eye, up, _), (az, elev) in zip(cams, angles):
+        d = (eye - center) / np.linalg.norm(eye - center)
+        right = np.cross(-d, up)
+        right /= np.linalg.norm(right)
+        rel = verts - center
+        depth = np.linalg.norm(eye - center) - rel @ d      # camera -> vertex
+        half = np.maximum(np.abs(rel @ right), np.abs(rel @ up))
+        out.append(float(np.max(half / (T * depth))))
+    return out
+
+
+def test_tight_fit_frames_a_thin_model_closer_than_the_orbit_it_replaced():
+    """A 1x1x10 tower: the extent norm is set by the long axis, so the old
+    single radius pushed the side views far enough back to fit a diagonal
+    nothing in them was ever going to show. The pilot's ~1.7x pixels is this."""
+    verts = cloud(1, 1, 10)
+    center = np.zeros(3)
+    angles = [(a, 0.0) for a in np.linspace(0, 2 * np.pi, 8, endpoint=False)]
+    dists = [np.linalg.norm(eye - center)
+             for _, eye, _, _ in tight_view_cams(verts, center, angles)]
+    assert max(dists) < old_radius(verts)
+    assert min(dists) > 0
+
+
+def test_the_fit_crops_nothing_and_the_margin_is_the_only_reason():
+    """Safety and its price in one assertion. The distance formula is exactly
+    tangent: at margin 1.0 the extreme vertex lands *on* the frame edge in
+    every view, so the 5% is the whole of the tolerance rather than a
+    decoration on slack the formula already had — and a mesh is only as safe
+    from cropping as the margin makes it."""
+    verts = cloud(1, 1, 10)
+    center = np.array([0.3, -0.2, 1.0])      # off-origin: rel is what matters
+    verts = verts + center
+    angles = [(a, e) for e in (0.0, np.deg2rad(20), np.deg2rad(-20))
+              for a in np.linspace(0, 2 * np.pi, 8, endpoint=False)]
+
+    bare = worst_fill(verts, center,
+                      tight_view_cams(verts, center, angles, margin=1.0), angles)
+    assert np.allclose(bare, 1.0, atol=1e-12)             # exactly on the edge
+
+    fills = worst_fill(verts, center,
+                       tight_view_cams(verts, center, angles), angles)
+    assert max(fills) < 1.0                               # nothing cropped
+    # the slack is bounded by 5% and slightly under it: backing off scales the
+    # camera distance, not the model's depth, so the near half of the mesh
+    # gains a little more room than the far half
+    assert max(fills) <= 1 / 1.05
+    assert min(fills) > 0.9
+
+
+def test_distance_follows_the_silhouette_not_one_radius():
+    """A 10x1x1 bar seen end-on presents a 1x1 square and seen broadside a
+    10x1 slab, so the two views cannot share a distance — which is the whole
+    difference from `rotated_cams`' single radius."""
+    verts = cloud(10, 1, 1)
+    center = np.zeros(3)
+    angles = [(0.0, 0.0), (np.pi / 2, 0.0)]               # end-on, broadside
+    end_on, broadside = [np.linalg.norm(eye - center)
+                         for _, eye, _, _ in tight_view_cams(verts, center, angles)]
+    assert end_on < broadside
+    assert broadside / end_on > 2                          # not a rounding wobble
+
+
+def test_the_subsample_is_seeded_so_a_repeat_frames_identically(rig):
+    """Above TIGHT_FIT_VERTS the fit runs on a sample, and an unseeded sample
+    would move the cameras between two visits to the same mesh — a second
+    source of render drift under one cache key, on top of the draw-history
+    dependence there is no fixing (CLAUDE.md)."""
+    # 3x the cap, not a hair over it: at a 98% sampling fraction two draws
+    # keep the same extreme vertices and the test would pass unseeded
+    rng = np.random.default_rng(7)
+    big = o3d.geometry.TriangleMesh()
+    big.vertices = o3d.utility.Vector3dVector(
+        rng.normal(size=(3 * TIGHT_FIT_VERTS, 3)))
+    r, _ = rig()
+    r.views(LoadedMesh(file=Path("/nowhere/big.stl"), mesh=big, nbytes=100),
+            0, (0.0, 1.0, 0.0))
+    first = r._renderer.cams
+    r._renderer.cams = []
+    r.views(None, 0, (0.0, 1.0, 0.0))        # residency hit: same geometry
+    assert len(first) == 8 * 2
+    for a, b in zip(first, r._renderer.cams):
+        assert a[0] == b[0] and all(np.array_equal(x, y) for x, y in zip(a[1:], b[1:]))
+
+
+def test_views_fits_the_rotated_copy_not_the_mesh_as_loaded(rig):
+    """The fit reads `rot.vertices`, so the resolved up moves the framing — the
+    same reason the copy is what gets rotated at all (I11). A 1x2x4 box, not a
+    cube: an axis permutation maps a cube onto itself and the two framings
+    would agree for the wrong reason."""
+    slab = LoadedMesh(file=Path("/nowhere/slab.stl"), nbytes=100,
+                      mesh=o3d.geometry.TriangleMesh.create_box(1.0, 2.0, 4.0))
+    r, _ = rig()
+    r.views(slab, 1, (0.0, 0.0, 1.0))
+    z_up = [np.linalg.norm(e - c) for _, c, e, _ in r._renderer.cams]
+    r._renderer.cams = []
+    r.views(None, 1, (0.0, 1.0, 0.0))
+    y_up = [np.linalg.norm(e - c) for _, c, e, _ in r._renderer.cams]
+    assert len(z_up) == len(y_up)
+    assert not np.allclose(z_up, y_up)
+
+
+def test_the_pose_path_keeps_the_fixed_framing(rig):
+    """Pose accuracy was tuned on the 1.4x extent-norm pixels and measures
+    insensitive to framing, so `pose_tiles` must not inherit the view path's
+    fit: one radius for all six candidates is what lets them share an upload."""
+    r, _ = rig()
+    r.pose_tiles(lm(), 0)
+    rm = r.resident["m0"]
+    dists = {round(float(np.linalg.norm(eye - center)), 9)
+             for _, center, eye, _ in r._renderer.cams}
+    assert dists == {round(rm.radius, 9)}
 
 
 # --- residency and pinning ---------------------------------------------------

@@ -127,7 +127,13 @@ def rel_path(f, root):
 # numpy-parser swap was the near-miss (it passed only because triangle counts
 # and bounding boxes came out exact). Appended to the key only when bumped, so
 # every key from before it existed survives its introduction.
-EMBED_CACHE_VERSION = 1
+#   2 = tight per-view framing in `renderer.views` (2026-08-31): each
+#       classification view is fitted to the rotated mesh's projected
+#       vertices instead of one 1.4x extent-norm orbit, so every
+#       classification-view pixel changes. Pose tiles keep the fixed framing
+#       and are unaffected. The `|ev2` token is therefore live in every key
+#       written from here on — version 1 is the one that stays invisible.
+EMBED_CACHE_VERSION = 2
 
 # The --elevations default. It lives here because the key elides it: a single
 # 20 degree ring appends nothing, which is what keeps keys written before

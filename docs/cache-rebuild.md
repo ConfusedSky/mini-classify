@@ -51,7 +51,7 @@ so that keys written before each flag existed still hash the same:
 |---|---|---|
 | `\|e:` | `--elevations` is `[20.0]` | keys predating `--elevations` |
 | `\|compiled` | `--compile` off | the two numeric regimes cache separately |
-| `\|ev<n>` | `EMBED_CACHE_VERSION == 1` | appended only when bumped |
+| `\|ev<n>` | `EMBED_CACHE_VERSION == 1` | **live at 2** since 2026-08-31 (tight per-view framing in `renderer.views`, §6). Every key written from now on carries `\|ev2`; every key that predates the bump is version-1-invisible, so the two populations coexist and never mix |
 
 **At a rebuild:** these can become unconditional, which makes the key say what
 it means instead of encoding its own history. `EMBED_CACHE_VERSION`'s elision
@@ -123,6 +123,24 @@ cache is invalid; the log says which models to look at and why).
 Doing this *at* the rebuild also removes the awkwardness described in
 OPEN_QUESTIONS about introducing v1 elided-from-the-key to avoid invalidating
 existing entries — there are no existing entries to protect.
+
+**Amended 2026-08-31: the framing half is now versioned, the rest is not.**
+`renderer.views` fits each camera to the rotated mesh's projected vertices
+instead of orbiting at `1.4 × ‖extent‖`, so `EMBED_CACHE_VERSION` went to 2 and
+`cachedir.view_config` grew a matching `-evN` suffix for the `front_view`
+entries that were resolved from the old pixels. That covers framing and only
+framing: the FOV, the sun and fill intensities, the material and
+`rotation_to_z_up` are still outside every key, and a change to any of them is
+still silent. So this section's open question stands — the recipe version is
+what would close it; `EMBED_CACHE_VERSION` is a hand-bumped stand-in for the
+one part of the recipe that has changed so far.
+
+**At a rebuild:** the `ev1` `.npy` files under `embeds/` and the pre-`ev`
+`front_view` entries in `pose-cache.json` are the deletable residue — they are
+correct embeddings of a framing nothing renders any more, and nothing reads
+them once the current keys are populated. Delete them with the recipe version
+that replaces the whole mechanism, not before: until then they are what a
+rollback of the framing change would land back on.
 
 ## 7. Mixed render formats on disk
 

@@ -74,9 +74,19 @@ def view_config(args):
     Lives here rather than in `src/done.py`, which computes with it: it is a
     piece of cache identity, and `done` owns torch — leaving it there forced
     the CLI and `cluster_models.py` to reach a pure string function through a
-    module that loads SigLIP."""
+    module that loads SigLIP.
+
+    `EMBED_CACHE_VERSION` joins it under the same elision doctrine as the
+    embedding key: nothing appended at version 1, so every front_view entry
+    already on disk keeps its meaning, and a bump simply makes the old entry
+    absent under the new token. Absent is cheap here — `Done._score` recomputes
+    the index with `pose.front_view_index` over embeddings it already has, with
+    no render — where a stale one would name the front of a framing that no
+    longer exists."""
     elev = ",".join(f"{e:g}" for e in args.elevations)
-    return f"{args.views}v-e{elev}"
+    ver = "" if identity.EMBED_CACHE_VERSION == 1 else \
+        f"-ev{identity.EMBED_CACHE_VERSION}"
+    return f"{args.views}v-e{elev}{ver}"
 
 
 def render_subdir(args):

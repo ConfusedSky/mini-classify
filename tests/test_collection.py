@@ -299,7 +299,8 @@ def test_front_cached_under_another_view_config_is_not_used(tmp_path):
     entries[ident]["front_view"] = {"8v-e20,-20": 3}    # another config entirely
     cache.write_text(json.dumps(entries))
     c = Collection.load(args)
-    assert c.view_cfg == "2v-e20"
+    assert c.view_cfg == "2v-e20-ev2"   # -evN is the framing version, which
+                                        # is itself part of "another config"
     assert c.pose_of(0)["front"] is None
 
 
