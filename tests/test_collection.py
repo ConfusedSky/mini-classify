@@ -491,10 +491,19 @@ def test_pose_of_returns_null_for_a_malformed_entry(tmp_path, change):
 def test_a_null_confidence_keeps_the_pose_and_defaults_the_number(tmp_path):
     """A missing confidence is not a missing pose: the up vector is what the
     viewer needs, and discarding the orientation over an absent score would
-    lose more than it protects."""
+    lose more than it protects.
+
+    Mutated *after* the load, because since adversarial review pass 4
+    (2026-08-31) `pose._readable` drops a non-numeric `confidence` at the
+    door — `Pose.from_cache`'s `float(d.get("confidence", 0.0))` raises on
+    it — so no such entry survives `Collection.load` to be asked here (the
+    drop is pinned in `tests/test_pose.py`). The belt this asserts is what
+    stays: never raising is a property of `pose_of` itself, not of whichever
+    loader filled `self.poses`."""
     args, root, files = build(tmp_path, ["a/one.stl"])
-    _mangle(tmp_path, files, root, "a/one.stl", {"confidence": None})
-    p = Collection.load(args).pose_of(0)
+    c = Collection.load(args)
+    c.poses[c._ident[0]]["confidence"] = None
+    p = c.pose_of(0)
     assert p is not None and p["confidence"] == 0.0
     assert p["up"] == [0.0, 0.0, 1.0]
 

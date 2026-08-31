@@ -124,6 +124,13 @@ class Done:
             "rejected"      True                replaces
             True            True                replaces
 
+        The rows are exhaustive over what a run can hold, because the loader
+        admits `arbitrated` only as absent, `None`, `True`, `False` or
+        `"rejected"` (`pose._readable`, adversarial review pass 4,
+        2026-08-31): nothing that the loose `in (True, "rejected")` tests
+        elsewhere read as a judgment — a hand-edited `1` — can reach the
+        strict `is True` rows here and land in a different cell.
+
         The first refusal: `False` or absent says "asked and not answered
         *yet*", or "never asked at all" — neither is a verdict, and a judgment
         is replaced only by another judgment.

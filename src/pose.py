@@ -240,6 +240,15 @@ def file_identity(f, root):
     return f"{identity.rel_path(f, root)}|{identity.mtime_key(stat)}|{stat.st_size}"
 
 
+def _number(x):
+    """A JSON number — and not the `bool` that `isinstance(x, int)` admits.
+
+    `_readable`'s numeric clauses exist to stop a crash, and `True` crashes
+    nothing: it would be read as a confidence or a margin of 1.0, and a
+    silently wrong number outlives a dropped entry."""
+    return isinstance(x, (int, float)) and not isinstance(x, bool)
+
+
 def _readable(entry):
     """Can the contract process this entry? The loader admits exactly what it
     can, and drops the rest — the principle 9d39745 and c3adf6c each applied
@@ -265,10 +274,25 @@ def _readable(entry):
       is `tuple(float(x) for x in d["up"])` in `from_cache`, which raises on
       a missing or null `up`, and `entry_up` additionally rejects the zero
       and NaN vectors `rotation_to_z_up` raises on downstream;
-    * the `margin` **key present**, `None` allowed — `from_cache` reads
-      `d["margin"]` with no default. `None` has to survive: it is the
-      geometry-only pass and C3's `arbitrated: false` marker, and the
-      ensemble upgrades both in place;
+    * `confidence` absent or a real number — `from_cache` reads
+      `float(d.get("confidence", 0.0))`, which raises on a null
+      (`TypeError`) and on a non-numeric string (`ValueError`). Absent is
+      legal because the default *is* the access;
+    * the `margin` **key present**, its value `None` or a real number —
+      `from_cache` reads `d["margin"]` with no default, and a non-null margin
+      goes on to `needs_arbiter_margin`, whose `margin < threshold` raises
+      `TypeError` on a string: that one crashes inside *sufficiency*, so once
+      again the check meant to protect the constructor is the thing that
+      crashes. `None` has to survive: it is the geometry-only pass and C3's
+      `arbitrated: false` marker, and the ensemble upgrades both in place;
+    * `arbitrated` absent, `None`, or exactly `True`, `False` or
+      `"rejected"` — the one clause that is not a crash but an ambiguity. A
+      hand-edited JSON `1` is `== True`, so `pose_is_sufficient`'s
+      `entry.get("arbitrated") in (True, "rejected")` reads it as a judgment
+      while `Done.record_pose`'s refusals, which test `was is True`, do not:
+      the same entry lands in different cells of that truth table depending
+      on which reader is looking at it. Dropping it at the door is what keeps
+      the table's rows exhaustive over what the loader admits (pass 4);
     * `front_view` absent or a dict — `dict(d.get("front_view", {}))` raises
       on the legacy bare int, which is stamped v4 and so clears the version
       test (9d39745);
@@ -281,12 +305,17 @@ def _readable(entry):
       a stored judgment, so no re-resolution can heal it. Nothing converges
       and nothing writes.
 
+    The numeric clauses reject `bool` as well as `str` and `None`, because
+    `float(True)` and `True < 0.45` do not raise: a `confidence: true` would
+    be admitted and read as 1.0, a wrong number rather than a dropped entry,
+    and the drop is the cheaper mistake.
+
     No production writer emits any of these shapes — `Poser._make_pose` fills
-    every required key, and `_fold` stamps a judgment only onto a pose that
-    parked, which ran `needs_arbiter_margin` against a float — so they arrive
-    from a hand-edited or foreign pose-cache.json. Each one that got through
-    became a permanent per-file `Failure` (`route` raises, the driver's J3
-    boundary converts) in every run, never healed."""
+    every required key with a float, and `_fold` stamps a judgment only onto
+    a pose that parked, which ran `needs_arbiter_margin` against a float — so
+    they arrive from a hand-edited or foreign pose-cache.json. Each one that
+    got through became a permanent per-file `Failure` (`route` raises, the
+    driver's J3 boundary converts) in every run, never healed."""
     if not isinstance(entry, dict):
         return False
     if entry.get("v") != POSE_CACHE_VERSION:
@@ -295,11 +324,18 @@ def _readable(entry):
         return False
     if entry_up(entry) is None:
         return False
-    if "margin" not in entry:
+    if "confidence" in entry and not _number(entry["confidence"]):
+        return False
+    if "margin" not in entry or not (entry["margin"] is None
+                                     or _number(entry["margin"])):
         return False
     if not isinstance(entry.get("front_view", {}), dict):
         return False
-    return not (entry.get("arbitrated") in (True, "rejected")
+    arbitrated = entry.get("arbitrated")
+    if not (arbitrated is None or arbitrated is True or arbitrated is False
+            or arbitrated == "rejected"):
+        return False
+    return not (arbitrated in (True, "rejected")
                 and entry["source"] != "vlm"
                 and entry["margin"] is None)
 

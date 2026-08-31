@@ -1130,6 +1130,92 @@ def test_the_loader_admits_only_what_route_can_process(tmp_path):
         assert pose.Pose.from_cache(entry).v == pose.POSE_CACHE_VERSION
 
 
+def test_the_loader_admits_only_well_typed_scalars(tmp_path):
+    """The three scalar clauses (adversarial review pass 4, 2026-08-31), by
+    the same derivation as the rest of `_readable`: each is an access
+    `Pose.from_cache` or `pose_is_sufficient` actually makes.
+
+    Two of them are the pass-3 failure again, one field over. A
+    `confidence: null` crashes `from_cache`'s
+    `float(d.get("confidence", 0.0))`; a string `margin` crashes
+    `needs_arbiter_margin`'s `margin < threshold`, which is inside
+    *sufficiency*, so the check meant to protect the constructor is once more
+    the thing that raises. Either way `route` raises with no guard, the
+    driver's J3 boundary turns it into a `RENDER_ERROR` row for that file in
+    **every** run, and nothing ever re-poses it. `confidence: null` is not
+    hypothetical: it is the hand-edit `collection.pose_of`'s belt was written
+    for.
+
+    The third is not a crash but an ambiguity, and it is why the drop is
+    strict rather than truthy: a hand-edited `1` is `== True`, so
+    `pose_is_sufficient`'s `in (True, "rejected")` reads it as a judgment
+    while `Done.record_pose`'s refusals, which test `was is True`, do not.
+    The same entry then lands in different cells of that truth table
+    depending on which reader is looking at it; dropping it at the door is
+    what keeps those rows exhaustive over what the loader admits. `"true"` is
+    the same drop from the other side — `arbitrated` is a closed four-state
+    enum, and a string that is not `"rejected"` is not one of the four.
+
+    The survivors are the live schema: `confidence` absent (the `.get`
+    default is the access), a real one, an *integer* margin — JSON writes a
+    whole float back as `1` — C3's `arbitrated: false` marker with its null
+    margin, and each of the four legal `arbitrated` states."""
+    ok = {"up": [0.0, 0.0, 1.0], "confidence": 0.5, "source": "geometry",
+          "margin": 0.9, "v": pose.POSE_CACHE_VERSION}
+    # margin 0.9 clears MARGIN_THRESHOLD, so each of these is *sufficient*
+    # first and reaches the access that raises
+    crashers = {
+        "confidence-null": dict(ok, confidence=None),
+        "confidence-str": dict(ok, confidence="high"),
+        "margin-str": dict(ok, margin="0.9"),
+    }
+    dropped = dict(crashers, **{
+        # no crash: a type the schema does not have, admitted by one reader's
+        # test and refused by another's
+        "arbitrated-1": dict(ok, margin=0.2, arbitrated=1),
+        "arbitrated-true-str": dict(ok, margin=0.2, arbitrated="true"),
+        # the clause is a type test, not a parse: `float("0.5")` would in fact
+        # succeed, and the entry goes anyway rather than leaving two readers
+        # to disagree about whether a string is a number
+        "confidence-numeric-str": dict(ok, confidence="0.5"),
+    })
+    kept = {
+        "confidence-absent": {k: v for k, v in ok.items() if k != "confidence"},
+        "confidence-real": dict(ok, confidence=0.7),
+        "margin-int": dict(ok, margin=1),
+        "marked": dict(ok, margin=None, arbitrated=False),   # C3's marker
+        "arbitrated-absent": dict(ok),
+        "arbitrated-true": dict(ok, margin=0.2, arbitrated=True),
+        "arbitrated-false": dict(ok, arbitrated=False),
+        "arbitrated-rejected": dict(ok, margin=0.2, arbitrated="rejected"),
+    }
+
+    # first: the crashers really do crash the pair, or the drop pins nothing
+    for name, entry in crashers.items():
+        with pytest.raises((TypeError, ValueError)):
+            if pose.pose_is_sufficient(entry, True, pose.MARGIN_THRESHOLD):
+                pose.Pose.from_cache(entry)
+            else:                       # a miss for another reason would make
+                raise AssertionError(   # the raises() above pass vacuously
+                    f"{name} was a miss, not a crash — re-pick the fixture")
+
+    # and the integer 1 really is read two ways by the two readers, which is
+    # the whole reason `arbitrated` is admitted by identity and not by `in`
+    one = dropped["arbitrated-1"]["arbitrated"]
+    assert one in (True, "rejected")     # pose_is_sufficient calls it judged
+    assert one is not True               # Done.record_pose's rows do not
+
+    pose.save_pose_cache(tmp_path, {**dropped, **kept})
+    got = pose.load_pose_cache(tmp_path)
+    assert set(got) == set(kept)
+    # what survives is processable by *both* halves of the contract, which is
+    # the claim the predicate makes
+    for entry in got.values():
+        assert pose.Pose.from_cache(entry).v == pose.POSE_CACHE_VERSION
+        assert pose.pose_is_sufficient(
+            entry, True, pose.MARGIN_THRESHOLD) in (True, False)
+
+
 def test_an_entry_below_the_current_version_never_reaches_from_cache(tmp_path):
     """`from_cache` reads `v` and `margin` straight out of the dict now, with
     no defaults (docs/cache-rebuild.md §3). What makes that safe is upstream,
