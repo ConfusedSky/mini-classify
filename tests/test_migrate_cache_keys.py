@@ -92,7 +92,8 @@ def test_poses_are_re_keyed_onto_the_wider_root(tmp_path):
 
 
 def test_entries_matching_no_file_are_dropped(tmp_path):
-    # load_pose_cache filters on version alone, so these would ride along forever
+    # load_pose_cache filters on version and shape, never on whether the file
+    # still exists, so these would ride along forever
     lib, kit, f = grown_library(tmp_path)
     gone = model(kit, "Kit/deleted.stl")
     cache, _ = anchored_cache(tmp_path, [f, gone], kit, args())

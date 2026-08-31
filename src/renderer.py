@@ -96,9 +96,12 @@ ROTATED_NAME = "_rot"
 
 # Above this many vertices `views` fits its cameras to a sample: the fit
 # projects every vertex once per view, and this collection holds meshes in the
-# millions. A sample can only *miss* an extreme, which frames slightly tighter
-# than exact rather than looser — the 5% margin is the tolerance that covers
-# it, and the fixed seed is what makes it the same miss every time.
+# millions. A sample can only *miss* an extreme, which frames tighter than
+# exact rather than looser. What bounds the miss is the union `views` takes,
+# not the margin: the per-axis extremes are always kept, so what can still be
+# lost is an off-axis extremity, with a probability falling as its vertex
+# count rises, and the 5% margin covers only a miss that lands inside the
+# margin. The fixed seed is what makes it the same miss every time.
 TIGHT_FIT_VERTS = 200_000
 
 # Encodings for saved renders. Written and never read back — the classifier
@@ -373,8 +376,15 @@ class Renderer:
             # fixed sequence and not otherwise (CLAUDE.md, draw history), and a
             # varying subsample would move the framing too and put a second
             # source of drift under the same cache key.
-            verts = verts[np.random.default_rng(0).choice(
-                len(verts), TIGHT_FIT_VERTS, replace=False)]
+            keep = np.random.default_rng(0).choice(
+                len(verts), TIGHT_FIT_VERTS, replace=False)
+            # The per-axis extremes go back in because a sparse extremity can
+            # be sampled away entirely — a 40-vertex antenna on a 3M-vertex
+            # mesh is drawn at 1-in-15 — and a fit that never saw it crops it
+            # in every view, far outside what the 5% margin absorbs
+            # (adversarial review, 2026-08-31).
+            verts = verts[np.unique(np.concatenate(
+                [keep, verts.argmin(0), verts.argmax(0)]))]
         angles = pose.view_angles(self.cfg.views, list(self.cfg.elevations))
         # Tight per-view fit, not one orbit radius: the mesh's own silhouette
         # sets each view's distance, so an elongated model is seen close end-on

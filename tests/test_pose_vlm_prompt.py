@@ -145,6 +145,36 @@ def test_auto_takes_the_openrouter_fallback_instead_of_asking(tmp_path):
     assert "loading no-such-org/no-such-model" in out.stdout
 
 
+def test_the_degrade_drops_a_gemini_model_pin_and_says_so(tmp_path):
+    """The backend degrades; a `--pose-vlm-model` chosen for gemini must not
+    survive it. OpenRouter ids are org/model and a gemini id never is, so a
+    surviving pin reaches OpenRouter as an HTTP 400 — which `pose._ask_glm`
+    has to map to `VLMRejected`, a non-transient 4xx being the API judging the
+    request, and `poser.Poser._fold` writes that permanently as
+    `arbitrated: "rejected"`. Nothing throttles it either: every rejection
+    resets the breaker, so the run pins one model per escalation, forever
+    (adversarial review, 2026-08-31)."""
+    key = tmp_path / "or-key"
+    key.write_text("sk-or-not-a-real-key\n")
+    out = run_piped(tmp_path, "--pose-vlm-model", "gemini-3.5-pro", or_key=key)
+    assert "ignoring --pose-vlm-model gemini-3.5-pro" in out.stdout
+    # the pin is gone, so the backend's own default is what gets announced
+    assert "z-ai/glm-5.3-flash on OpenRouter" in out.stdout
+    assert "loading no-such-org/no-such-model" in out.stdout
+
+
+def test_explicit_glm_rejects_a_model_pin_that_is_not_an_openrouter_id(tmp_path):
+    """Both halves were typed, so this is an error rather than a silent drop —
+    the same fail-fast the gemini arm gets, and for the same reason: the
+    alternative is a run that writes a permanent `rejected` per escalation."""
+    out = run_piped(tmp_path, "--pose-vlm", "glm",
+                    "--pose-vlm-model", "gemini-3.5-pro")
+    assert out.returncode != 0
+    assert "--pose-vlm glm:" in out.stderr
+    assert "gemini-3.5-pro is not an OpenRouter model id" in out.stderr
+    assert "loading" not in out.stdout
+
+
 def test_explicit_glm_without_a_key_fails_at_startup(tmp_path):
     """Symmetric with the gemini arm: asking for an arbiter by name and not
     getting one is an error, and the message names the file to fix."""

@@ -245,6 +245,36 @@ def test_the_subsample_is_seeded_so_a_repeat_frames_identically(rig):
         assert a[0] == b[0] and all(np.array_equal(x, y) for x, y in zip(a[1:], b[1:]))
 
 
+def test_the_subsample_never_drops_an_axis_extremity(rig):
+    """A sparse extremity can be sampled away outright — a 40-vertex antenna on
+    a 3M-vertex mesh is drawn at 1-in-15 — and a fit that never saw it crops it
+    in every view, which the 5% margin does not begin to cover. So `views`
+    unions the per-axis extreme vertices back into the sample: the view looking
+    down the antenna's own axis must be framed exactly as the full vertex array
+    would frame it (adversarial review, 2026-08-31)."""
+    rng = np.random.default_rng(7)
+    verts = np.vstack([rng.normal(size=(3 * TIGHT_FIT_VERTS, 3)),
+                       [[30.0, 0.0, 0.0]]])           # the antenna: one vertex
+    # the test claims nothing unless the seeded sample really does miss it
+    assert verts.shape[0] - 1 not in np.random.default_rng(0).choice(
+        len(verts), TIGHT_FIT_VERTS, replace=False)
+    spiked = o3d.geometry.TriangleMesh()
+    spiked.vertices = o3d.utility.Vector3dVector(verts)
+    r, _ = rig()
+    r.views(LoadedMesh(file=Path("/nowhere/antenna.stl"), mesh=spiked, nbytes=100),
+            0, (0.0, 0.0, 1.0))                       # +Z up: the copy is unrotated
+    cams = r._renderer.cams
+    center = cams[0][1]
+    # the view aimed most directly down +x, where the antenna alone decides the
+    # distance — everything else in the cloud is behind it and lands nearer
+    i = int(np.argmax([(eye - center)[0] / np.linalg.norm(eye - center)
+                       for _, _, eye, _ in cams]))
+    angles = pose_mod.view_angles(8, [20.0, -20.0])
+    exact = tight_view_cams(verts, center, angles)[i]
+    assert np.isclose(np.linalg.norm(cams[i][2] - center),
+                      np.linalg.norm(exact[1] - center))
+
+
 def test_views_fits_the_rotated_copy_not_the_mesh_as_loaded(rig):
     """The fit reads `rot.vertices`, so the resolved up moves the framing — the
     same reason the copy is what gets rotated at all (I11). A 1x2x4 box, not a

@@ -761,9 +761,10 @@ def test_a_deadline_is_the_verdict_not_an_attempt(monkeypatch, tmp_path):
     Final WITHIN the call: the loop that ran out the clock is reproducible and
     is still generating server-side after the client lets go, so a second
     attempt buys another deadline and another bill for the same non-answer
-    (measured 2026-08-30: `Floor` at max effort exhausted six 120 s attempts
-    at ~17k billed output tokens each). Every other transient failure gets
-    two attempts here; this one gets one.
+    (measured 2026-08-30: `Floor` at max effort exhausted six 120 s attempts;
+    a solo call on `Body`, abandoned at 120 s, ran 142 s to completion
+    server-side and billed its 17,584 output tokens). Every other transient
+    failure gets two attempts here; this one gets one.
 
     And the worker thread must be a **daemon**: it is abandoned still reading,
     and a non-daemon one is joined untimed at interpreter exit — which under

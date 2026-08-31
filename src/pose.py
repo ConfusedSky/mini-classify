@@ -765,10 +765,11 @@ class DeadlineExceeded(VLMUnavailable):
     Final because the loop that blew the deadline is *reproducible*: the
     provider keeps generating server-side after the client abandons the
     socket, so a retry re-runs the same reasoning loop and pays for it twice
-    (measured 2026-08-30: `Floor` at max effort exhausted six 120 s attempts,
-    ~17k billed output tokens each; one abandoned call was completed and
-    billed anyway). `ask_vlm_up` therefore breaks out of its retry loop on
-    this type instead of spending the second attempt on it."""
+    (measured 2026-08-30: `Floor` at max effort exhausted six 120 s attempts;
+    separately, a solo call on `Body` abandoned at 120 s ran 142 s to
+    completion server-side and billed its 17,584 output tokens). `ask_vlm_up`
+    therefore breaks out of its retry loop on this type instead of spending
+    the second attempt on it."""
 
 
 # Waits before each retry after a rate-limit refusal. Two attempts, so one
@@ -912,7 +913,7 @@ def openrouter_key():
     path = openrouter_key_path()
     try:
         key = path.read_text().strip()
-    except OSError as e:
+    except (OSError, ValueError) as e:    # ValueError: undecodable bytes
         raise VLMUnavailable(f"no OpenRouter key at {path}: {e}") from e
     if not key:
         raise VLMUnavailable(f"OpenRouter key file is empty: {path}")

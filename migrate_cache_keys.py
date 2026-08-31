@@ -30,8 +30,8 @@ a token this code no longer produces, so it matches neither name, is never
 moved, and is counted in the unclaimed line at the end. Nothing outside the
 collection is deleted either: unclaimed `.npy` and unclaimed renders are
 reported and left where they are. The one exception is pose entries that match
-no file, which are dropped, because `load_pose_cache` filters on version alone
-and would carry them forever.
+no file, which are dropped, because `load_pose_cache` filters on version and
+shape, never on whether the file still exists, and would carry them forever.
 
 `cache-meta.json` is stamped **last**, only after every move succeeded, so an
 interrupted run stays re-runnable.

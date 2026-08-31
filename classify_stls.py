@@ -160,8 +160,9 @@ def resolve_pose_vlm(args):
     if backend == "auto":
         # gemini or nothing: it is the only arbiter measured to beat the
         # ensemble (43/44 against 40/44), where haiku/sonnet on a 256px sheet
-        # score below running no arbiter at all. It bills per call — ~$0.30 for
-        # a 602-model run at ~120 escalations — so the choice is announced.
+        # score below running no arbiter at all. It bills per call — $2.7 for
+        # the 354 escalations a 602-model run fires, measured usage at list
+        # prices (LEARNINGS 2026-08-30) — so the choice is announced.
         try:
             args.gemini_project = args.gemini_project or pose.gcloud_project()
             pose.gcloud_token()
@@ -176,8 +177,23 @@ def resolve_pose_vlm(args):
             if not _openrouter_ready():
                 return _confirm_degraded(e)
             backend = "glm"
+            # The backend degraded; a --pose-vlm-model pin chosen for gemini
+            # does not, unless it is dropped here. OpenRouter ids are
+            # org/model and a gemini id never is, so a surviving pin reaches
+            # OpenRouter as an HTTP 400 — which `pose._ask_glm` must map to
+            # `VLMRejected`, since a non-transient 4xx is the API judging the
+            # request, and `poser.Poser._fold` records that permanently as
+            # `arbitrated: "rejected"`. One per escalation for the whole run,
+            # and unstoppable: each rejection *resets* the breaker
+            # (adversarial review, 2026-08-31).
+            pin = args.pose_vlm_model
+            drop = bool(pin) and "/" not in pin
+            if drop:
+                args.pose_vlm_model = None
             print(f"pose VLM: gemini unavailable ({e}) — falling back to the "
-                  f"OpenRouter arbiter")
+                  f"OpenRouter arbiter"
+                  + (f", ignoring --pose-vlm-model {pin} — it names a gemini "
+                     f"model, and glm models are org/model ids" if drop else ""))
     vlm_model = args.pose_vlm_model or pose.DEFAULT_VLM_MODELS.get(backend)
     if backend == "gemini":
         # Fail here rather than on the first ambiguous model, thousands of
@@ -193,6 +209,16 @@ def resolve_pose_vlm(args):
         print(f"pose VLM: {vlm_model} on Vertex AI, project {args.gemini_project} "
               f"— billed per escalation")
     elif backend == "glm":
+        # The foreign pin `auto` drops silently is an error when both halves
+        # were typed: a gemini id sent to OpenRouter comes back HTTP 400, and
+        # the retry contract has to read a non-transient 4xx as a verdict — so
+        # the run would write a permanent `arbitrated: "rejected"` per
+        # escalation rather than fail (adversarial review, 2026-08-31).
+        if args.pose_vlm_model and "/" not in args.pose_vlm_model:
+            raise SystemExit(
+                f"--pose-vlm glm: --pose-vlm-model {args.pose_vlm_model} is not an "
+                f"OpenRouter model id — those are org/model (e.g. {pose.GLM_MODEL}). "
+                f"Drop the pin or give it an OpenRouter id")
         # Symmetric with the gemini arm: the one thing that goes wrong is the
         # key, and checking it costs nothing against finding out thousands of
         # renders into a run. `auto` reaches this having already probed —
@@ -259,9 +285,10 @@ def main():
                              "gemini if gcloud ADC resolves, else glm if an OpenRouter "
                              "key is readable, else ask. gemini-3.5-flash is the best "
                              "arbiter measured (43/44 standalone, +4 -> 42/44 as the "
-                             "tier) and bills ~$0.30 per full-collection run; "
+                             "tier) and bills ~$2.7 per full-collection run (the "
+                             "354 escalations a 602-model run fires); "
                              "GLM-5.3-Flash is the measured fallback (+3 -> 41/44) at "
-                             "~1/40th the cost and no GPU. `ollama` is retired: "
+                             "~1/40th the cost ($0.06) and no GPU. `ollama` is retired: "
                              "the arbiter is a thread pool with no inline arm, and a "
                              "pooled ollama call would share the 4060 with SigLIP")
     parser.add_argument("--pose-vlm-model", default=None,
