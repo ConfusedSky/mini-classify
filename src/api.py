@@ -55,6 +55,11 @@ POOL = Literal["mean", "max", "softmax"]
 # response dict bounded by the request rather than by the collection.
 POSES_MAX = 1024
 
+# The ceiling on what any one response will serialise, shared by `/query`'s
+# `cap` and `/under`'s `limit` because it is one statement about this server
+# and not two opinions about two routes (docs/api/surface.md, `POST /query`).
+RESPONSE_CAP = 10000
+
 # `logging`, not the `print` the rest of this project uses: a server's output
 # is uvicorn's to configure, and a print bypasses whatever level, format or
 # sink the operator chose. One line per scoring request — enough to answer
@@ -345,7 +350,7 @@ class QueryRequest(BaseModel):
     # count, and a client that wants ten says ten.
     top: int | None = Field(None, ge=1, le=1000)
     min_score: float | None = None
-    cap: int = Field(500, ge=1, le=10000)
+    cap: int = Field(500, ge=1, le=RESPONSE_CAP)
 
 
 class SimilarRequest(BaseModel):
@@ -367,7 +372,7 @@ class UnderRequest(BaseModel):
     # are, so the refusal is pydantic's own 422 and this route invents no
     # error; the ceiling is `cap`'s — what the server will serialise at all,
     # not a second opinion about how many models a folder may hold.
-    limit: int = Field(..., ge=1, le=10000)
+    limit: int = Field(..., ge=1, le=RESPONSE_CAP)
 
 
 class ReloadRequest(BaseModel):
@@ -629,10 +634,22 @@ def create_app(state: ServerState) -> FastAPI:
                  scope.path, scope.status, min(matched, req.limit), matched,
                  " truncated" if truncated else "",
                  (time.monotonic() - t0) * 1000)
+        # `n_scanned` and `covers` are §scope's, unchanged in name and meaning,
+        # because a two-valued `status` alone re-creates the exact ambiguity
+        # that block was invented to remove. They are not interchangeable and
+        # two readers in a row have conflated them: **`n_scanned` is what
+        # differs** between a folder of `.3mf` (0 — the walk saw nothing to
+        # see) and an unclassified folder of STLs (>0 — walked, not embedded
+        # yet), both of which answer `unindexed`; **`covers` is why it can be
+        # 0** at all, the constant list of extensions this index can ever
+        # hold. `matched` is already `scope.n_indexed`, so that field is not
+        # repeated under a second name.
         return {"status": "ok" if matched else "unindexed",
                 "models": [c.listing(i) for i in rows[:req.limit]],
                 "matched": matched,
-                "truncated": truncated}
+                "truncated": truncated,
+                "n_scanned": scope.n_scanned,
+                "covers": list(scope.covers)}
 
     @app.post("/reload")
     def post_reload(req: ReloadRequest) -> dict:

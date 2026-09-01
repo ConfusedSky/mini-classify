@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
-from src.api import ServerState, create_app
+from src.api import RESPONSE_CAP, ServerState, create_app
 from src.collection import Collection
 from test_collection import build          # the real-cache-on-disk fixture
 
@@ -481,7 +481,8 @@ def test_under_lists_a_directory_in_rel_path_order(tmp_path):
     c.poses[key] = None                            # indexed, pose unresolved
 
     body = client.post("/under", json={"path": "Kits", "limit": 10}).json()
-    assert set(body) == {"status", "models", "matched", "truncated"}
+    assert set(body) == {"status", "models", "matched", "truncated",
+                        "n_scanned", "covers"}
     assert body["status"] == "ok"
     assert [m["path"] for m in body["models"]] == [
         str(c.root / "Kits" / "A" / "y.stl"),
@@ -515,11 +516,45 @@ def test_under_on_an_unindexed_directory_is_a_200_that_says_so(tmp_path):
     r = client.post("/under", json={"path": "b", "limit": 10})
     assert r.status_code == 200
     assert r.json() == {"status": "unindexed", "models": [], "matched": 0,
-                        "truncated": False}
+                        "truncated": False, "n_scanned": 1, "covers": ["stl"]}
     # the other half of the distinction: `ok` never arrives empty, so the two
     # answers differ in the status rather than in a list a caller must read
     ok = client.post("/under", json={"path": "a", "limit": 10}).json()
     assert ok["status"] == "ok" and len(ok["models"]) == 1
+
+
+def test_under_tells_a_folder_of_3mf_from_one_that_is_merely_unclassified(tmp_path):
+    """The pair §scope's fields exist for, and the reason `status` alone
+    cannot carry this route: both folders answer `unindexed` with `matched:
+    0`, and the whole difference is `n_scanned`.
+
+    Zero where the classify run's walk had nothing it could even look at —
+    model-browser lists `.stl`, `.3mf` and `.obj`, `classify_stls.py` walks
+    `.stl` — against one where it walked an STL that is simply not embedded
+    yet. "Nothing here is searchable at all" and "nothing here *yet*" are
+    different things to show a person, and a two-valued status re-created
+    exactly the ambiguity the scope block was invented to remove (review,
+    2026-09-01).
+
+    `covers` is the constant that explains why zero is *possible*, not the
+    field that discriminates — it is byte-identical in both answers. Pinned
+    that way round on purpose: two readers in a row have taken `covers` for
+    the discriminator."""
+    client, _, _ = serve(tmp_path,
+                         layout=["a/one.stl", "b/two.stl", "tiles/m.3mf"],
+                         embed=["a/one.stl"])
+    unsearchable = client.post("/under", json={"path": "tiles",
+                                               "limit": 10}).json()
+    not_yet = client.post("/under", json={"path": "b", "limit": 10}).json()
+
+    assert unsearchable["status"] == not_yet["status"] == "unindexed"
+    assert unsearchable["matched"] == not_yet["matched"] == 0
+    assert unsearchable["n_scanned"] == 0      # the walk saw nothing to see
+    assert not_yet["n_scanned"] == 1           # walked, not embedded yet
+    assert unsearchable["covers"] == not_yet["covers"] == ["stl"]
+    # and it is the *only* difference: everything else about the two answers,
+    # `covers` included, is the same bytes
+    assert unsearchable == {**not_yet, "n_scanned": 0}
 
 
 def test_a_symlink_spelled_directory_reaches_the_same_rows(tmp_path):
@@ -566,6 +601,24 @@ def test_under_refuses_a_request_without_a_usable_limit(tmp_path, body):
     other malformed field already gets."""
     client = client_of(tmp_path, layout=UNDER)
     assert client.post("/under", json=body).status_code == 422
+
+
+def test_the_two_response_bounds_stop_at_one_shared_ceiling(tmp_path):
+    """`/query`'s `cap` and `/under`'s `limit` are bounded by the same number,
+    because it is one statement about what this server will serialise and not
+    two opinions about two routes. It lived as two unshared literals until
+    2026-09-01 (review), where either could have been raised without the
+    other and surface.md would still have described one ceiling. Asserted at
+    the edge on both routes, and against the number the document states."""
+    assert RESPONSE_CAP == 10000                 # what surface.md publishes
+    client = client_of(tmp_path, layout=UNDER)
+    at = [client.post("/query", json={"text": "x", "cap": RESPONSE_CAP}),
+          client.post("/under", json={"path": "Kits", "limit": RESPONSE_CAP})]
+    over = [client.post("/query", json={"text": "x", "cap": RESPONSE_CAP + 1}),
+            client.post("/under", json={"path": "Kits",
+                                        "limit": RESPONSE_CAP + 1})]
+    assert [r.status_code for r in at] == [200, 200]
+    assert [r.status_code for r in over] == [422, 422]
 
 
 @pytest.mark.parametrize("path,code", [

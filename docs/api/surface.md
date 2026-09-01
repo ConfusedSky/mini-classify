@@ -120,7 +120,7 @@ minimum; volume identity would be better.
 | `pool` | `mean\|max\|softmax` | server default | `:pool` |
 | `top` | int | — | at most this many, of whatever `min_score` let through |
 | `min_score` | float | — | every model at or above (`:min`) |
-| `cap` | int | 500 | hard ceiling on returned hits, whatever the bounds |
+| `cap` | int | 500 | hard ceiling on returned hits, whatever the bounds; at most **10000** |
 
 **The two bounds compose, and absent means not in force.** `min_score` filters,
 then `top` caps what survived: *the best N of everything at least this similar*.
@@ -249,7 +249,7 @@ the list, so the answer is a scan of the store.
 | `path` | string | required | directory (or file) — absolute or root-relative, any spelling `resolve` accepts |
 | `limit` | int | **required** | at most this many models, off the front of the sorted listing |
 
-Returns `{status, models, matched, truncated}`:
+Returns `{status, models, matched, truncated, n_scanned, covers}`:
 
 ```jsonc
 {
@@ -259,7 +259,9 @@ Returns `{status, models, matched, truncated}`:
      "pose": { ... }}         // the `pose` shape below; null when unresolved
   ],
   "matched": 210,             // models in scope, BEFORE the limit cut
-  "truncated": true           // matched > limit
+  "truncated": true,          // matched > limit
+  "n_scanned": 232,           // §scope's, same name and meaning
+  "covers": ["stl"]           // §scope's, same name and meaning
 }
 ```
 
@@ -268,10 +270,12 @@ Returns `{status, models, matched, truncated}`:
 absent would mean a response bounded by the collection rather than by the
 request, and a listing caller always knows how many tiles it is about to draw.
 It is validated the way the other ints are — `< 1` is pydantic's own **422**,
-and the ceiling is `cap`'s 10000, which is a statement about what this server
-will serialise and not a second opinion about how many models a folder may
-hold. `matched` counts the scope **before** the cut, the same job it does on
-`/query`: a client showing 64 of 210 has somewhere to read the 210.
+and the ceiling is the one `/query`'s `cap` is bounded by, which is a
+statement about what this server will serialise and not a second opinion about
+how many models a folder may hold — one number, declared once as
+`api.RESPONSE_CAP` rather than as a literal per route. `matched` counts the
+scope **before** the cut, the same job it does on `/query`: a client showing
+64 of 210 has somewhere to read the 210.
 `truncated` is `matched > limit` and nothing else.
 
 **Order is by root-relative path, component-wise**, and it is part of the
@@ -309,7 +313,20 @@ rather than one:
   the folder, it is empty" are different things to show a person. `status` is
   two-valued rather than the scope block's three — `partial` reads as `ok`,
   because a listing that returns 41 of the 55 files in a folder has still
-  answered, and the consumer that wants the coverage number asks `/query`.
+  answered, and `n_scanned` beside `matched` is what lets a client that wants
+  the coverage number derive it here rather than asking `/query`.
+
+**`n_scanned` and `covers` ride along, §scope's own fields under §scope's own
+names**, because a two-valued `status` on its own re-creates the ambiguity
+that block was invented to remove — and re-creates it for *this* consumer,
+which lists `.3mf` and `.obj` beside `.stl`. **They are not two spellings of
+one fact, and conflating them is the mistake to avoid: `n_scanned` is what
+differs** — `0` for a folder of `.3mf` ("nothing here is searchable at all")
+against `>0` for an unclassified folder of STLs ("nothing here *yet*"), where
+both answer `unindexed` and `matched: 0` — **while `covers` is why it can be
+`0` at all**, the same constant list of extensions this index can ever hold
+that `/status` and every scope block carry. `n_indexed` is not repeated: it is
+`matched`, which this response already has under the name `/query` gave it.
 
 `path` values are **absolute, in the collection's canonical spelling** — the
 same string `hit.path` carries for the same model, built from the same
@@ -519,7 +536,12 @@ pose implies without loading a rendering library. One copy of each.
 
 Every scoped response carries what the filter actually matched, because
 "no results" and "you searched a directory nothing has been classified in"
-are different answers and the UI must be able to say which:
+are different answers and the UI must be able to say which. `/query` and
+`/similar` carry it as the block below; `/under` is not a search and has no
+`results` to explain, so it carries the same facts inline under the same names
+— `n_scanned` and `covers` verbatim, `n_indexed` as the `matched` it already
+reports, and a `status` deliberately collapsed to two values (see that
+section). Under either shape the fields mean one thing:
 
 ```jsonc
 {
