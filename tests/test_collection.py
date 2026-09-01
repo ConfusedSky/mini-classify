@@ -254,6 +254,98 @@ def test_a_run_scoped_to_a_subdirectory_keeps_root_relative_paths(tmp_path):
     assert len(c.resolve("Kits").rows) == 1          # only what was walked
 
 
+def test_a_symlink_walked_run_is_readable_through_the_resolved_input(tmp_path):
+    """The walk cache is keyed on `inp.resolve()` but stores paths *as walked*,
+    so one cache serves every spelling of the root while holding exactly one of
+    them. A classify run through a symlink leaves link-spelled entries there,
+    and a bare `serve_api.py --cache-dir ...` then loads them with `input`
+    taken from run-params.json — which records it **resolved**. Both lexical
+    relations in `_parts` fail on that pair, `_rel` fell back to absolute
+    tuples, and the damage is total and silent: `row_of` missed for every
+    model, so `POST /poses` answered null for all of them with `/status` green,
+    and every scope matched nothing. The 2026-08-19 absolute-`_rel` bug
+    arriving by a second route (cross-session review of f074334)."""
+    args, root, _ = build(tmp_path, ["Kits/Baal/x.stl", "Kits/Other/y.stl"])
+    link = tmp_path / "link"
+    link.symlink_to(root)
+    Collection.load(_replace(args, input=str(link), rescan=True))      # the run
+    c = Collection.load(_replace(args, input=str(root), rescan=False))  # the server
+    assert all(f.is_relative_to(link) for f in c.files)     # the fixture's premise
+    for i, f in enumerate(c.files):
+        # the realpath is the only spelling model-browser holds for a model
+        assert c.row_of(str(Path(f).resolve())) == i, f
+        assert c.row_of(c.hit(i, 0.1, 1.0)["rel_path"]) == i
+    assert {c.hit(i, 0.1, 1.0)["rel_path"] for i in range(len(c.files))} == \
+        {"Kits/Baal/x.stl", "Kits/Other/y.stl"}
+    s = c.resolve("Kits")
+    assert len(s.rows) == 2 and s.n_scanned == 2 and s.status == "indexed"
+    assert len(c.resolve(str(root / "Kits" / "Baal")).rows) == 1
+
+
+def test_a_real_path_walked_run_is_readable_through_a_symlinked_input(tmp_path):
+    """The other direction of the same matrix. It already worked — the walk
+    stores resolved spellings, so `_parts` falls through to
+    `f.relative_to(self.root)` — and the repair must leave it that way, which
+    is the half a fix keyed on the input alone would have broken."""
+    args, root, _ = build(tmp_path, ["Kits/Baal/x.stl", "Kits/Other/y.stl"])
+    link = tmp_path / "link"
+    link.symlink_to(root)
+    Collection.load(_replace(args, input=str(root), rescan=True))      # the run
+    c = Collection.load(_replace(args, input=str(link), rescan=False))  # the server
+    assert all(f.is_relative_to(root) for f in c.files)     # the fixture's premise
+    for i, f in enumerate(c.files):
+        assert c.row_of(str(f)) == i, f             # the realpath, as sent
+        assert c.row_of(c.hit(i, 0.1, 1.0)["rel_path"]) == i
+    assert {c.hit(i, 0.1, 1.0)["rel_path"] for i in range(len(c.files))} == \
+        {"Kits/Baal/x.stl", "Kits/Other/y.stl"}
+    s = c.resolve("Kits")
+    assert len(s.rows) == 2 and s.n_scanned == 2 and s.status == "indexed"
+    # `resolve` realpaths, so the link spelling scopes the same rows — the
+    # difference from `row_of`, which is lexical and answers None for a third
+    # alias by design
+    assert c.resolve(str(link / "Kits")).rows.tolist() == s.rows.tolist()
+
+
+def test_a_scoped_symlink_walked_run_keeps_root_relative_paths(tmp_path):
+    """`_prefix` and the realpath repair must not both apply. `_prefix` is the
+    *input's* offset from the root and belongs only to the input-relative
+    branch; `_real(f).relative_to(self._real_root)` is already root-relative,
+    so prepending `_prefix` there would spell `Kits/Baal/Kits/Baal/x.stl` — a
+    scope that matches nothing and a join key no consumer can use, which is the
+    same failure by the opposite mistake."""
+    args, root, _ = build(tmp_path, ["Kits/Baal/x.stl", "Kits/Other/y.stl"])
+    link = tmp_path / "link"
+    link.symlink_to(root)
+    Collection.load(_replace(args, input=str(link / "Kits" / "Baal"), rescan=True))
+    c = Collection.load(_replace(args, input=str(root / "Kits" / "Baal"),
+                                rescan=False))
+    assert len(c.files) == 1 and c.files[0].is_relative_to(link)
+    assert c.hit(0, 0.1, 1.0)["rel_path"] == "Kits/Baal/x.stl"
+    assert c.row_of(str(root / "Kits" / "Baal" / "x.stl")) == 0
+    assert len(c.resolve("Kits").rows) == 1          # only what was walked
+
+
+def test_a_file_walked_out_of_the_collection_keeps_its_absolute_parts(tmp_path):
+    """The terminal fallback the realpath repair must not swallow. A walk that
+    followed a symlink out of the tree holds a file with no root-relative name
+    at all — realpath cannot heal that one, and 2026-08-19's reason for
+    returning something usable rather than raising still stands for it. What it
+    must not do is land under a scope inside the root."""
+    args, root, _ = build(tmp_path, ["Kits/Baal/x.stl"])
+    outside = tmp_path / "elsewhere" / "z.stl"
+    outside.parent.mkdir(parents=True)
+    outside.write_bytes(b"solid x\nendsolid x\n")
+    Collection.load(args)                            # writes the walk cache
+    walk = next((tmp_path / "cache").glob("walk-*.json"))
+    saved = json.loads(walk.read_text())
+    saved["files"].append(str(outside))          # as a walk out of the tree left it
+    walk.write_text(json.dumps(saved))
+
+    c = Collection.load(_replace(args, rescan=False))            # must not raise
+    assert c.resolve(None).n_scanned == 2
+    assert c.resolve("Kits").n_scanned == 1          # under no scope in the root
+
+
 # --- pose ------------------------------------------------------------------
 
 def test_pose_carries_up_azimuth_zero_and_the_front_camera(tmp_path):

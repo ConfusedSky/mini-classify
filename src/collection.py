@@ -477,12 +477,42 @@ class Collection:
         absolute parts — which matched no scope and emitted a `rel_path` with
         a doubled leading slash, the documented join key silently unusable
         (review, 2026-08-19). `_prefix` is the input's offset from the root, so
-        this stays exact for a run scoped to a subdirectory too."""
+        this stays exact for a run scoped to a subdirectory too.
+
+        Both lexical relations fail when the walk and this load spell one tree
+        differently, which the walk cache makes routine rather than exotic: it
+        is keyed on `inp.resolve()` but stores paths *as walked*, so one cache
+        serves every spelling of a root while holding exactly one of them. A
+        classify run through a symlink and a `serve_api.py` started from the
+        `input` run-params.json records — resolved, by `save_run_params` —
+        therefore share a cache and disagree about every path in it, and the
+        absolute fallback below is then the 2026-08-19 bug arriving by that
+        second route (cross-session review of f074334): `_row_by_rel` keyed by
+        absolute tuples, so `row_of` missed for every model and every scope
+        matched nothing, silently. Realpath heals it, because the disagreement
+        is only about spelling and the file is the same file.
+
+        Note what that branch returns: parts relative to the **root** already,
+        so `_prefix` must not be prepended there — it is the *input's* offset
+        and belongs to the input-relative branch alone. A file whose realpath
+        is genuinely outside the root (a walk that followed a symlink out of
+        the tree) has no root-relative name at all and keeps the absolute
+        parts, for 2026-08-19's reason: something usable beats raising.
+
+        One `_real()` per file, and only here. The module docstring's budget is
+        a promise about *requests* — "nothing here touches the filesystem after
+        `load`" — and this runs once per load, on the same pass where
+        `load_file_list` already `exists()`s every entry."""
         try:
             return self._prefix + f.relative_to(self._inp).parts
         except ValueError:
             pass
-        return f.relative_to(self.root).parts if f.is_relative_to(self.root) else f.parts
+        if f.is_relative_to(self.root):
+            return f.relative_to(self.root).parts
+        try:
+            return _real(f).relative_to(self._real_root).parts
+        except ValueError:
+            return f.parts
 
     def _display_name(self, f: Path) -> str:
         """The REPL's rule, one copy: root-relative, filler directory dropped,
