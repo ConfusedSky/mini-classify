@@ -40,7 +40,8 @@ src/embedder.py      SigLIP; the only module that owns torch models
 src/query.py         view pooling, robust z, ranking: the query path, numpy only
 src/collection.py    the loaded cache an API query answers against: matrix,
                      poses, scope resolution              [no torch, no open3d]
-src/api.py           the HTTP surface: four routes, the GPU lock, the warmup
+src/api.py           the HTTP surface: the routes (surface.md owns the
+                     inventory), the GPU lock, the warmup
                      gate                                 [imported by nothing]
 serve_api.py         CLI entry for the API, like classify_stls.py for the
                      pipeline; nothing imports it
