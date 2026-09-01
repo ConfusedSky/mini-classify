@@ -789,7 +789,9 @@ def parse_tile_answer(text, n_tiles):
         tile = json.loads(text[text.index("{"):text.rindex("}") + 1])["tile"]
     except (ValueError, KeyError, TypeError):
         return None
-    if isinstance(tile, int) and 1 <= tile <= n_tiles:
+    # bool subclasses int, so an unguarded check answers tile 1 for `true`
+    if (isinstance(tile, int) and not isinstance(tile, bool)
+            and 1 <= tile <= n_tiles):
         return tile - 1
     return None
 
@@ -973,6 +975,41 @@ rest of the permanent side: `MAX_TOKENS`, `OTHER` and a missing reason are
 transient, because a body that merely carries no answer is not a verdict."""
 
 
+def _split_transport(e):
+    """Map a transport-layer failure onto the retry split. **Always raises.**
+
+    Both arbiters face the same status space and must map it identically, and
+    three review passes have each found a transient failure pinned permanent
+    in one copy or the other — so the mapping gets one home. The 200-body
+    splits stay with their callers: Vertex's `finishReason` and OpenRouter's
+    embedded error envelope genuinely differ."""
+    import urllib.error
+
+    # HTTPError first: it subclasses OSError, so the order is the whole
+    # classification, not a style choice.
+    if isinstance(e, urllib.error.HTTPError):
+        detail = f"HTTP {e.code}: {e.read()[:200].decode(errors='replace')}"
+        # 429/503 are "come back later", not "this request is wrong", and they
+        # return in milliseconds — so an immediate retry is a second failure
+        # and a freed worker starts a third. Distinguished so `ask_vlm_up` can
+        # back off instead (2026-08-19: a --rescan at collection scale hit
+        # Vertex quota and the un-paced pool turned it into a storm).
+        if e.code in (429, 503):
+            raise RateLimited(detail) from e
+        # Auth/entitlement and intermediary-timeout statuses are the
+        # environment, not a verdict on the request, and both are discovered
+        # only mid-run — the startup probe never makes a provider call
+        # (docs/archive/tri-state-pass-2.md, 2026-08-21). Any 5xx is the server
+        # failing, transient like a network drop, without 429/503's backoff.
+        if e.code in TRANSIENT_HTTP_STATUS or e.code >= 500:
+            raise VLMUnavailable(detail) from e
+        raise VLMRejected(detail) from e
+    # URLError and socket timeouts are OSErrors; a mid-read protocol error is
+    # an HTTPException. None of them is the API saying "no", so none may land
+    # on the permanent side of the retry split (review, 2026-08-20).
+    raise VLMUnavailable(f"network failure: {e}") from e
+
+
 def _ask_gemini(png_bytes, n_tiles, model, project=None):
     """Vertex AI arbiter. Raw HTTPS rather than an SDK: one POST, no dependency,
     and the same call the eval harness measured at 43/44 standalone."""
@@ -1004,33 +1041,10 @@ def _ask_gemini(png_bytes, n_tiles, model, project=None):
     }).encode()
     req = urllib.request.Request(url, body, {"Authorization": f"Bearer {token}",
                                              "Content-Type": "application/json"})
-    # The `HTTPError` clause stays ABOVE the `OSError` one — HTTPError
-    # subclasses OSError — while `.read()`'s IncompleteRead is an
-    # HTTPException and lands transient below.
     try:
         raw = urllib.request.urlopen(req, timeout=300).read()
-    except urllib.error.HTTPError as e:
-        detail = f"HTTP {e.code}: {e.read()[:200].decode(errors='replace')}"
-        # 429/503 are "come back later", not "this request is wrong", and they
-        # return in milliseconds — so an immediate retry is a second failure
-        # and a freed worker starts a third. Distinguished so `ask_vlm_up` can
-        # back off instead (2026-08-19: a --rescan at collection scale hit
-        # Vertex quota and the un-paced pool turned it into a storm).
-        if e.code in (429, 503):
-            raise RateLimited(detail) from e
-        # Auth/entitlement and intermediary-timeout statuses are the
-        # environment, not a verdict on the request, and both are discovered
-        # only mid-run — the startup probe never makes a Vertex call
-        # (docs/archive/tri-state-pass-2.md, 2026-08-21). Any 5xx is the server
-        # failing, transient like a network drop, without 429/503's backoff.
-        if e.code in TRANSIENT_HTTP_STATUS or e.code >= 500:
-            raise VLMUnavailable(detail) from e
-        raise VLMRejected(detail) from e
-    except (OSError, http.client.HTTPException) as e:
-        # URLError and socket timeouts are OSErrors; a mid-read protocol error
-        # is HTTPException. None of them is the API saying "no", so none may
-        # land on the permanent side of the retry split (review, 2026-08-20).
-        raise VLMUnavailable(f"network failure: {e}") from e
+    except (urllib.error.HTTPError, OSError, http.client.HTTPException) as e:
+        _split_transport(e)
     # Read split from parse, and `"rejected"` inferred from the API's stated
     # verdict rather than from a KeyError (review 2 blocker B2): a
     # `finishReason: MAX_TOKENS` with no parts — the thinking-token exhaustion
@@ -1183,19 +1197,12 @@ def _ask_glm(tile_pngs, n_tiles, model):
     req = urllib.request.Request(OPENROUTER_URL, body,
                                  {"Authorization": f"Bearer {key}",
                                   "Content-Type": "application/json"})
-    # Same ordering rule as `_ask_gemini`: HTTPError above OSError, because it
-    # subclasses OSError. `DeadlineExceeded` is a RuntimeError and passes both.
+    # `DeadlineExceeded` is a RuntimeError and matches none of these, so it
+    # reaches `ask_vlm_up` unmapped — which is what breaks its retry loop.
     try:
         raw = _fetch_with_deadline(req)
-    except urllib.error.HTTPError as e:
-        detail = f"HTTP {e.code}: {e.read()[:200].decode(errors='replace')}"
-        if e.code in (429, 503):
-            raise RateLimited(detail) from e
-        if e.code in TRANSIENT_HTTP_STATUS or e.code >= 500:
-            raise VLMUnavailable(detail) from e
-        raise VLMRejected(detail) from e
-    except (OSError, http.client.HTTPException) as e:
-        raise VLMUnavailable(f"network failure: {e}") from e
+    except (urllib.error.HTTPError, OSError, http.client.HTTPException) as e:
+        _split_transport(e)
     try:
         d = json.loads(raw)
     except ValueError as e:
@@ -1236,11 +1243,15 @@ def arbiter_id(backend, model):
     One function because two callers must produce byte-identical strings or
     `--repose` re-poses the whole collection every run: `poser.Poser` stamps
     what it writes, `classify_stls.main` computes what to compare against.
-    The model half can itself contain "/" (OpenRouter ids are org/model) and
-    can be None (the claude backend has no model id) — neither matters,
-    because nothing ever splits this string; the only operation on it is
-    whole-string equality."""
-    return f"{backend}/{model or DEFAULT_VLM_MODELS.get(backend)}" if backend else None
+    The model half can itself contain "/" (OpenRouter ids are org/model),
+    which does not matter: nothing ever splits this string, and the only
+    operation on it is whole-string equality. A backend that has no model id
+    at all — `claude`, which is a CLI — stamps the bare backend name; the
+    alternative asserts a model literally called "None"."""
+    if not backend:
+        return None
+    model = model or DEFAULT_VLM_MODELS.get(backend)
+    return f"{backend}/{model}" if model else backend
 
 
 def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None,
@@ -1332,6 +1343,12 @@ def ask_vlm_up(tiles, backend, scratch_dir, vlm_model="gemma4:26b", save_to=None
                 # what the model is asked about.
                 pngs = []
                 for im in tiles:
+                    # Capped like the sheet's own tiles: above SHEET_THUMB the
+                    # per-tile token cost is unmeasured (6-12x at a
+                    # --render-size of 1024+). thumbnail never enlarges, so a
+                    # default-size run sends exactly the bytes it always did.
+                    im = im.copy()
+                    im.thumbnail((SHEET_THUMB, SHEET_THUMB))
                     buf = io.BytesIO()
                     im.save(buf, format="PNG")
                     pngs.append(buf.getvalue())

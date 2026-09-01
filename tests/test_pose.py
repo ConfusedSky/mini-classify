@@ -742,6 +742,30 @@ def test_glm_backend_is_dispatched_with_solo_tiles_not_a_sheet(monkeypatch, tmp_
     assert pose.ask_vlm_up(tiles, "glm", tmp_path, pose.GLM_MODEL) is None
 
 
+def test_glm_solo_tiles_are_capped_at_sheet_thumb(monkeypatch, tmp_path):
+    """Solo tiles ride the same cap `make_contact_sheet` puts on its own.
+
+    Every other send path thumbnails before encoding, so only this one scales
+    with --render-size: a 1024 px run would put six full-size tiles on the
+    wire at an unmeasured 6-12x the token cost of the 512 px sweeps every GLM
+    number in LEARNINGS was measured under. `thumbnail` never enlarges, which
+    is why the default render size is untouched by the cap."""
+    tiles = [Image.new("RGB", (1024, 1024), c)
+             for c in ["white", "red", "green", "blue", "yellow", "black"]]
+    seen = {}
+
+    def fake(tile_pngs, n_tiles, model):
+        seen["pngs"] = tile_pngs
+        return 0
+
+    monkeypatch.setattr(pose, "_ask_glm", fake)
+    assert pose.ask_vlm_up(tiles, "glm", tmp_path, pose.GLM_MODEL) == 0
+    got = [Image.open(io.BytesIO(p)) for p in seen["pngs"]]
+    assert [im.size for im in got] == [(pose.SHEET_THUMB, pose.SHEET_THUMB)] * 6
+    # scaled, not cropped or reordered — still six distinct tiles in tile order
+    assert [im.getpixel((0, 0)) for im in got] == [t.getpixel((0, 0)) for t in tiles]
+
+
 def test_the_sheet_is_still_built_and_saved_for_the_glm_backend(monkeypatch, tmp_path):
     """Sent and saved are different jobs. The tiles go to the model; the sheet
     goes next to the renders, because it is the artefact a human reads back
@@ -1289,6 +1313,21 @@ def test_parse_tile_answer():
     assert pose.parse_tile_answer('{"tile": 0}', 6) is None
     assert pose.parse_tile_answer("no json here", 6) is None
     assert pose.parse_tile_answer('{"tile": "two"}', 6) is None
+    # bool subclasses int, so an unguarded isinstance answered tile 1 here
+    assert pose.parse_tile_answer('{"tile": true}', 6) is None
+    assert pose.parse_tile_answer('{"tile": false}', 6) is None
+
+
+def test_arbiter_id_shapes():
+    """The stamp `poser.Poser` writes and `classify_stls.main` compares
+    against; they must agree byte for byte or `--repose` re-poses the whole
+    collection every run."""
+    assert pose.arbiter_id("gemini", None) == f"gemini/{pose.GEMINI_MODEL}"
+    assert pose.arbiter_id("glm", None) == f"glm/{pose.GLM_MODEL}"
+    assert pose.arbiter_id("glm", "org/m") == "glm/org/m"     # "/" in the half
+    # `claude` has no model id: the bare backend, not a model called "None"
+    assert pose.arbiter_id("claude", None) == "claude"
+    assert pose.arbiter_id(None, None) is None
 
 
 def test_make_contact_sheet_grid():
