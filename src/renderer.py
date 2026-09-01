@@ -71,6 +71,11 @@ from src.identity import render_key
 from src.loader import LoadedMesh
 from src.messages import RenderConfig
 
+# The vertical FOV every shot is set up with, and the one `tight_view_cams`
+# fits against. One constant because a fit computed at one FOV and shot at
+# another is not tight — it is wrong in whichever direction the two differ.
+FOV_DEG = 45.0
+
 SUN_INTENSITY = 90000.0
 # Ambient fill. The sun is the only light Filament gives us here —
 # add_directional_/point_/spot_light all return True and then render as a
@@ -132,13 +137,13 @@ def orbit_camera(center, radius, az, elev):
     return eye, up, sun / np.linalg.norm(sun)
 
 
-def tight_view_cams(verts, center, angles, fov_deg=45.0, margin=1.05):
+def tight_view_cams(verts, center, angles, fov_deg=FOV_DEG, margin=1.05):
     """Per-view camera tuples framed to the mesh's own silhouette.
 
     One orbit distance per (az, elev): project every vertex into that view's
     frame and back the camera off until the widest of |x|,|y| just fits the
-    frustum. `fov_deg` must match the FOV `_shoot` passes to `setup_camera` —
-    a fit computed at one FOV and shot at another is not tight, it is wrong in
+    frustum. A caller that overrides `fov_deg` must shoot at that FOV too — a
+    fit computed at one FOV and shot at another is not tight, it is wrong in
     whichever direction the two differ.
 
     Pure numpy, and `verts` is an array rather than a mesh: the fit is
@@ -326,7 +331,7 @@ class Renderer:
         not PIL: arrays are what cross the boundary (data_structures.md)."""
         images = []
         for center, eye, up, sun in cams:
-            self._renderer.setup_camera(45.0, center, eye, up)
+            self._renderer.setup_camera(FOV_DEG, center, eye, up)
             self._renderer.scene.scene.set_sun_light(sun, [1.0, 1.0, 1.0], SUN_INTENSITY)
             images.append(np.asarray(self._renderer.render_to_image()).copy())
         return images

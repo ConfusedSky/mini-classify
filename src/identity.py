@@ -133,6 +133,10 @@ def rel_path(f, root):
 #       classification-view pixel changes. Pose tiles keep the fixed framing
 #       and are unaffected. The `|ev2` token is therefore live in every key
 #       written from here on — version 1 is the one that stays invisible.
+#       Same change as RECIPE_VERSION 1 below, seen from the other side: that
+#       entry describes the recipe the pixels come from, this one that the
+#       derivation reading those pixels now answers differently. Both bumped
+#       together on 2026-08-31 and neither is a second, separate change.
 EMBED_CACHE_VERSION = 2
 
 # Versions the render *recipe* — the knobs that decide what the camera sees,
@@ -152,6 +156,9 @@ EMBED_CACHE_VERSION = 2
 #       1.05, seeded 200k-vertex subsample); pose tiles left on the fixed 1.4x
 #       extent-norm orbit; sun 90000 / fill 10000; `defaultLit` at 0.7 grey;
 #       the exact (noise-free) `pose._AXIS_ROTATIONS`.
+#       The tight framing here and EMBED_CACHE_VERSION 2 above are one
+#       2026-08-31 change described twice, not two: this is the recipe that
+#       draws the pixels, that is the derivation that reads them.
 #
 # Elided at 1 for the same reason EMBED_CACHE_VERSION is: embed-cache2 and
 # embed-cache-test are not part of this rebuild, and an unconditional token

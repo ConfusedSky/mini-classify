@@ -68,7 +68,11 @@ def load_siglip(model_name: str, device: str, torch_dtype=None):
     downloads nothing. `local_files_only=True` skips it. The retry keeps a
     model you have never pulled working, since offline raises rather than
     fetches; `OSError` is the shape transformers raises for both a missing
-    snapshot (`LocalEntryNotFoundError`) and a partial one.
+    snapshot (`LocalEntryNotFoundError`) and a partial one. The retried block
+    is the two `from_pretrained` calls and nothing else — `OSError` is a broad
+    family, and a device transfer or an unrelated filesystem error caught
+    alongside them would silently re-enter the loader online, turning "this
+    machine has no network" into a second failure with a different cause.
 
     The `transformers` import stays deferred, as at every other load site: the
     signature already implies torch (interfaces.md §import rules), but the
@@ -81,20 +85,20 @@ def load_siglip(model_name: str, device: str, torch_dtype=None):
 
     def load(local_only):
         # Processor first: it is the cheap CPU-side half, and on a partial
-        # snapshot it is the half that raises. Loading the model first left an
-        # fp16 copy resident on the 4060 — the traceback keeps the failed
-        # frame alive — for the whole retry, peaking at two.
+        # snapshot it is the half that raises. Loading the model first left a
+        # copy of the weights alive for the whole retry — the traceback keeps
+        # the failed frame — peaking at two.
         processor = AutoProcessor.from_pretrained(model_name,
                                                   local_files_only=local_only)
-        model = (AutoModel.from_pretrained(model_name, torch_dtype=torch_dtype,
-                                           local_files_only=local_only)
-                 .to(device).eval())
+        model = AutoModel.from_pretrained(model_name, torch_dtype=torch_dtype,
+                                          local_files_only=local_only)
         return model, processor
 
     try:
-        return load(True)
+        model, processor = load(True)
     except OSError:
-        return load(False)
+        model, processor = load(False)
+    return model.to(device).eval(), processor
 
 
 def as_tensor(feat):

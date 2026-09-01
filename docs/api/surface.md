@@ -192,10 +192,14 @@ directory knew nothing, which is the gap this call closes.
 |---|---|---|---|
 | `paths` | string[] | required | real paths, absolute or root-relative; at most **1024** per request |
 
-Returns `{"poses": {"<path>": pose | null, …}}`. **Every requested path is a
-key, echoed exactly as it was sent**, so the caller joins on the string it
-already holds rather than on one this side normalised; `pose` is the shared
-shape below, the same block `hit.pose` carries for the same model.
+Returns `{"poses": {"<path>": pose | null, …}}`. **Every *distinct* requested
+path is a key, echoed exactly as it was sent**, so the caller joins on the
+string it already holds rather than on one this side normalised; `pose` is the
+shared shape below, the same block `hit.pose` carries for the same model. A
+path repeated within one batch collapses to a single entry — a JSON object
+cannot carry the same key twice — so the response has one key per distinct
+path, not one per element of `paths`. Two spellings of one model are two
+distinct keys and are echoed as two.
 
 **`null` is an answer here, not an error, and that is the one departure from
 `/query`'s `path`.** There an unindexed or unaddressable path is a 404/400/422

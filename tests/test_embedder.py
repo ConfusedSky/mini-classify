@@ -209,6 +209,32 @@ def test_load_siglip_tries_the_local_cache_first(monkeypatch, cached, expected):
     assert isinstance(model, FakeModel) and processor is proc
 
 
+def test_an_oserror_moving_the_model_is_not_a_cache_miss(monkeypatch):
+    """The retry answers "the snapshot is not on disk", and only that. An
+    `OSError` out of the device transfer is a different fault entirely, and
+    retrying it re-enters the loader online — hiding the real cause behind a
+    download, or behind a second failure on a machine with no network."""
+    seen = []
+
+    class Immovable(FakeModel):
+        def to(self, device):
+            raise OSError("device transfer failed")
+
+    def model_from_pretrained(name, torch_dtype=None, local_files_only=False):
+        seen.append(local_files_only)
+        return Immovable()
+
+    mod = types.ModuleType("transformers")
+    mod.AutoModel = types.SimpleNamespace(from_pretrained=model_from_pretrained)
+    mod.AutoProcessor = types.SimpleNamespace(
+        from_pretrained=lambda name, local_files_only=False: FakeProcessor())
+    monkeypatch.setitem(sys.modules, "transformers", mod)
+
+    with pytest.raises(OSError, match="device transfer failed"):
+        load_siglip(DEFAULT_MODEL, "cpu")
+    assert seen == [True]            # loaded once, offline, and never re-tried
+
+
 @pytest.mark.parametrize("device, expected", [
     ("cpu", torch.float32), ("cuda", torch.float16), ("cuda:0", torch.float16),
 ])

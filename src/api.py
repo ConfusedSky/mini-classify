@@ -42,7 +42,7 @@ from pydantic import BaseModel, Field
 
 from src import query
 from src.cachedir import cache_version
-from src.collection import (CacheUnusable, Collection, NoSuchPath,
+from src.collection import (COVERS, CacheUnusable, Collection, NoSuchPath,
                             OutsideCollection, ScopeError, VirtualPath,
                             VolumeUnavailable)
 
@@ -457,7 +457,10 @@ def create_app(state: ServerState) -> FastAPI:
                    n_views=int(c.matrix.shape[1]),
                    dim=int(c.matrix.shape[2]),
                    missing=c.missing,
-                   covers=list(c.resolve(None).covers))
+                   # The constant every scope block carries, read as the
+                   # constant: resolving the whole-collection scope for it
+                   # builds a row index over every file to report a fixed list.
+                   covers=list(COVERS))
         return out
 
     @app.post("/query")

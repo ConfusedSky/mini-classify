@@ -228,7 +228,7 @@ def test_the_bounds_compose_over_http_and_matched_says_what_was_cut(tmp_path):
 
 
 def test_matched_counts_the_floor_set_not_the_collection(tmp_path):
-    client, _, c = serve(tmp_path, layout=MANY)
+    client, _, _ = serve(tmp_path, layout=MANY)
     body = client.post("/query", json={"text": "x", "min_score": 2.0}).json()
     assert body["results"] == [] and body["matched"] == 0
 
@@ -300,7 +300,7 @@ def test_the_text_forward_is_serialised(tmp_path):
 # --- /similar ---------------------------------------------------------------
 
 def test_similar_ranks_neighbours_and_excludes_the_model_itself(tmp_path):
-    client, _, c = serve(tmp_path)
+    client, _, _ = serve(tmp_path)
     body = client.post("/similar", json={"path": "a/one.stl"}).json()
     rels = [h["rel_path"] for h in body["results"]]
     assert "a/one.stl" not in rels                 # never itself
@@ -407,6 +407,19 @@ def test_a_mixed_batch_keys_every_path_it_was_given(tmp_path):
     body = client_of(tmp_path).post("/poses", json={"paths": asked}).json()
     assert list(body["poses"]) == asked
     assert [body["poses"][p] is None for p in asked] == [False, True, False, True]
+
+
+def test_a_repeated_path_collapses_to_one_key(tmp_path):
+    """The limit of "every requested path is a key": a JSON object cannot
+    carry the same key twice, so a batch that repeats a path answers it once.
+    Surface.md says *distinct* for this reason — a caller counting keys
+    against `len(paths)` to detect a dropped model would misread its own
+    duplicate as a loss."""
+    asked = ["a/one.stl", "a/nowhere.stl", "a/one.stl"]
+    body = client_of(tmp_path).post("/poses", json={"paths": asked}).json()
+    assert list(body["poses"]) == ["a/one.stl", "a/nowhere.stl"]
+    assert body["poses"]["a/one.stl"] is not None
+    assert body["poses"]["a/nowhere.stl"] is None
 
 
 def test_the_batch_is_bounded_and_the_refusal_is_the_schemas_own(tmp_path):

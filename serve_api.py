@@ -27,6 +27,11 @@ from src.api import ServerState, create_app
 from src.cachedir import add_cache_args, apply_run_params
 from src.collection import Collection
 
+# The warmup's other half narrates through `mini_classify.api` (445b2b0); this
+# entry point owns the one warmup line that happens out here, in `load_embed`,
+# and logs it beside those rather than printing past them.
+log = logging.getLogger("mini_classify.serve")
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -55,7 +60,7 @@ def main():
         import torch
         from src.embedder import embed_raw, embed_texts, load_siglip
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"loading {args.model} on {device} ...")
+        log.info("loading %s on %s", args.model, device)
         model, processor = load_siglip(args.model, device)
 
         def embed(texts, raw=False):
