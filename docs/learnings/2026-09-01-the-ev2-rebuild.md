@@ -73,3 +73,14 @@ per query.
 Both run artifacts are in `eval/renderer_pilot/out/` (`ev2_rankings.json`,
 `judgments_glm_ev2.json`); the script stays beside the pilot for the next
 recipe change.
+
+Manually verified 2026-09-01 (Claude, viewing the ev2 renders of every
+top-10 entry/exit on the six moved queries): dissented from GLM on 4 of 10
+contested grades, but substituting those grades gives +0.011 — same
+verdict, same 8/4 split. The one real relevance discovery is
+`32mm_LootingGoblin` entering goblin's top-3 (an unambiguous 2); robot's
+gain is pure reordering (same top-10, all six rel-2s packed into ranks
+1–6); knight's −0.086 is positional (same three rel-2s both sides, a rel-1
+promoted above them). One texture GLM's totals hide: wizard's two new
+entries are *props* (a staff, a brazier) — tight framing can let an
+object's silhouette dominate a scene query — but both sit at ranks 6/10.
