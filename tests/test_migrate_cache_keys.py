@@ -14,16 +14,18 @@ import hashlib
 import json
 import os
 import shutil
+import sys
 
 import numpy as np
+import pytest
 from PIL import Image
 
 from src import pose
 from src.cachedir import (CACHE_VERSION, EMBEDS_SUBDIR, RENDERS_SUBDIR,
                           cache_key, cache_version, render_subdir,
-                          require_cache_version)
+                          require_cache_version, save_run_params)
 from src.identity import cache_key_from_identity, render_key
-from migrate_cache_keys import (move_all, plan_embeds, plan_poses,
+from migrate_cache_keys import (main, move_all, plan_embeds, plan_poses,
                                 plan_renders)
 
 
@@ -68,6 +70,26 @@ def anchored_cache(tmp_path, files, root, a, *, source="siglip"):
             Image.new("RGB", (8, 8)).save(d / f"{render_key(f, root)}_{tail}.jpg")
     (cache / "pose-cache.json").write_text(json.dumps(entries))
     return cache, cache / RENDERS_SUBDIR
+
+
+def run_params(cache, root, a=None):
+    """run-params.json as a classify run leaves it.
+
+    Through `save_run_params` rather than a hand-written dict, so `main` reads
+    the manifest a real run records — including the `collection_root` key the
+    anchoring turns on (CLAUDE.md: production writers)."""
+    a = a or args()
+    save_run_params(argparse.Namespace(
+        cache_dir=str(cache), input=str(root), collection_root=str(root),
+        **vars(a)))
+
+
+def invoke(cache, inp, *extra):
+    """`main()` as the command line reaches it — argv, not a call signature,
+    because the root derivation these tests pin sits behind `apply_run_params`
+    and the manifest it merges."""
+    return ["migrate_cache_keys.py", str(inp), "--cache-dir", str(cache),
+            *extra]
 
 
 def grown_library(tmp_path):
@@ -319,6 +341,67 @@ def test_empty_cache_is_stamped_current(tmp_path):
     require_cache_version(d)
     assert cache_version(d) == CACHE_VERSION
     require_cache_version(d)     # and idempotent thereafter
+
+
+# --- main: the root it migrates to, and the write that lands ----------------
+
+def test_a_subdir_scoped_run_is_refused_before_anything_is_written(tmp_path, monkeypatch):
+    """`identity.resolve_root`'s anchoring, which `main` used to go around.
+
+    A run scoped to one kit *inside* the recorded collection root has nothing
+    to migrate — the recorded root still anchors those keys, which is exactly
+    why `resolve_root` keeps it and answers "subdir". Deriving the new root
+    from the input alone answered the kit instead: every key recomputed
+    relative to it, and on --apply every pose outside the kit dropped, because
+    `plan_poses` claims only what the walk sees and the walk sees one kit. The
+    second model here is that population — it must still be in the file
+    afterwards."""
+    lib, kit, f = grown_library(tmp_path)
+    outside = model(lib, "Other Kit/model.stl")
+    cache, _ = anchored_cache(tmp_path, [f, outside], lib, args())
+    run_params(cache, lib)
+    before = (cache / "pose-cache.json").read_bytes()
+
+    monkeypatch.setattr(sys, "argv", invoke(cache, kit, "--rescan", "--apply"))
+    with pytest.raises(SystemExit) as e:
+        main()
+    assert str(lib) in str(e.value)                  # names the recorded root
+    assert (cache / "pose-cache.json").read_bytes() == before
+    assert len(json.loads(before)) == 2
+
+
+def test_a_torn_pose_cache_write_leaves_the_previous_one_readable(tmp_path, monkeypatch, capsys):
+    """--apply rewrites the most expensive file in the cache, and re-running
+    is this tool's entire recovery story (module docstring) — so a write that
+    dies half-way has to leave something to re-run against.
+
+    It used to go through `pose.save_pose_cache`, whose bare `write_text`
+    truncates in place: ENOSPC or a Ctrl-C mid-write left a torn
+    pose-cache.json and the re-run had no cache to read, on the one artifact
+    whose loss costs money. Only the pose write is failed here, not every
+    `os.replace` — `load_file_list` publishes its walk cache through the same
+    idiom first, and a blanket failure would pass without the migration ever
+    reaching the write under test."""
+    lib, kit, f = grown_library(tmp_path)
+    cache, _ = anchored_cache(tmp_path, [f], kit, args())
+    run_params(cache, kit)
+    before = (cache / "pose-cache.json").read_bytes()
+
+    real_replace = os.replace
+
+    def full_disk(src, dst):
+        if os.path.basename(dst) == "pose-cache.json":
+            raise OSError(28, "No space left on device")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", full_disk)
+    monkeypatch.setattr(sys, "argv", invoke(cache, lib, "--rescan", "--apply"))
+    with pytest.raises(OSError):
+        main()
+
+    assert "1 re-keyed of 1" in capsys.readouterr().out   # not a vacuous plan
+    assert (cache / "pose-cache.json").read_bytes() == before
+    assert not list(cache.glob("*.tmp"))                  # nothing stranded
 
 
 def test_cache_key_first_fields_are_file_identity(tmp_path):

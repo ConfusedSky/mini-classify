@@ -54,7 +54,7 @@ from src import identity
 from src import pose
 from src.cachedir import (CACHE_VERSION, EMBEDS_SUBDIR, RENDERS_SUBDIR,
                           add_cache_args, apply_run_params, load_file_list,
-                          load_run_params, stamp_cache_version)
+                          load_run_params, stamp_cache_version, write_atomic)
 from src.identity import cache_key_from_identity, render_key
 
 # "<render key>_view3" / "<render key>_pose", split off the right-hand end
@@ -177,6 +177,35 @@ def move_all(moves):
         shutil.move(str(src), str(dst))
 
 
+def migration_root(inp, recorded):
+    """The root to re-key *to*, refusing the one scoping that re-keying eats.
+
+    Deliberately `identity.resolve_root` and not `identity.collection_root`:
+    the anchor is the recorded root's to keep, and a subdir-scoped run is
+    exactly where the two answers diverge. `collection_root` would answer the
+    subdir, every key would be recomputed relative to it, and `plan_poses`
+    walks only that subdir — so every pose outside it is claimed by no file
+    and `--apply` drops the lot. Nothing there needs migrating in any case:
+    the recorded root still anchors those keys, which is the whole point of
+    `resolve_root` keeping it.
+
+    Every other case re-keys onto the resolved root, which is the migration
+    this tool exists for: "superdir" (the library grew around the cached kit)
+    and "mismatch" (it moved somewhere else entirely) both answer the input's
+    own root, as before. A loose-file input is the one place the answer also
+    changes — it keeps the recorded anchor, so the run reports nothing to
+    migrate rather than re-keying a whole collection onto one file's parent
+    directory."""
+    root, note = identity.resolve_root(inp, recorded)
+    if note == "subdir":
+        sys.exit(f"{Path(inp).resolve()} is inside the recorded collection root "
+                 f"{recorded} — nothing to migrate: keys under it are still "
+                 f"anchored there, and re-keying relative to a subdir would "
+                 f"drop every pose outside it on --apply. Re-run against "
+                 f"{recorded} if the root itself has moved.")
+    return root
+
+
 def main():
     parser = argparse.ArgumentParser()
     add_cache_args(parser, "STL directory, where the library is now "
@@ -192,8 +221,8 @@ def main():
                  "pass the STL directory explicitly")
 
     params = load_run_params(args.cache_dir)
-    new_root = identity.collection_root(Path(args.input))
     anchored = params.get("collection_root")
+    new_root = migration_root(args.input, anchored)
     old_root = Path(anchored) if anchored else new_root
 
     print(f"cache      {args.cache_dir}")
@@ -254,12 +283,19 @@ def main():
         print("\ndry run — nothing changed; pass --apply to do it")
         return
 
-    # poses first: an embedding's key contains the pose's up-token
-    pose.save_pose_cache(args.cache_dir, rekeyed)
+    # poses first: an embedding's key contains the pose's up-token. Written
+    # here rather than through `pose.save_pose_cache`, whose bare write_text
+    # is the evals': a crash mid-write tears the most expensive file in the
+    # cache, and re-running is this tool's whole recovery story. Same
+    # one-liner as `Done.flush`, so the two writers stay byte-identical.
+    p = Path(args.cache_dir) / "pose-cache.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    write_atomic(p, json.dumps(rekeyed))
     move_all(moves_e)
     move_all(moves_r)
     params["collection_root"] = str(new_root)
-    (Path(args.cache_dir) / "run-params.json").write_text(json.dumps(params, indent=2))
+    write_atomic(Path(args.cache_dir) / "run-params.json",
+                 json.dumps(params, indent=2))
     stamp_cache_version(args.cache_dir)   # last: an interrupted run re-runs
 
     print(f"\nre-keyed {len(rekeyed)} poses, {len(moves_e)} embeddings and "

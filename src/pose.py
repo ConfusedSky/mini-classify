@@ -382,6 +382,15 @@ def load_pose_cache(cache_dir):
 
 
 def save_pose_cache(cache_dir, cache):
+    """The evals' writer, and theirs alone (J7).
+
+    The bare `write_text` is deliberate — `pose` is the leaf both sides of the
+    process boundary import and may not reach for `cachedir` to get an atomic
+    one (interfaces.md's import-rule table). Anything that writes a
+    pose-cache.json a later run will read goes through `cachedir.write_atomic`
+    at its own call site instead, as `Done.flush` and `migrate_cache_keys.main`
+    do; a tool reaching for this function is about to leave a torn cache
+    behind on the one file whose loss costs money."""
     if not cache_dir:
         return
     p = Path(cache_dir) / "pose-cache.json"
