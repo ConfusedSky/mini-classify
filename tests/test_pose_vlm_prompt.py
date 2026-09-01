@@ -175,6 +175,27 @@ def test_explicit_glm_rejects_a_model_pin_that_is_not_an_openrouter_id(tmp_path)
     assert "loading" not in out.stdout
 
 
+def test_explicit_gemini_rejects_an_openrouter_shaped_model_pin(tmp_path):
+    """The mirror of the glm check, and the same catastrophe on the other side
+    of the wire: an org/model id in the Vertex URL names a model the project
+    does not serve, the 4xx is non-transient so the retry contract reads it as
+    a verdict, and `poser.Poser._fold` writes `arbitrated: "rejected"`
+    permanently — one per escalation, unthrottled, because each rejection
+    resets the breaker.
+
+    `gcloud` is absent from PATH here, so the assertion that its failure is
+    *not* what stopped the run is what pins the check ahead of the
+    credentials: without it this run stops at the ADC probe instead, and on a
+    machine with working ADC it would not stop at all."""
+    out = run_piped(tmp_path, "--pose-vlm", "gemini",
+                    "--pose-vlm-model", "z-ai/glm-5.3-flash")
+    assert out.returncode != 0
+    assert "--pose-vlm gemini:" in out.stderr
+    assert "z-ai/glm-5.3-flash is an OpenRouter-shaped org/model id" in out.stderr
+    assert "gcloud" not in out.stderr            # the pin, not the credentials
+    assert "loading" not in out.stdout
+
+
 def test_explicit_glm_without_a_key_fails_at_startup(tmp_path):
     """Symmetric with the gemini arm: asking for an arbiter by name and not
     getting one is an error, and the message names the file to fix."""
@@ -242,6 +263,23 @@ def test_repose_with_an_explicit_fallback_is_allowed(tmp_path):
     out = run_piped(tmp_path, "--pose-vlm", "glm", "--repose", or_key=key)
     assert "auto degraded" not in out.stderr
     assert "loading no-such-org/no-such-model" in out.stdout
+
+
+def test_repose_refuses_a_forced_up_axis(tmp_path):
+    """A forced `--up-axis` builds every pose from the flag — `cache_checker`
+    never opens the pose store — so there are no cached judgments for
+    `--repose` to re-arbitrate and the flag cannot act. The arbiter is real
+    here (explicit glm, a key), so the refusal cannot be the arbiterless one:
+    what is refused is the combination. Announcing a re-judgment the run will
+    not do is the failure being prevented."""
+    key = tmp_path / "or-key"
+    key.write_text("sk-or-not-a-real-key\n")
+    out = run_piped(tmp_path, "--pose-vlm", "glm", "--repose",
+                    "--up-axis", "z", or_key=key)
+    assert out.returncode != 0
+    assert "--repose does nothing under a forced --up-axis" in out.stderr
+    assert "re-arbitrating cached poses" not in out.stdout   # never announced
+    assert "loading" not in out.stdout                       # before SigLIP
 
 
 def test_repose_with_an_arbiter_announces_the_judge_it_will_compare_against(tmp_path):

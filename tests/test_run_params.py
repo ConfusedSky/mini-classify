@@ -131,6 +131,118 @@ def test_a_preflight_death_leaves_the_manifest_alone(tmp_path):
     assert (cache / RUN_PARAMS_FILE).read_bytes() == before
 
 
+STOP_IN_DRIVER = '''\
+"""Stop the CLI in `driver.run` — the first thing past the manifest write.
+
+Imported by the interpreter at startup (PYTHONPATH), which is before
+`main()` binds either name, and the only way in: nothing may import
+`classify_stls.py` (CLAUDE.md), so the manifest decision can only be read
+from outside, off the file it leaves behind.
+
+The two collaborators replaced are the ones that own a GPU — SigLIP in this
+process, Filament in the render child — and neither has any part in the
+decision under test. Everything that does is real: the same argparse, the
+same `apply_run_params` merge, the same `main`."""
+import sys
+
+sys.path.insert(0, {repo!r})
+
+from src import driver, embedder
+
+
+class NoSigLIP:
+    """Everything `main` reads off the Embedder, and no model."""
+
+    def __init__(self, *a, **kw):
+        self.text_embeds = self.up_T = self.down_T = None
+        self.front_T = self.back_T = None
+
+
+def stop(cfg):
+    raise SystemExit("stopped in driver.run")
+
+
+embedder.Embedder = NoSigLIP
+driver.spawn_render_child = lambda *a, **kw: None
+driver.run = stop
+'''
+
+
+def a_run_that_reaches_the_driver(tmp_path, cache, *extra):
+    """The same CLI as `a_run_that_dies_in_the_model_load`, carried one step
+    further: that helper stops *before* the manifest write, so it can say
+    nothing about which runs perform it. This one stops immediately after,
+    which is the only place from which both halves are visible.
+
+    Divergent flags, as there: --views 6 and --render-size 128 against a
+    manifest seeded at 4 and 512, so a write leaves fingerprints. No GPU, no
+    network, no renders, nothing outside tmp_path."""
+    stls, cats = scratch(tmp_path)
+    hooks = tmp_path / "hooks"
+    hooks.mkdir(exist_ok=True)
+    (hooks / "sitecustomize.py").write_text(STOP_IN_DRIVER.format(repo=str(REPO)))
+    out = subprocess.run(
+        [sys.executable, "classify_stls.py", str(stls),
+         "--cache-dir", str(cache), "--categories", str(cats),
+         "--pose-vlm", "off", "--views", "6", "--render-size", "128", *extra],
+        cwd=REPO, env=dict(os.environ, PYTHONPATH=str(hooks),
+                           HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1"),
+        capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
+    # the proof it got past the write, and the reason a survived manifest below
+    # means the guard held rather than that the run died early
+    assert "stopped in driver.run" in out.stderr
+    return out
+
+
+def a_seeded_cache(tmp_path, stls, cats):
+    """A cache described by a manifest, written through the production writer
+    like every fixture here."""
+    cache = tmp_path / "cache"
+    stamp_cache_version(cache)
+    save_run_params(argparse.Namespace(
+        cache_dir=str(cache), input=str(stls), collection_root=str(stls.resolve()),
+        views=4, elevations=list(DEFAULT_ELEVATIONS), render_size=512,
+        model="google/siglip2-so400m-patch16-512", compile=False,
+        up_axis="auto", categories=str(cats), render_format="jpg"))
+    return cache
+
+
+def test_skip_embed_leaves_the_manifest_alone(tmp_path):
+    """A manifest describes the run whose embeddings are in the cache, and a
+    --skip-embed run writes none: `cache_checker.route` forces `need_embeds`
+    False for every file. Rewriting it with that run's flags leaves every
+    reader — the next bare `serve_api.py` first — reconstructing keys nothing
+    was ever written under, which is the CacheUnusable c05c14d closed for
+    pre-flight deaths, bought instead by a run that stored nothing.
+
+    Byte-compared for the same reason the pre-flight test is: the merge drops
+    None, so a clobbering write need not change every field to be a
+    catastrophe."""
+    stls, cats = scratch(tmp_path)
+    cache = a_seeded_cache(tmp_path, stls, cats)
+    before = (cache / RUN_PARAMS_FILE).read_bytes()
+
+    a_run_that_reaches_the_driver(tmp_path, cache, "--skip-embed")
+
+    assert (cache / RUN_PARAMS_FILE).read_bytes() == before
+
+
+def test_a_run_that_can_embed_still_rewrites_the_manifest(tmp_path):
+    """The positive half, and the control on the test above: the same harness,
+    the same divergent flags, minus --skip-embed. A run poised to add entries
+    re-describes the cache under which they will land — without this, the
+    guard could be swallowing the write for every run and nothing here would
+    notice."""
+    stls, cats = scratch(tmp_path)
+    cache = a_seeded_cache(tmp_path, stls, cats)
+    before = (cache / RUN_PARAMS_FILE).read_bytes()
+
+    a_run_that_reaches_the_driver(tmp_path, cache)
+
+    assert (cache / RUN_PARAMS_FILE).read_bytes() != before
+    assert json.loads((cache / RUN_PARAMS_FILE).read_text())["views"] == 6
+
+
 def test_a_preflight_death_writes_no_manifest_at_all(tmp_path):
     """The same rule where there is nothing to clobber: a cache directory a
     dead run only touched must not end up describing entries it never wrote —

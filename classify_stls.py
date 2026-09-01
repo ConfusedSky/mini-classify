@@ -196,6 +196,18 @@ def resolve_pose_vlm(args):
                      f"model, and glm models are org/model ids" if drop else ""))
     vlm_model = args.pose_vlm_model or pose.DEFAULT_VLM_MODELS.get(backend)
     if backend == "gemini":
+        # Mirror of the glm arm's check below, and the same catastrophe on the
+        # other side of the wire: an org/model id in the Vertex URL is a model
+        # this project does not serve, the 4xx is non-transient so the retry
+        # contract reads it as a verdict, and `poser.Poser._fold` writes
+        # `arbitrated: "rejected"` permanently — one per escalation, with every
+        # rejection resetting the breaker. Before the gcloud checks: a pin this
+        # shape is wrong whatever ADC says.
+        if args.pose_vlm_model and "/" in args.pose_vlm_model:
+            raise SystemExit(
+                f"--pose-vlm gemini: --pose-vlm-model {args.pose_vlm_model} is an "
+                f"OpenRouter-shaped org/model id — gemini models are bare ids "
+                f"(e.g. {pose.GEMINI_MODEL}). Drop the pin or give it a gemini id")
         # Fail here rather than on the first ambiguous model, thousands of
         # renders into a run: resolving the project and minting a token are the
         # two things that go wrong, and both are cheap to check up front.
@@ -415,6 +427,16 @@ def main():
     # stamp, which is why both go through `pose.arbiter_id` — and after
     # `resolve_pose_vlm`, which is where an `auto` degrade settles both the
     # backend and the model pin.
+    if args.repose and args.up_axis in pose.FORCED_UPS:
+        # `route` never opens the pose store under a forced axis — it builds
+        # the Pose from the flag — so there is nothing to re-judge and the
+        # flag cannot act. Refused rather than ignored, like every other
+        # --repose contradiction: a silent no-op reports the re-judgment it
+        # never bought as done.
+        raise SystemExit(
+            f"--repose does nothing under a forced --up-axis {args.up_axis}: a "
+            f"forced axis never consults the pose store, so there are no cached "
+            f"judgments to re-arbitrate. Drop one of the two flags")
     if args.repose and vlm_backend is None:
         raise SystemExit(
             "--repose needs an arbiter — it exists to re-judge, and this run "
@@ -525,9 +547,18 @@ def main():
     # it. Every RUN_PARAMS_KEYS value is settled by argparse plus
     # `collection_root` above and none of them changes during the run, so these
     # are the bytes the exit-time write produced. The negative half is pinned
-    # by test_run_params.py::test_a_preflight_death_leaves_the_manifest_alone;
-    # the positive half needs a real model load, so it is not pinned.
-    save_run_params(args)
+    # by test_run_params.py::test_a_preflight_death_leaves_the_manifest_alone,
+    # the positive by ::test_a_run_that_can_embed_still_rewrites_the_manifest.
+    #
+    # And only a run that can embed writes it: `route` forces need_embeds False
+    # under --skip-embed, so such a run adds no entry the manifest could
+    # describe, and rewriting it with this run's divergent flags leaves every
+    # reader reconstructing keys nothing was ever written under — the same
+    # CacheUnusable as above, bought by a run that stored nothing. A first-ever
+    # --skip-embed run therefore writes no manifest at all, which is honest for
+    # the same reason a pre-flight death's silence is.
+    if not args.skip_embed:
+        save_run_params(args)
     driver.run(DriverConfig(
         # the bar advances on admission, so it runs at most WINDOW files
         # ahead of what has actually retired
