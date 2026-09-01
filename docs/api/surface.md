@@ -84,8 +84,8 @@ SigLIP takes real seconds to load. If the process binds the port only after
 the model is resident, a probe cannot tell warming from not-running, and the
 consumer's semantic affordance flickers off and on across every restart. So:
 bind first, warm in the background, answer `/status` throughout with
-`ready: false`, and reject `/query`, `/similar` and `/poses` with **503**
-until it flips.
+`ready: false`, and reject `/query`, `/similar`, `/poses` and `/under` with
+**503** until it flips.
 A caller that sees a reply at all knows the server exists.
 
 Bind-before-warm is load-bearing rather than polite: it is what makes warming
@@ -229,6 +229,107 @@ hit carries and its `rel_path`; an absolute path is also matched under
 is reached through a symlinked mount. A path reached through some third alias
 is not this index's path, and `/status`'s `collection_root` is where the
 caller checks that the two sides mean one tree.
+
+### `POST /under`
+
+The models this index holds under a directory, each with its pose — a folder's
+contact sheet, answered without walking anything.
+
+`/poses` closes the gap for a consumer that already knows *which* files it
+wants. This closes the one before that: knowing which files there are. The
+caller's own walk is what fails, and specifically it fails on this library's
+shape — a peek's 64-entry budget is spent inside a first-sorted
+`(Presupported)` subtree while the posed kits sit one subdirectory later, so a
+folder that is fully indexed here comes back as an empty sheet there. The last
+classify run already walked every file under every prefix and this side kept
+the list, so the answer is a scan of the store.
+
+| field | type | default | note |
+|---|---|---|---|
+| `path` | string | required | directory (or file) — absolute or root-relative, any spelling `resolve` accepts |
+| `limit` | int | **required** | at most this many models, off the front of the sorted listing |
+
+Returns `{status, models, matched, truncated}`:
+
+```jsonc
+{
+  "status": "ok",             // ok | unindexed
+  "models": [
+    {"path": "/run/media/masa/STLLibrary/DM Stash/Kits/Baal/Baal_Axe.stl",
+     "pose": { ... }}         // the `pose` shape below; null when unresolved
+  ],
+  "matched": 210,             // models in scope, BEFORE the limit cut
+  "truncated": true           // matched > limit
+}
+```
+
+**`limit` is required, which no other bound on this surface is.** `/query`'s
+`top` has no default precisely so that absent can mean *not in force*; here
+absent would mean a response bounded by the collection rather than by the
+request, and a listing caller always knows how many tiles it is about to draw.
+It is validated the way the other ints are — `< 1` is pydantic's own **422**,
+and the ceiling is `cap`'s 10000, which is a statement about what this server
+will serialise and not a second opinion about how many models a folder may
+hold. `matched` counts the scope **before** the cut, the same job it does on
+`/query`: a client showing 64 of 210 has somewhere to read the 210.
+`truncated` is `matched > limit` and nothing else.
+
+**Order is by root-relative path, component-wise**, and it is part of the
+contract because the limit cuts a *prefix* of it: two requests for the same
+folder must return the same 64 models, and they must be the 64 a person would
+expect to see first. Row order would not do — `load_file_list` replays the
+walk cache verbatim, so it is whatever that file was written holding, and the
+walk's own `sorted()` is over `Path` objects, whose comparison was over whole
+strings before Python 3.12 and over components since (the two disagree on
+exactly `Kits/A-B` vs `Kits/A`, where `-` sorts under `/`). So the rows are
+re-sorted on their path tuples (`Collection.in_rel_order`) rather than
+inheriting an order that is an artifact of the interpreter and of a cache
+file.
+
+**`resolve()` is the scoper, and that is the design decision here.** It is the
+same machinery `/query`'s `path` filter uses, which buys three things at once
+rather than one:
+
+* **Symlink spellings land on the same rows.** The library is on removable
+  media that remounts under a different name for the same tree, and `resolve`
+  compares realpaths (§scope, and the cross-spelling load `_parts` heals). A
+  listing route that matched strings would answer `unindexed` for a folder
+  full of indexed models after a remount, which is the failure mode this
+  whole surface has already paid for twice.
+* **The rejections are already three answers.** A zip virtual path is
+  **422**, a path outside `collection_root` is **400**, nothing on disk is
+  **404** — the same codes `/query` returns for the same three, because they
+  are the same three facts and a consumer branching on them must not need a
+  per-route table.
+* **`unindexed` comes from the same place it does everywhere else.** A real
+  directory no classify run has covered is a **200** with
+  `{"status": "unindexed", "models": [], "matched": 0, "truncated": false}`,
+  not a 404 and not an empty `ok`. That distinction is the reason the scope
+  block exists at all (§scope): "nothing here is classified yet" and "here is
+  the folder, it is empty" are different things to show a person. `status` is
+  two-valued rather than the scope block's three — `partial` reads as `ok`,
+  because a listing that returns 41 of the 55 files in a folder has still
+  answered, and the consumer that wants the coverage number asks `/query`.
+
+`path` values are **absolute, in the collection's canonical spelling** — the
+same string `hit.path` carries for the same model, built from the same
+`Collection.files` entry. That is a contract between the two routes, not a
+coincidence: a caller lists a folder, then hands one of those strings back to
+`/poses` or `/similar`, and a listing that answered in some other spelling
+would break its own join. `pose` is byte-identical to the block `/poses`
+returns and `hit.pose` carries, from the same `Collection.pose_of`.
+
+No `rel_path`, `id`, `name` or `score`: this says what is in a folder, not
+what matched, and the caller already holds the folder.
+
+**No GPU and no filesystem I/O**, the same promise `/poses` makes and for the
+same reason — one `Path.resolve()` and one `exists()` on the scope path is the
+entire syscall budget, proportional to that path's depth and never to the
+collection or to the folder. So this is *cheaper* than the walk it replaces
+rather than that walk moved across the wire, and none of §Deliberately not
+decided here's GPU-lock deliberation reaches it. It shares the readiness gate:
+**503 while warming**, in the `{ready, elapsed, failure}` envelope every other
+route uses.
 
 ### `POST /reload`
 
@@ -531,8 +632,8 @@ this section describes.
 ## Deliberately not decided here
 
 - **The GPU lock.** Starlette's threadpool means handlers really do run
-  concurrently, so text embedding needs a lock around the 4060. (`/poses` is
-  outside this entirely — a store lookup takes no lock, so nothing below
+  concurrently, so text embedding needs a lock around the 4060. (`/poses` and `/under`
+  are outside this entirely — a store lookup takes no lock, so nothing below
   bounds how fast a listing gets its poses.) (ollama and
   SigLIP cannot share the card; an HTTP surface makes that easier to violate
   than the REPL did.) Whether the lock wraps the forward or the whole handler

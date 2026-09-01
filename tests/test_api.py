@@ -1,4 +1,4 @@
-"""src/api.py: the five routes, their status codes, and the warmup gate.
+"""src/api.py: the six routes, their status codes, and the warmup gate.
 
 No GPU and no SigLIP anywhere here — `ServerState.embed` is a callable, so the
 whole HTTP surface runs against a stub that returns deterministic vectors. That
@@ -83,7 +83,8 @@ def test_status_answers_while_warming_and_queries_do_not(tmp_path):
     assert s["volume"]["present"] is None and s["failure"] is None
 
     for route, body in (("/query", {"text": "x"}), ("/similar", {"path": "a"}),
-                        ("/poses", {"paths": ["a/one.stl"]})):
+                        ("/poses", {"paths": ["a/one.stl"]}),
+                        ("/under", {"path": "a", "limit": 10})):
         r = client.post(route, json=body)
         assert r.status_code == 503, route
         assert r.json()["detail"]["ready"] is False
@@ -436,6 +437,168 @@ def test_poses_never_touches_the_gpu_lock(tmp_path):
     state.gpu = Watching()
     assert client.post("/poses", json={"paths": ["a/one.stl"]}).status_code == 200
     assert held == []
+
+
+# --- /under -----------------------------------------------------------------
+#
+# The folder contact sheet. model-browser's own walk cannot build it: a peek's
+# 64-entry budget is spent inside a first-sorted "(Presupported)" subtree while
+# the posed kits sit one subdirectory later, so a fully indexed folder comes
+# back empty there. This index already holds that walk, and the poses with it.
+
+UNDER = ["Kits/A-B/x.stl", "Kits/A/y.stl", "other/z.stl"]
+
+
+def serve_as_recorded(tmp_path, layout=UNDER, **kw):
+    """`serve` over a cache whose recorded walk order is not the rel order.
+
+    Row order is not something this API gets to inherit. `load_file_list`
+    replays the walk cache verbatim, so it is whatever that file holds; and
+    `find_stls`'s own order is `sorted()` over `Path`s, which compared whole
+    strings before Python 3.12 and components since — the two disagree on
+    exactly the `Kits/A-B` vs `Kits/A` pair above, where `-` sorts under `/`.
+    So the fixture records a reversed list through the production writer and
+    loads it back: a layout whose stored order already happens to be its rel
+    order would pin nothing."""
+    import json
+    from pathlib import Path as P
+    args, *_ = build(tmp_path, layout, **kw)
+    Collection.load(args)                          # writes the walk cache
+    walk = next(P(args.cache_dir).glob("walk-*.json"))
+    saved = json.loads(walk.read_text())
+    saved["files"].reverse()
+    walk.write_text(json.dumps(saved))
+    return serve(tmp_path, layout=layout, rescan=False, **kw)
+
+
+def test_under_lists_a_directory_in_rel_path_order(tmp_path):
+    """Sorted by the root-relative path tuple, which is not the order the rows
+    are stored in — and with mixed poses, since an indexed model whose pose is
+    unresolved is a null the caller has to be able to receive."""
+    client, _, c = serve_as_recorded(tmp_path)
+    assert [f.name for f in c.files] == ["z.stl", "x.stl", "y.stl"]  # the premise
+    key = next(k for k in c.poses if k.startswith("Kits/A-B/x.stl|"))
+    c.poses[key] = None                            # indexed, pose unresolved
+
+    body = client.post("/under", json={"path": "Kits", "limit": 10}).json()
+    assert set(body) == {"status", "models", "matched", "truncated"}
+    assert body["status"] == "ok"
+    assert [m["path"] for m in body["models"]] == [
+        str(c.root / "Kits" / "A" / "y.stl"),
+        str(c.root / "Kits" / "A-B" / "x.stl")]    # y first: 'A' < 'A-B'
+    assert body["models"][0]["pose"]["up"] == [0.0, 0.0, 1.0]
+    assert body["models"][1]["pose"] is None
+    assert (body["matched"], body["truncated"]) == (2, False)
+    assert "z.stl" not in str(body)                # the scope is the directory
+
+
+def test_under_cuts_the_sorted_listing_at_the_limit(tmp_path):
+    """`matched` is the scope before the cut, so a client showing 64 of 210 can
+    say 210; `truncated` is this bound's own act. The cut takes a *prefix* of
+    the sorted listing, which is why the order is contract rather than a
+    courtesy: drop either the sort or the cut and a different model comes
+    back."""
+    client, _, c = serve_as_recorded(tmp_path)
+    body = client.post("/under", json={"path": "Kits", "limit": 1}).json()
+    assert body["matched"] == 2 and body["truncated"] is True
+    assert [m["path"] for m in body["models"]] == \
+        [str(c.root / "Kits" / "A" / "y.stl")]
+
+
+def test_under_on_an_unindexed_directory_is_a_200_that_says_so(tmp_path):
+    """The tri-state, through the same `resolve` every scoped route uses: a
+    real directory nothing has been classified in is an answer, not a 404 —
+    and never an empty `ok`, which is the one shape a UI cannot tell from
+    "this folder is empty" (surface.md §scope)."""
+    client, _, _ = serve(tmp_path, layout=["a/one.stl", "b/two.stl"],
+                         embed=["a/one.stl"])
+    r = client.post("/under", json={"path": "b", "limit": 10})
+    assert r.status_code == 200
+    assert r.json() == {"status": "unindexed", "models": [], "matched": 0,
+                        "truncated": False}
+    # the other half of the distinction: `ok` never arrives empty, so the two
+    # answers differ in the status rather than in a list a caller must read
+    ok = client.post("/under", json={"path": "a", "limit": 10}).json()
+    assert ok["status"] == "ok" and len(ok["models"]) == 1
+
+
+def test_a_symlink_spelled_directory_reaches_the_same_rows(tmp_path):
+    """Scoping through `resolve` is what buys this: it compares realpaths, and
+    the library is on removable media that remounts under another name for the
+    same tree. A listing route matching strings would answer `unindexed` for a
+    folder full of indexed models after a remount."""
+    client, _, c = serve(tmp_path, layout=UNDER)
+    link = tmp_path / "by-another-name"
+    link.symlink_to(c.root / "Kits")
+    canonical = client.post("/under", json={"path": "Kits", "limit": 10}).json()
+    aliased = client.post("/under", json={"path": str(link), "limit": 10}).json()
+    assert aliased == canonical and canonical["matched"] == 2
+
+
+def test_under_names_a_model_exactly_as_a_hit_does(tmp_path):
+    """The consistency the contract rests on: a caller lists a folder and then
+    hands one of those strings back to `/poses` or `/similar`. One spelling for
+    one model, and the pose block byte-identical to the one a search carried."""
+    client, _, _ = serve(tmp_path, layout=["Kits/A/y.stl"],
+                         ups={"Kits/A/y.stl": [0.0, 1.0, 0.0]},
+                         front={"Kits/A/y.stl": 1})
+    hit = client.post("/query", json={"text": "x"}).json()["results"][0]
+    m = client.post("/under", json={"path": "Kits", "limit": 10}).json()["models"][0]
+    assert set(m) == {"path", "pose"}
+    assert m["path"] == hit["path"]
+    assert m["pose"] == hit["pose"] and m["pose"]["up"] == [0.0, 1.0, 0.0]
+    # ...and the string round-trips through the batch route unnormalised
+    poses = client.post("/poses", json={"paths": [m["path"]]}).json()["poses"]
+    assert poses[m["path"]] == m["pose"]
+
+
+@pytest.mark.parametrize("body", [
+    {"path": "Kits"},                       # no count: an unbounded listing
+    {"path": "Kits", "limit": 0},
+    {"path": "Kits", "limit": -1},
+    {"path": "Kits", "limit": "many"},
+    {"limit": 10},                          # no directory
+])
+def test_under_refuses_a_request_without_a_usable_limit(tmp_path, body):
+    """`limit` is required — the one bound on this surface that is. Absent
+    would mean a response bounded by the collection rather than by the
+    request, and the refusal is pydantic's own 422, the same answer every
+    other malformed field already gets."""
+    client = client_of(tmp_path, layout=UNDER)
+    assert client.post("/under", json=body).status_code == 422
+
+
+@pytest.mark.parametrize("path,code", [
+    ("a/pack.zip!/inner.stl", 422),         # zip virtual path: unaddressable
+    ("/etc", 400),                          # outside the collection
+    ("a/nowhere", 404),                     # not on disk
+])
+def test_under_maps_each_scope_rejection_the_way_query_does(tmp_path, path, code):
+    """Same scoper, same three codes, asserted against `/query` in the same
+    breath: a consumer branching on them must not need a per-route table."""
+    client, _, _ = serve(tmp_path)
+    assert client.post("/under", json={"path": path,
+                                       "limit": 10}).status_code == code
+    assert client.post("/query", json={"text": "x",
+                                       "path": path}).status_code == code
+
+
+def test_under_never_touches_the_gpu_lock(tmp_path):
+    """A store scan: `resolve`, tuple arithmetic, dict gets. If this ever took
+    the lock a folder's listing could queue behind a query, which is the cost
+    the no-GPU framing in surface.md promises it cannot pay."""
+    client, state, _ = serve(tmp_path)
+    state.embed = lambda *a, **k: pytest.fail("/under embedded something")
+    held = []
+
+    class Watching:
+        def __enter__(self): held.append(1)
+        def __exit__(self, *a): pass
+
+    state.gpu = Watching()
+    r = client.post("/under", json={"path": "a", "limit": 10})
+    assert r.status_code == 200 and held == []
+
 
 
 # --- /reload ----------------------------------------------------------------
@@ -836,6 +999,8 @@ class CountingState(ServerState):
                  id="similar"),
     pytest.param(lambda cl: cl.post("/poses", json={"paths": ["a/one.stl"]}),
                  id="poses"),
+    pytest.param(lambda cl: cl.post("/under", json={"path": "a", "limit": 10}),
+                 id="under"),
     pytest.param(lambda cl: cl.post("/reload", json={}), id="reload"),
 ])
 def test_every_handler_binds_the_collection_at_most_once(tmp_path, call):
@@ -882,3 +1047,9 @@ def test_every_response_is_json_serialisable_without_numpy_types(tmp_path):
     assert type(block["confidence"]) is float
     for field in ("up", "azimuth_zero"):
         assert all(type(x) is float for x in block[field]), field
+    # and once more through the listing envelope, which reaches that same
+    # block by a third route
+    payload = client.post("/under", json={"path": "a", "limit": 10}).json()
+    json.dumps(payload)
+    assert type(payload["matched"]) is int
+    assert all(type(m["path"]) is str for m in payload["models"])

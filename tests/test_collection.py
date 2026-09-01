@@ -346,6 +346,71 @@ def test_a_file_walked_out_of_the_collection_keeps_its_absolute_parts(tmp_path):
     assert c.resolve("Kits").n_scanned == 1          # under no scope in the root
 
 
+# --- in_rel_order: the order a listing is cut in ----------------------------
+
+def _recorded_in_reverse(args):
+    """Reverse the order the walk cache records, and load it back.
+
+    Row order is not something the API gets to inherit. `load_file_list`
+    replays this file verbatim, so it is whatever the file holds; and
+    `find_stls`'s own order is `sorted()` over `Path`s, which compared whole
+    strings before Python 3.12 and components since — the two disagree on
+    exactly `Kits/A-B` vs `Kits/A`, where `-` sorts under `/`."""
+    Collection.load(args)                            # writes the walk cache
+    walk = next(Path(args.cache_dir).glob("walk-*.json"))
+    saved = json.loads(walk.read_text())
+    saved["files"].reverse()
+    walk.write_text(json.dumps(saved))
+    return Collection.load(_replace(args, rescan=False))
+
+
+def test_rows_come_back_in_root_relative_order_not_walk_order(tmp_path):
+    """`POST /under` cuts a *prefix* of this order at its limit, so which
+    models survive the cut depends on it being the component-wise order a
+    consumer's tree shows rather than the order the rows are stored in."""
+    args, root, _ = build(tmp_path, ["Kits/A-B/x.stl", "Kits/A/y.stl"])
+    c = _recorded_in_reverse(args)
+    assert [f.name for f in c.files] == ["x.stl", "y.stl"]     # the premise
+    rows = c.in_rel_order(c.resolve("Kits").rows)
+    assert [c.files[i].name for i in rows] == ["y.stl", "x.stl"]
+    assert [type(i) for i in rows] == [int, int]      # ordinary ints, not intp
+
+
+def test_in_rel_order_keeps_only_the_rows_it_was_given(tmp_path):
+    """It sorts a scope, it does not widen one."""
+    args, *_ = build(tmp_path, ["Kits/A/y.stl", "other/z.stl"])
+    c = Collection.load(args)
+    rows = c.in_rel_order(c.resolve("Kits").rows)
+    assert [c.files[i].name for i in rows] == ["y.stl"]
+
+
+# --- listing: one row of POST /under ----------------------------------------
+
+def test_a_listing_entry_is_the_path_and_pose_a_hit_carries(tmp_path):
+    """A consumer lists a folder and then hands one of those strings back to
+    `/poses` or `/similar`, so the listing's spelling has to be the one every
+    other route means by that model — `hit`'s own, from the same
+    `Collection.files` entry."""
+    args, root, files = build(tmp_path, ["Kits/Baal/x.stl"],
+                              ups={"Kits/Baal/x.stl": [0.0, 1.0, 0.0]},
+                              front={"Kits/Baal/x.stl": 1})
+    c = Collection.load(args)
+    e, h = c.listing(0), c.hit(0, 0.1, 1.0)
+    assert set(e) == {"path", "pose"}
+    assert e["path"] == h["path"] == str(files["Kits/Baal/x.stl"])
+    assert e["pose"] == h["pose"] and e["pose"]["up"] == [0.0, 1.0, 0.0]
+    assert c.row_of(e["path"]) == 0             # the string the batch joins on
+
+
+def test_a_listing_entry_carries_a_null_pose_rather_than_dropping_the_model(tmp_path):
+    """An indexed model whose pose never resolved is still in the folder."""
+    args, root, files = build(tmp_path, ["a/one.stl"])
+    c = Collection.load(args)
+    c.poses.clear()
+    assert c.listing(0) == {"path": str(files["a/one.stl"]), "pose": None}
+
+
+
 # --- pose ------------------------------------------------------------------
 
 def test_pose_carries_up_azimuth_zero_and_the_front_camera(tmp_path):
@@ -538,6 +603,19 @@ def test_a_hit_touches_the_filesystem_not_at_all(tmp_path):
     args, *_ = build(tmp_path, ["a/one.stl", "b/two.stl"])
     c = Collection.load(args)
     calls = count_syscalls(lambda: [c.hit(i, 0.5, 2.0) for i in range(2)])
+    assert sum(calls.values()) == 0, dict(calls)
+
+
+def test_listing_a_whole_directory_touches_the_filesystem_not_at_all(tmp_path):
+    """`POST /under` answers a folder out of the store, which is the entire
+    reason it exists: the consumer's own walk is what ran out of budget. A
+    per-model stat here would put the storage back in the request cost, and
+    on a directory the size of a kit that is the failure this route replaces
+    arriving from the other side."""
+    args, *_ = build(tmp_path, ["Kits/A-B/x.stl", "Kits/A/y.stl", "b/z.stl"])
+    c = Collection.load(args)
+    rows = c.resolve("Kits").rows
+    calls = count_syscalls(lambda: [c.listing(i) for i in c.in_rel_order(rows)])
     assert sum(calls.values()) == 0, dict(calls)
 
 

@@ -359,6 +359,17 @@ class PosesRequest(BaseModel):
     paths: list[str] = Field(..., max_length=POSES_MAX)
 
 
+class UnderRequest(BaseModel):
+    path: str
+    # Required, unlike every other bound on this surface: a listing with no
+    # count is a response bounded by the collection, and the caller always
+    # knows how many tiles it is about to draw. Validated as `/query`'s ints
+    # are, so the refusal is pydantic's own 422 and this route invents no
+    # error; the ceiling is `cap`'s — what the server will serialise at all,
+    # not a second opinion about how many models a folder may hold.
+    limit: int = Field(..., ge=1, le=10000)
+
+
 class ReloadRequest(BaseModel):
     rescan: bool = False
 
@@ -569,6 +580,59 @@ def create_app(state: ServerState) -> FastAPI:
                  sum(v is not None for v in out.values()),
                  (time.monotonic() - t0) * 1000)
         return {"poses": out}
+
+    @app.post("/under")
+    def post_under(req: UnderRequest) -> dict:
+        """Every indexed model under a directory, with its pose — the folder
+        contact sheet, answered from the store instead of from a walk.
+
+        The consumer's walk is what does not work: a peek's 64-entry budget is
+        spent inside a first-sorted `(Presupported)` subtree while the posed
+        kits sit one subdirectory later, so the sheet comes back empty for a
+        folder that is fully indexed here. This index already holds every file
+        the last classify run walked under any prefix, and the pose beside it.
+
+        A **pure store scan**, and the module docstring's request-time budget
+        is the promise being kept: `resolve` costs one `Path.resolve()` and
+        one `exists()` on the scope path — proportional to its depth, never to
+        the collection — and everything after it is tuple arithmetic over
+        `_rel` plus dict gets against the pose cache. No embedding, no GPU, no
+        `state.gpu` (like `/poses`, so a listing can never queue behind a
+        query), and no filesystem I/O per model. That is what makes this
+        *cheaper* than the walk it replaces rather than the same walk moved
+        across the wire.
+
+        Scoping is `Collection.resolve`, the same machinery `/query`'s `path`
+        filter uses, which buys three things at once: a symlink-spelled
+        request reaches the same rows as the canonical one, the three
+        `ScopeError`s map to the three codes they map to there, and the
+        `unindexed` answer comes from the same place — a real directory no
+        classify run has covered is a 200 that says so, never an empty `ok`
+        and never a 404 (surface.md §scope)."""
+        t0 = time.monotonic()
+        c = _live()
+        try:
+            scope = c.resolve(req.path)
+        except ScopeError as e:
+            raise _http(e) from e
+
+        rows = c.in_rel_order(scope.rows)
+        # `matched` counts the scope before the cut, so a client showing 64 of
+        # 210 has somewhere to read the 210 — the same job it does on
+        # `/query`, where a bound that reports only what it returned leaves
+        # the UI unable to say there is more. `truncated` is this one bound's
+        # own act, and the sort is what makes the cut a stable prefix rather
+        # than an arbitrary 64 of the folder.
+        matched = len(rows)
+        truncated = matched > req.limit
+        log.info("under %s %s %d/%d models%s in %.1f ms",
+                 scope.path, scope.status, min(matched, req.limit), matched,
+                 " truncated" if truncated else "",
+                 (time.monotonic() - t0) * 1000)
+        return {"status": "ok" if matched else "unindexed",
+                "models": [c.listing(i) for i in rows[:req.limit]],
+                "matched": matched,
+                "truncated": truncated}
 
     @app.post("/reload")
     def post_reload(req: ReloadRequest) -> dict:

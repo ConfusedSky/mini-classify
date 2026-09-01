@@ -216,6 +216,14 @@ class Collection:
         # keys because a caller holds either spelling — the absolute `path` a
         # hit carries (walked from `_inp`, so a symlinked input keeps its own
         # spelling here) or a root-relative one it built itself.
+        # Two rows share a `_rel` tuple only by being one physical file under
+        # two spellings — a walk list holding both, which `_parts` then heals
+        # onto the one root-relative name — so this collision is last-wins by
+        # insertion order, deterministic (walk order) and carrying no
+        # information either way: `identity.rel_path` resolves before keying,
+        # so colliding rows share a pose entry, an embedding key and a render
+        # key as well, and whichever row wins names the same model with the
+        # same answer.
         self._row_by_path = {os.path.normpath(str(f)): i
                              for i, f in enumerate(files)}
         self._row_by_rel = {rel: i for i, rel in enumerate(self._rel)}
@@ -363,6 +371,25 @@ class Collection:
         n_scanned = sum(1 for rel in self._scanned_rel if rel[:n] == want)
         return Scope(str(path), rows, len(rows), n_scanned, list(COVERS))
 
+    def in_rel_order(self, rows) -> list[int]:
+        """`rows` sorted by root-relative path — the order a listing is read in.
+
+        `Scope.rows` arrives in row order, which is not an order this index
+        gets to promise anything about: `load_file_list` replays the walk
+        cache verbatim, so it is whatever that file was written holding, and
+        `find_stls`'s own `sorted()` is over `Path` objects — whose comparison
+        was over whole strings before Python 3.12 and over components since,
+        two orders that disagree on exactly `Kits/A-B` vs `Kits/A`, where `-`
+        sorts under `/`. Component-wise on the `_rel` tuple is the order a
+        consumer's own tree already shows, and it is the order `POST /under`
+        promises: a limit cuts a *prefix* of the listing, so which rows
+        survive the cut is decided here.
+
+        Total: no two rows in one scope share a tuple unless they name the
+        same physical file, where either order is the same answer (see
+        `_row_by_rel`). No I/O — `_rel` is computed once at load."""
+        return sorted((int(i) for i in rows), key=self._rel.__getitem__)
+
     # --- per-model detail ---------------------------------------------------
 
     def row_of(self, path: str) -> int | None:
@@ -449,6 +476,22 @@ class Collection:
                               "azimuth_deg": float(np.rad2deg(az)),
                               "elevation_deg": float(np.rad2deg(el))}
         return block
+
+    def listing(self, i: int) -> dict:
+        """Row `i` as a directory-listing entry: where the model is, and how to
+        stand it up (`POST /under`).
+
+        Both fields are `hit`'s own, deliberately: `path` is the same absolute
+        spelling — the collection's, as walked — and `pose` the same block, so
+        a consumer that lists a folder and then searches it gets one string
+        for one model rather than two it has to reconcile. Kept beside `hit`
+        because that is the only thing keeping the two from drifting; the
+        agreement itself is pinned over HTTP in tests/test_api.py, since it is
+        a claim about two routes.
+
+        No `rel_path`, `id` or `name`: this answers "what is in this folder",
+        not "what matched", and the caller already holds the folder."""
+        return {"path": str(self.files[i]), "pose": self.pose_of(i)}
 
     def hit(self, i: int, score: float, z: float) -> dict:
         """One result row in the API's `hit` shape (surface.md §hit).
