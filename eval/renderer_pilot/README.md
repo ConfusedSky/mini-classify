@@ -41,3 +41,8 @@ text tower):
 `out/` holds this run's sample, rankings, candidate pool, judgments, and the
 Osteotron across the five rendered arms. The renders and `.npy` files are not
 kept (≈25k PNGs); the scripts regenerate them in ~30 minutes.
+
+`ev2_check.py` (2026-09-01) re-ranks the pilot's 12 queries before/after the
+ev2 rebuild — before from the archived `arm_open3d.npy`, after from the live
+rebuilt cache, one GLM judge for both sides — and delta-judges only pairs the
+new ranking surfaces. The rebuild's write-up: LEARNINGS, "The ev2 rebuild".

@@ -202,6 +202,17 @@ notes at the bottom are amended in place. Open work is tracked separately in
   harnesses now pin, cap wall-clock per call, and log provider per call; a
   3-describer panel cannot rescue a model with a systematic prior.
 
+- [The ev2 rebuild](docs/learnings/2026-09-01-the-ev2-rebuild.md)
+  — embed-cache512 regenerated from empty under tight framing / ev2 / the
+  provenance stack (2026-08-31, ~4 h 52 m): 3,380 models, 1,526 arbiter
+  escalations **all answered by gemini-3.5-flash** (944 moved, 582
+  confirmed, zero rejected — §8 closed by construction, every judgment
+  stamped with its judge), ~$11.5 of Vertex. Tight framing then measured
+  live against the archived pre-ev2 embeddings on the pilot's 12 queries,
+  one GLM judge for both sides: **0.876 → 0.887 nDCG@20 (+0.012)**, 8/4
+  queries better, matching the pilot's +0.015–0.018 prediction in
+  direction and order. `eval/renderer_pilot/ev2_check.py`.
+
 
 ## Evergreen notes
 

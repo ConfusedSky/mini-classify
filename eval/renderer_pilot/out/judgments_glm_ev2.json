@@ -1,0 +1,14 @@
+{
+"treasure chest|233": {
+"relevance": 0,
+"reason": "The model is a stone brick tower/wall section with wooden doors, not a treasure chest.",
+"tok": 2885,
+"usd": 0.0004443
+},
+"wizard casting a spell|11": {
+"relevance": 0,
+"reason": "The model is a horned, tailed devil/tiefling-like figure in a dynamic pose, not a wizard casting a spell; no spellcasting elements are visible.",
+"tok": 2902,
+"usd": 0.00045245
+}
+}
