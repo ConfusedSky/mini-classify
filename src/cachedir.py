@@ -157,7 +157,13 @@ def write_atomic(path, text):
     mkstemp opens 0600; the chmod restores exactly what a plain `write_text`
     would have produced — 0666 under the process umask, read at import
     (`_UMASK`), not a hardcoded 0644 that would silently widen files for
-    anyone running under 077 (review follow-up, 2026-08-21)."""
+    anyone running under 077 (review follow-up, 2026-08-21).
+
+    No fsync, deliberately: the idiom guards readers against *partial* files
+    (a writer dying mid-write), not the disk against power loss — a cut can
+    drop the newest published version, the same window `Done.flush` accepts.
+    Everything written through here is rebuildable derived state, so the
+    worst real loss is re-deriving the newest pose entries."""
     path = Path(path)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".",
                                suffix=".tmp")

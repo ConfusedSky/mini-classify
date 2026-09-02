@@ -247,11 +247,20 @@ def resolve_pose_vlm(args):
     # never enlarges — so tiles rendered smaller than that sit padded in their
     # cells and the arbiter sees a smaller sheet than the number implies. Worth
     # saying out loud: sheet size is the knob that moved sonnet 10 of 44.
+    # Above SHEET_THUMB the tiles are capped back down instead — sheet cells
+    # and GLM's solo tiles both — so a bigger --render-size buys the arbiter
+    # nothing either (and 1024 sheets measured worse for both backends,
+    # LEARNINGS 2026-08-30).
     if args.render_size < pose.SHEET_THUMB:
         print(f"  note: --render-size {args.render_size} is below the {pose.SHEET_THUMB}px "
               f"arbiter tile, so the arbiter sees {args.render_size}px tiles, not "
               f"{pose.SHEET_THUMB}px ones — on the sheet backends they sit padded into "
               f"{pose.SHEET_THUMB}px cells")
+    elif args.render_size > pose.SHEET_THUMB:
+        print(f"  note: --render-size {args.render_size} is above the {pose.SHEET_THUMB}px "
+              f"arbiter tile; arbiter inputs are capped to {pose.SHEET_THUMB}px, and "
+              f"SigLIP resizes to its own input size — the extra pixels survive only "
+              f"in the saved renders")
     return backend
 
 
@@ -419,6 +428,18 @@ def main():
     from src.messages import CacheContext, Failure, RenderConfig
     from src.poser import Poser, VlmConfig
 
+    if args.repose and args.up_axis in pose.FORCED_UPS:
+        # `route` never opens the pose store under a forced axis — it builds
+        # the Pose from the flag — so there is nothing to re-judge and the
+        # flag cannot act. Refused rather than ignored, like every other
+        # --repose contradiction: a silent no-op reports the re-judgment it
+        # never bought as done. Checked before `resolve_pose_vlm`, whose
+        # `auto` path probes gcloud for a token — a run about to be refused
+        # should not pay a credential probe first.
+        raise SystemExit(
+            f"--repose does nothing under a forced --up-axis {args.up_axis}: a "
+            f"forced axis never consults the pose store, so there are no cached "
+            f"judgments to re-arbitrate. Drop one of the two flags")
     vlm_backend = resolve_pose_vlm(args)
     # --repose's comparison value, on the namespace because `route` reads the
     # run's flags through `CacheContext.args` and nothing else crosses — under
@@ -427,16 +448,6 @@ def main():
     # stamp, which is why both go through `pose.arbiter_id` — and after
     # `resolve_pose_vlm`, which is where an `auto` degrade settles both the
     # backend and the model pin.
-    if args.repose and args.up_axis in pose.FORCED_UPS:
-        # `route` never opens the pose store under a forced axis — it builds
-        # the Pose from the flag — so there is nothing to re-judge and the
-        # flag cannot act. Refused rather than ignored, like every other
-        # --repose contradiction: a silent no-op reports the re-judgment it
-        # never bought as done.
-        raise SystemExit(
-            f"--repose does nothing under a forced --up-axis {args.up_axis}: a "
-            f"forced axis never consults the pose store, so there are no cached "
-            f"judgments to re-arbitrate. Drop one of the two flags")
     if args.repose and vlm_backend is None:
         raise SystemExit(
             "--repose needs an arbiter — it exists to re-judge, and this run "
@@ -557,6 +568,14 @@ def main():
     # CacheUnusable as above, bought by a run that stored nothing. A first-ever
     # --skip-embed run therefore writes no manifest at all, which is honest for
     # the same reason a pre-flight death's silence is.
+    #
+    # The gate is "can embed", not "writes any file": a --skip-embed
+    # --save-renders run still saves renders, into the config-derived
+    # directory `render_subdir` names — and when its flags diverge from the
+    # manifest, nothing reads them until an embedding run at that config
+    # rewrites it. Accepted: the renders sit correctly named either way, and
+    # advertising them would mean repointing every reader at embeddings this
+    # run never wrote.
     if not args.skip_embed:
         save_run_params(args)
     driver.run(DriverConfig(
