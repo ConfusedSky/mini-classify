@@ -55,7 +55,8 @@ import numpy as np
 from src import identity, pose
 from src.cachedir import (cache_root, load_file_list, require_cache_version,
                           total_views, view_config)
-from src.embed_store import load_embedding_matrix
+from src.embed_store import (load_embedding_matrix,
+                             load_embedding_matrix_from_poses)
 
 # What `classify_stls.py` walks (`cachedir.find_stls`), and therefore the only
 # thing this index can ever hold. Published in every scope block because
@@ -120,10 +121,15 @@ class VolumeUnavailable(Exception):
     embeddings are intact and local; nothing needs re-running; the drive needs
     plugging in.
 
-    Deliberately not a degraded load. The file identity is `rel|mtime|size`,
-    so serving without the volume would mean trusting the pose cache's keys
-    over the filesystem, and this project would rather refuse than answer from
-    a snapshot it cannot check.
+    Deliberately not a degraded load, and still the default. The file identity
+    is `rel|mtime|size`, so serving without the volume means trusting the pose
+    cache's keys over the filesystem, and this project would rather refuse than
+    answer from a snapshot it cannot check — *unless it is asked to*.
+    `serve_api.py --no-volume` (2026-09-02) is that ask: an explicit opt-in
+    that indexes from the cache's own records, taken for shipping the server
+    somewhere the full-resolution library does not go. It is never a fallback —
+    a load that hits this exception does not retry as one, because the whole
+    value of the refusal is that nobody meets it by accident.
 
     Carries `as_dict()` in the same shape as `Collection.volume`, so a server
     reports the absence through the same field it reports the presence
@@ -135,8 +141,11 @@ class VolumeUnavailable(Exception):
         super().__init__(f"{what} is not available: {missing}")
 
     def as_dict(self) -> dict:
+        # `required` is always true here: this exception is raised only on the
+        # path that requires the volume, so a consumer reading `present: false`
+        # off it is looking at a server that needs the drive back.
         return {"present": False, "root": str(self.root),
-                "missing": str(self.missing)}
+                "missing": str(self.missing), "required": True}
 
 
 @dataclass(frozen=True)
@@ -175,7 +184,8 @@ class Collection:
     block (`cachedir.add_cache_args`), so this agrees with the classifier about
     which cache it is reading by construction."""
 
-    def __init__(self, args, root, files, scanned, matrix, poses, missing):
+    def __init__(self, args, root, files, scanned, matrix, poses, missing,
+                 idents=None):
         self.args = args
         self.root = root                    # collection_root: anchor and display base
         self.files = files                  # aligned with matrix rows
@@ -183,6 +193,9 @@ class Collection:
         self.matrix = matrix                # (n_files, n_views, dim) float32
         self.poses = poses
         self.missing = missing              # walked, not embedded
+        # Read off the args rather than passed, so `load_with` and `reload` —
+        # which copy the namespace — carry the mode without re-plumbing it.
+        self.no_volume = bool(getattr(args, "no_volume", False))
         self.view_cfg = view_config(args)   # keys front_view entries
         self.n_views = total_views(args)
         self._angles = pose.view_angles(args.views, list(args.elevations))
@@ -208,7 +221,11 @@ class Collection:
         # leaving it in `hit` cost 9 syscalls per result.
         self._rel = [self._parts(f) for f in files]
         self._scanned_rel = [self._parts(f) for f in scanned]
-        self._ident = [pose.file_identity(f, root) for f in files]
+        # `file_identity` stats the file, so the manifest load hands in the
+        # identities it already read out of pose-cache.json rather than let
+        # this line reach for a volume that is not there.
+        self._ident = list(idents) if idents is not None else \
+            [pose.file_identity(f, root) for f in files]
         self._keys = [identity.render_key(f, root) for f in files]
         self._names = [self._display_name(f) for f in files]
         # path -> row, so `row_of` is a dict get rather than a scan of `_rel`
@@ -238,8 +255,18 @@ class Collection:
 
         Raises `VolumeUnavailable` when the collection's storage is missing,
         before the walk rather than after it: the walk's own failure mode is a
-        silent zero-file result that reads as an empty cache."""
+        silent zero-file result that reads as an empty cache.
+
+        Under `--no-volume` (`args.no_volume`, `serve_api.py` only) the index
+        comes from the cache's own records instead: pose-cache.json enumerates
+        the collection and `identity.cache_key_from_identity` rebuilds every
+        embedding key from the identities it is keyed by, so nothing outside
+        `cache_dir` is read. `scanned` is then the indexed set itself — there
+        is no walk to compare it against — which is what makes `partial` and
+        `unindexed` unreachable in that mode and a scope's 404 an
+        index-membership answer rather than a stat (`resolve`)."""
         inp = Path(args.input)
+        no_volume = getattr(args, "no_volume", False)
         # Everything that reads the cache runs inside one boundary. The two
         # SystemExit raisers exit the process on failure, which is right for a
         # CLI and wrong inside a request handler — see `CacheUnusable`. The
@@ -256,11 +283,24 @@ class Collection:
         # and propagates as itself.
         try:
             root = cache_root(inp, args.cache_dir, confirm=False)
-            cls._require_volume(root, inp, args.cache_dir)
-            require_cache_version(args.cache_dir)
-            scanned = load_file_list(inp, args.cache_dir, args.rescan)
-            matrix, files, missing = load_embedding_matrix(scanned, args, root)
-            poses = pose.load_pose_cache(args.cache_dir)
+            idents = None
+            if no_volume:
+                # No `_require_volume` and no walk — both consult the input
+                # path, which is exactly what this mode promises not to do.
+                # `cache_root` stays: it reads run-params.json for the anchor
+                # and resolves the input non-strictly, which a missing path
+                # answers as well as a present one.
+                require_cache_version(args.cache_dir)
+                poses = pose.load_pose_cache(args.cache_dir)
+                matrix, files, idents, missing = \
+                    load_embedding_matrix_from_poses(poses, args, root)
+                scanned = files
+            else:
+                cls._require_volume(root, inp, args.cache_dir)
+                require_cache_version(args.cache_dir)
+                scanned = load_file_list(inp, args.cache_dir, args.rescan)
+                matrix, files, missing = load_embedding_matrix(scanned, args, root)
+                poses = pose.load_pose_cache(args.cache_dir)
         except SystemExit as e:
             text = str(e)
             hint = next((ln.strip() for ln in text.splitlines()
@@ -275,7 +315,7 @@ class Collection:
             raise CacheUnusable(f"unreadable cache in {args.cache_dir}: {e}",
                                 "run: classify_stls.py --rescan to rebuild "
                                 "the file list") from e
-        return cls(args, root, files, scanned, matrix, poses, missing)
+        return cls(args, root, files, scanned, matrix, poses, missing, idents)
 
     @classmethod
     def load_with(cls, args, **over) -> "Collection":
@@ -322,8 +362,19 @@ class Collection:
     def volume(self) -> dict:
         """What `/status` reports about the storage. Present by construction —
         a Collection cannot be loaded without it — so the interesting case is
-        the exception's `as_dict()`, which carries the same keys."""
-        return {"present": True, "root": str(self.root), "missing": None}
+        the exception's `as_dict()`, which carries the same keys.
+
+        Except under `--no-volume`, where it is `null`: not checked. `false`
+        would be a lie of the kind this field exists to prevent — it means
+        "looked, and the drive is gone", which a consumer acts on by telling
+        someone to plug it in. `required` is the field that separates the two
+        readings, so a consumer can tell a server that lost its volume from one
+        that was never going to look."""
+        if self.no_volume:
+            return {"present": None, "root": str(self.root), "missing": None,
+                    "required": False}
+        return {"present": True, "root": str(self.root), "missing": None,
+                "required": True}
 
     # --- scoping ------------------------------------------------------------
 
@@ -332,7 +383,17 @@ class Collection:
 
         Accepts absolute or root-relative, directory or file. `None` is the
         whole collection. Raises `VirtualPath`, `OutsideCollection` or
-        `NoSuchPath` — see each for why they are not one error."""
+        `NoSuchPath` — see each for why they are not one error.
+
+        **Under `--no-volume` the 404 is membership of the index, not a stat**,
+        and that costs a distinction: "a real directory with nothing
+        classified" — a 200 saying `unindexed`, the answer this block exists to
+        be able to give — is indistinguishable from "no such path" when there
+        is no disk to ask, so manifest mode collapses both to `NoSuchPath`.
+        `partial` and `unindexed` are unreachable there for the same reason:
+        `scanned` is the indexed set, so every scope that matches anything
+        matches equally under both counts. `OutsideCollection` is unaffected —
+        it is purely comparative and never touched the disk."""
         if path is None:
             return Scope(None, np.arange(len(self.files)), len(self.files),
                          len(self.scanned), list(COVERS))
@@ -356,12 +417,14 @@ class Collection:
             p = Path(path)
             p = p if p.is_absolute() else self.root / p
             real = _real(p)
-            exists = real.exists()
+            # None = not asked. `Path.resolve()` above is non-strict and
+            # answers on a path that is not there, so it stays in both modes.
+            exists = None if self.no_volume else real.exists()
         except (OSError, ValueError, RuntimeError, TypeError) as e:
             raise NoSuchPath(f"unusable path {path!r}: {e}") from e
         if not real.is_relative_to(self._real_root):
             raise OutsideCollection(f"{path} is not under {self.root}")
-        if not exists:                             # the one stat of a request
+        if exists is False:                        # the one stat of a request
             raise NoSuchPath(f"no such path: {path}")
 
         want = real.relative_to(self._real_root).parts
@@ -369,6 +432,12 @@ class Collection:
         rows = np.array([i for i, rel in enumerate(self._rel) if rel[:n] == want],
                         dtype=np.intp)
         n_scanned = sum(1 for rel in self._scanned_rel if rel[:n] == want)
+        if exists is None and want and not n_scanned:
+            # Existence from the index (see the docstring): a scope is real iff
+            # it prefixes something indexed. `want == ()` names the collection
+            # root, which exists by having been loaded — a `None` path already
+            # short-circuits above, but the root spelled out must not 404.
+            raise NoSuchPath(f"no such path: {path}")
         return Scope(str(path), rows, len(rows), n_scanned, list(COVERS))
 
     def in_rel_order(self, rows) -> list[int]:

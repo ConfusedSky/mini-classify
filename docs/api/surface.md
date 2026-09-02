@@ -43,8 +43,37 @@ other tool, and defaults come from the last run's `run-params.json`.
 | `--model` | `DEFAULT_MODEL` | cache identity |
 | `--compile` / `--up-axis` | off / auto | cache identity |
 | `--rescan` | off | re-walk instead of the cached file list |
+| `--no-volume` | off | index from pose-cache.json instead of from the volume |
 | `--pool` | `softmax` | default only; every call may override |
 | `--host` / `--port` | `127.0.0.1` / `8077` | loopback: the caller is a local service, not a page |
+
+**`--no-volume` is the one parameter that changes what an answer means.** A
+file identity is `rel|mtime|size`, so pose-cache.json enumerates the collection
+and every embedding key is rebuilt from it with no filesystem access at all:
+the server indexes from the cache's own records and never looks at the STL
+library. It exists for shipping the server where the full-resolution library
+does not go. It is **opt-in and never a fallback** — without it an unmounted
+volume is refused, deliberately, rather than degraded into an index nobody
+asked for (`collection.VolumeUnavailable`). Two things read differently under
+it, both below: a scope that matches nothing is a **404** rather than an
+`unindexed` 200 (§scope), and `POST /reload {"rescan": true}` is a **400**
+(§`POST /reload`). `GET /status`'s `volume` is what tells the two modes apart —
+`required: false, present: null`, meaning nobody looked, as against the
+`present: false` of a server whose drive is gone.
+
+**The index is a snapshot, and one thing about it cannot be checked.** Nothing
+prunes pose-cache.json, so it outlives the files it describes. A file
+re-exported since its last classify run leaves two identities behind, and the
+loader keeps the newest — one row per path, matching what a walk would have
+stat'd. A file **deleted or renamed** cannot be caught that way: its orphaned
+identity names a path that exists nowhere, and with no disk to ask, that model
+stays in the index and answers queries as if it were there. The scale is
+measurable — docs/cache-rebuild.md counted 3540 pose entries against 3396
+loaded models on embed-cache2 — and this is the cost the flag buys its
+availability with; a normal load is what trims those rows, because only a walk
+knows the file is gone. Hits already carry that caveat for their own reason
+(§`hit`: two caches of one tree drift, and callers drop or grey a hit whose
+file has moved), so a consumer that honours it is already correct here.
 
 ## Stack
 
@@ -363,7 +392,17 @@ Reloads the embedding matrix and the pose cache — for after a
 loaded: warmup is one-shot, so this route is also the retry for a failed
 model load (2026-08-20), and a model already resident is never loaded twice.
 
-Returns `{n_models, missing, volume, loaded_at, ready}` — `ready` because a
+`rescan: true` is **400** under `--no-volume`: the re-walk is of the input
+directory, which that flag promised the process would never touch, and a flag
+that cannot act is refused rather than quietly ignored. A plain reload works
+there and is the one that matters — it re-reads pose-cache.json and the `.npy`
+files, which is how a fresh `classify_stls.py` run reaches such a server.
+
+Returns `{n_models, missing, volume, loaded_at, ready}`, where `volume` is
+`{present, root, missing, required}` — `present` is `true` loaded, `false`
+checked and gone, `null` not checked; `required` is `false` only under
+`--no-volume`, which is what makes that `null` legible as "nobody looked"
+rather than "still warming". `ready` is here because a
 reload can succeed while the server still is not (the collection half worked,
 the model half did not). **It does not require the server to be ready**,
 deliberately: it is the retry a failed startup asks for, so a server that
@@ -565,6 +604,15 @@ section). Under either shape the fields mean one thing:
   say instead of "nothing matched" — the same distinction deep name search
   draws between a completed search and a truncated one.
 - Unscoped calls still get the block, with `path: null` and collection totals.
+
+**Under `--no-volume` those first two collapse into one.** The 404 is the only
+answer that ever needed the disk, and with no disk to ask, a scope exists iff
+it prefixes something indexed — so a real directory nothing has been classified
+in is a 404 there, not an `unindexed` 200. `partial` and `unindexed` are
+unreachable for the same reason: `n_scanned` is the indexed set itself, there
+being no walk to compare it against, so every scope that matches at all answers
+`indexed`. A consumer that shows the two states differently reads
+`status.volume.required` to know which mode it is talking to.
 
 **No directory walk happens in a request.** `n_scanned` is a filter over the
 *cached* file list the last classify run wrote, minus anything that had already

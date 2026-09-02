@@ -684,6 +684,20 @@ def create_app(state: ServerState) -> FastAPI:
         # covers traffic), and a reload that never returns has to be visible
         # as one that started
         log.info("reload requested rescan=%s", req.rescan)
+        if req.rescan and getattr(state.args, "no_volume", False):
+            # Refused rather than quietly downgraded to a plain reload, on the
+            # CLI's --repose precedent (`classify_stls.main`): a flag that
+            # cannot act is reported, never treated as done. A rescan re-walks
+            # the input directory, which is the one thing --no-volume promised
+            # this process would never touch. The plain reload below is the
+            # one that matters here anyway — it re-reads pose-cache.json and
+            # the .npy files, which is how a fresh classify run reaches a
+            # manifest-mode server.
+            raise HTTPException(status_code=400, detail=(
+                "rescan re-walks the input directory, and this server was "
+                "started with --no-volume, which promised never to touch it. "
+                "Reload without rescan to pick up new classify output, or "
+                "restart without --no-volume to rescan"))
         c = state.collection                # bound once, like every handler
         try:
             fresh = Collection.load_with(state.args, rescan=req.rescan)

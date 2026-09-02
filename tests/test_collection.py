@@ -101,6 +101,40 @@ def build(tmp_path, layout, *, embed=None, ups=None, front=None, **over):
     return args, root, files
 
 
+def reexport(tmp_path, args, root, f):
+    """Re-export one model: new bytes, a newer mtime, a second cache entry.
+
+    The state `build` cannot produce, because it writes each rel exactly once.
+    Nothing prunes pose-cache.json, so a re-exported file leaves its old
+    identity *and* old `.npy` on disk beside the new pair — 3540 pose entries
+    against 3396 loaded models on embed-cache2 (docs/cache-rebuild.md). Both
+    halves go through the production writers, like the rest of the fixture.
+
+    Returns the new identity. The new embedding is deliberately not `build`'s
+    0.1, so a loader that picks the stale entry is visible in the matrix rather
+    than only in the identity list."""
+    import os
+    f.write_bytes(b"solid x\nendsolid x\nre-exported, and longer\n")
+    st = f.stat()
+    # a *later whole second*: `identity.mtime_key` truncates to seconds, so a
+    # sub-second bump would key identically and never make a second entry
+    os.utime(f, (st.st_atime, st.st_mtime + 100))
+
+    cache = Path(args.cache_dir) / "pose-cache.json"
+    entries = json.loads(cache.read_text())
+    ident = pose.file_identity(f, root)
+    entries[ident] = {"up": [0.0, 0.0, 1.0], "confidence": 0.9,
+                      "source": "geometry", "margin": 0.5,
+                      "v": pose.POSE_CACHE_VERSION}
+    cache.write_text(json.dumps(entries))
+
+    token = pose.embed_cache_token(entries[ident], args.up_axis)
+    vec = np.full((args.views * len(args.elevations), DIM), 0.2, dtype=np.float32)
+    np.save(embeds_dir(args.cache_dir) / f"{cache_key(f, args, token, root)}.npy",
+            vec)
+    return ident
+
+
 # --- scope: which rows a path selects ---------------------------------------
 
 def test_the_whole_collection_is_every_row(tmp_path):
@@ -900,8 +934,10 @@ def test_an_absent_volume_raises_rather_than_reading_as_an_empty_cache(tmp_path,
 
     with pytest.raises(VolumeUnavailable) as e:
         Collection.load(args)
+    # `required` is true by construction: only the mode that requires the
+    # volume can raise this, which is what makes `present: false` actionable
     assert e.value.as_dict() == {"present": False, "root": str(root),
-                                 "missing": str(root)}
+                                 "missing": str(root), "required": True}
     out = capsys.readouterr().out
     assert "not available" in out and str(root) in out
     assert "intact and local" in out            # the console explanation
@@ -911,7 +947,7 @@ def test_an_absent_volume_raises_rather_than_reading_as_an_empty_cache(tmp_path,
 def test_a_present_volume_is_reported_as_present(tmp_path):
     args, root, _ = build(tmp_path, ["a/one.stl"])
     assert Collection.load(args).volume == {"present": True, "root": str(root),
-                                            "missing": None}
+                                            "missing": None, "required": True}
 
 
 def test_a_missing_input_under_a_mounted_volume_says_something_different(tmp_path, capsys):
@@ -935,6 +971,153 @@ def test_the_volume_check_precedes_the_walk(tmp_path):
     shutil.rmtree(root)
     with pytest.raises(VolumeUnavailable):      # not SystemExit from embed_store
         Collection.load(args)
+
+
+# --- serving without the volume (--no-volume) -------------------------------
+
+@pytest.mark.parametrize("layout", [
+    ["a/one.stl", "b/two.stl", "b/c/three.stl"],
+    # the pair `find_stls`' sort orders differently from a plain string sort:
+    # '-' is below '/', so "Kits/A-B" precedes "Kits/A" as a string and follows
+    # it as parts. A real collection shape (test_rows_come_back_in_rel_order),
+    # and the one that decides whether the two loaders agree at all.
+    ["Kits/A-B/x.stl", "Kits/A/y.stl", "Kits/AB/z.stl"],
+    # a filename holding the identity's own separator: `rel|mtime|size` is
+    # split from the right precisely because rel may contain "|" and the two
+    # numeric fields never do. A left split reads this file's name as a
+    # directory and the row then names a path nothing walked.
+    ["a/we|rd.stl", "a/plain.stl"],
+])
+def test_a_manifest_load_is_the_same_index_as_a_walked_one(tmp_path, layout):
+    """The claim the mode rests on: pose-cache.json plus run-params.json
+    rebuild every embedding key with no filesystem access (identity.py's
+    `cache_key_from_identity`, review §P3.1), so the index built from the
+    records is the index built from the volume — same rows, same order, same
+    keys, byte for byte."""
+    args, root, _ = build(tmp_path, layout)
+    walked = Collection.load(args)
+    manifest = Collection.load(_replace(args, no_volume=True))
+
+    assert np.array_equal(walked.matrix, manifest.matrix)
+    assert manifest.files == walked.files
+    assert manifest._keys == walked._keys
+    assert manifest._ident == walked._ident
+    assert manifest.hit(0, 0.5, 2.0) == walked.hit(0, 0.5, 2.0)
+
+
+def test_a_re_exported_file_is_one_row_at_its_newest_identity(tmp_path):
+    """Nothing prunes pose-cache.json, so iterating it sees identities a walk
+    cannot: a re-exported file has two, and the old `.npy` is still there.
+
+    Two rows for one file is not a cosmetic duplicate. `Collection`'s
+    `_row_by_rel`/`_row_by_path` collision rule holds only because colliding
+    rows share a pose entry, an embedding key and a render key — two exports of
+    one model share none of those — so `row_of` (and `POST /poses`) would
+    answer from whichever row won insertion, and the model would appear twice
+    in one result list under two different scores. The walk-driven loader keys
+    the current stat and gets one row; this one has to reach the same answer by
+    picking the newest identity."""
+    args, root, files = build(tmp_path, ["a/one.stl", "b/two.stl"])
+    fresh = reexport(tmp_path, args, root, files["a/one.stl"])
+
+    walked = Collection.load(args)
+    manifest = Collection.load(_replace(args, no_volume=True))
+    assert len(manifest.files) == 2                  # not three
+    assert manifest.files == walked.files
+    assert np.array_equal(manifest.matrix, walked.matrix)
+    assert manifest._ident == walked._ident and fresh in manifest._ident
+    assert manifest.missing == 1                     # superseded, not absent
+    # the row really is the new export: `build` writes 0.1, `reexport` 0.2
+    row = manifest.files.index(files["a/one.stl"])
+    assert manifest.matrix[row].min() == pytest.approx(0.2)
+
+
+def test_a_manifest_load_survives_the_volume_going_away(tmp_path):
+    """The whole point, stated against the refusal it is the opt-in for: the
+    same load that raises `VolumeUnavailable` with the drive unplugged answers
+    with the same rows under the flag. The `.npy` files and the pose cache are
+    intact and local; only the STL library is gone."""
+    import shutil
+    args, root, _ = build(tmp_path, ["a/one.stl", "b/two.stl"])
+    before = Collection.load(_replace(args, no_volume=True))
+    shutil.rmtree(root)                         # "unplug the drive"
+
+    after = Collection.load(_replace(args, no_volume=True))
+    assert after.files == before.files
+    assert np.array_equal(after.matrix, before.matrix)
+    assert after.volume == {"present": None, "root": str(root),
+                            "missing": None, "required": False}
+    with pytest.raises(VolumeUnavailable):      # and the default still refuses
+        Collection.load(args)
+
+
+def test_a_pose_entry_with_no_embedding_is_dropped_and_counted(tmp_path):
+    """`missing` keeps its meaning across the two loaders: known to the cache,
+    not in the index. Here it is the pose-only model — resolved, never
+    embedded, or embedded under other args — where the walked loader's is the
+    walked-but-unembedded file."""
+    args, root, files = build(tmp_path, ["a/one.stl", "a/two.stl"])
+    full = Collection.load(_replace(args, no_volume=True))
+    assert len(full.files) == 2 and full.missing == 0
+
+    poses = pose.load_pose_cache(args.cache_dir)
+    ident = pose.file_identity(files["a/one.stl"], root)
+    token = pose.embed_cache_token(poses[ident], args.up_axis)
+    key = cache_key(files["a/one.stl"], args, token, root)
+    (embeds_dir(args.cache_dir) / f"{key}.npy").unlink()
+
+    c = Collection.load(_replace(args, no_volume=True))
+    assert [f.name for f in c.files] == ["two.stl"] and c.missing == 1
+
+
+def test_a_cache_with_no_poses_names_the_reason_it_cannot_be_served(tmp_path):
+    """A cache built entirely under a forced `--up-axis` records no poses —
+    the flag *is* the up vector, so nothing is written — and manifest mode has
+    then nothing to enumerate. The advice must say that rather than the
+    embedding loader's "run classify_stls.py first", which is the wrong-advice
+    shape `VolumeUnavailable` was invented to stop."""
+    args, *_ = build(tmp_path, ["a/one.stl"])
+    (Path(args.cache_dir) / "pose-cache.json").write_text("{}")
+
+    with pytest.raises(CacheUnusable) as e:
+        Collection.load(_replace(args, no_volume=True))
+    assert "pose entries" in e.value.message and "--no-volume" in e.value.message
+    assert "up-axis" in e.value.message
+    assert e.value.hint and "--no-volume" in e.value.hint
+
+
+def test_a_manifest_scope_answers_from_the_index_not_from_a_stat(tmp_path):
+    """With no disk to ask, a scope exists iff it prefixes something indexed.
+    `OutsideCollection` is unaffected — it never touched the disk — and the
+    root spelled out is not a 404, since a `None` path is the only spelling
+    that short-circuits."""
+    import shutil
+    args, root, _ = build(tmp_path, ["a/one.stl", "b/two.stl"])
+    c = Collection.load(_replace(args, no_volume=True))
+    shutil.rmtree(root)
+
+    assert c.resolve("a").status == "indexed"
+    assert len(c.resolve("a").rows) == 1
+    assert len(c.resolve(str(root)).rows) == 2          # the root, spelled out
+    assert len(c.resolve(None).rows) == 2
+    with pytest.raises(NoSuchPath):                     # under root, no rows
+        c.resolve("nowhere")
+    with pytest.raises(OutsideCollection):
+        c.resolve(str(tmp_path / "elsewhere"))
+
+
+def test_a_manifest_scope_404s_where_a_walked_one_says_unindexed(tmp_path):
+    """The documented cost of the mode (surface.md §scope): "a real directory
+    with nothing classified" is a 200 saying `unindexed` only because a stat
+    can tell it from "no such path". Without the volume the two are one
+    answer, and the collapse is to the 404."""
+    args, root, _ = build(tmp_path, ["a/one.stl", "b/two.stl"], embed=["a/one.stl"])
+    walked = Collection.load(args)
+    assert walked.resolve("b").status == "unindexed"    # the answer, not an error
+
+    manifest = Collection.load(_replace(args, no_volume=True))
+    with pytest.raises(NoSuchPath):
+        manifest.resolve("b")
 
 
 def test_importing_collection_costs_no_torch_or_open3d(tmp_path):

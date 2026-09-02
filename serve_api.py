@@ -14,6 +14,15 @@ with `ready: false` and `elapsed` until the model lands; `/query`, `/similar`,
 server indistinguishable from a dead one, and the consumer's semantic-search
 affordance would flicker off across every restart.
 
+`--no-volume` serves from the cache's own records — pose-cache.json enumerates
+the collection and every embedding key is rebuilt from the identities it is
+keyed by — so the STL library need not be mounted, or present at all. Opt-in
+only: without it an absent volume is still refused rather than degraded
+(`collection.VolumeUnavailable`), and nothing falls back to it. Two
+consequences, both in docs/api/surface.md: a scope that matches nothing is a
+404 rather than an `unindexed` 200, and `POST /reload {"rescan": true}` is
+refused, since a rescan is the walk this flag rules out.
+
 Nothing imports this file — it is the entry point, like classify_stls.py, and
 exports nothing. The app itself is `src/api.py:create_app`, which takes a
 `ServerState` and so is testable without a GPU.
@@ -39,6 +48,10 @@ def main():
     parser.add_argument("--pool", choices=["mean", "max", "softmax"],
                         default="softmax",
                         help="default view pooling; every request may override")
+    parser.add_argument("--no-volume", action="store_true",
+                        help="serve from the cache's own records "
+                             "(pose-cache.json + run-params.json); the STL "
+                             "volume is never consulted")
     parser.add_argument("--host", default="127.0.0.1",
                         help="bind address (default 127.0.0.1) — loopback because "
                              "the caller is model-browser's server, not a browser "

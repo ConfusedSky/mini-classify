@@ -66,7 +66,8 @@ def test_status_reports_the_cache_and_the_collection_root(tmp_path):
     assert s["ready"] is True
     assert s["collection_root"] == str(c.root)
     assert (s["n_models"], s["n_views"], s["dim"]) == (3, 2, DIM)
-    assert s["volume"] == {"present": True, "root": str(c.root), "missing": None}
+    assert s["volume"] == {"present": True, "root": str(c.root),
+                           "missing": None, "required": True}
     assert s["covers"] == ["stl"]
 
 
@@ -120,7 +121,7 @@ def test_status_names_the_volume_it_looked_for_when_it_is_absent(tmp_path):
 
     s = client.get("/status").json()
     assert s["volume"] == {"present": False, "root": str(root),
-                           "missing": str(root)}
+                           "missing": str(root), "required": True}
     assert s["collection_root"] == str(root)     # usable even unloaded
     assert s["failure"]["kind"] == "VolumeUnavailable"
 
@@ -718,6 +719,45 @@ def test_status_stops_claiming_the_volume_after_a_reload_finds_it_gone(tmp_path)
     assert s["volume"]["present"] is False               # not the stale true
     assert s["failure"]["kind"] == "VolumeUnavailable"
     assert client.post("/query", json={"text": "x"}).status_code == 200  # still serves
+
+
+def test_status_says_the_volume_was_never_required_under_no_volume(tmp_path):
+    """`present: false` is a claim — looked, and the drive is gone — that a
+    consumer acts on by telling someone to plug it in. A server that was never
+    going to look must not make it, and `null` alone does not say which: it is
+    also what a warming server reports. `required` is the field that separates
+    them (surface.md §Process parameters)."""
+    import shutil
+    client, _, c = serve(tmp_path, layout=["a/one.stl"], no_volume=True)
+    shutil.rmtree(c.root)
+
+    s = client.get("/status").json()
+    assert s["volume"] == {"present": None, "root": str(c.root),
+                           "missing": None, "required": False}
+    assert s["failure"] is None and s["ready"] is True
+    assert client.post("/query", json={"text": "x"}).status_code == 200
+
+
+def test_a_no_volume_server_refuses_a_rescan_and_reloads_without_one(tmp_path):
+    """A rescan re-walks the input directory, which `--no-volume` promised the
+    process would never touch — refused rather than quietly downgraded, on the
+    CLI's --repose precedent. The plain reload is the one that matters anyway:
+    re-reading pose-cache.json and the `.npy` files is how a fresh classify run
+    reaches a manifest-mode server, and it works with the volume gone."""
+    import shutil
+    client, state, c = serve(tmp_path, layout=["a/one.stl"], no_volume=True)
+    build(tmp_path, ["a/one.stl", "a/two.stl"])          # a classify run happened
+    shutil.rmtree(c.root)                                # and the drive left
+
+    r = client.post("/reload", json={"rescan": True})
+    assert r.status_code == 400
+    assert "--no-volume" in r.json()["detail"]
+    assert state.collection is c                         # nothing was rebound
+
+    body = client.post("/reload", json={}).json()
+    assert body["n_models"] == 2                         # the new model, no walk
+    assert body["volume"]["required"] is False
+    assert state.collection is not c
 
 
 def test_a_corrupt_cache_reload_is_enveloped_never_a_bare_500(tmp_path):
