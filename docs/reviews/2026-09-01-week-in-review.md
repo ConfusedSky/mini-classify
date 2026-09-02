@@ -1,4 +1,4 @@
-# Week in review — 2026-09-01 (as received)
+# Week in review — 2026-09-01 (as received; resolutions at the end)
 
 mini-classify week in review — 27 commits, 3 streams, suite green (733 passed, 1 skipped)
 
@@ -73,3 +73,55 @@ honesty discriminator).
 The working tree has uncommitted edits to the three run_*.sh scripts
 (cache-dir retarget to embed-cache512 + a typo fix) — deliberate-looking,
 but uncommitted.
+
+## Resolutions (2026-09-01, four commits; suite 743 passed, 1 skipped)
+
+Every diagnosis was re-verified against the code before briefing; two claims
+adjusted below. Each behavioral fix carries a regression test falsified
+against the unfixed code.
+
+- ~~1 (MAJOR, atomicity)~~ + ~~2 (anchoring)~~ — "Migrate the cache without
+  tearing it or re-anchoring it to a kit". **Fixed at the call site, not as
+  proposed**: routing `pose.save_pose_cache` through `cachedir.write_atomic`
+  is forbidden by interfaces.md's import-rule table (`pose` is the leaf both
+  process sides import) and its guard test, and would have overturned J7.
+  `migrate_cache_keys.main` now writes pose-cache.json and run-params.json
+  itself via `write_atomic` (mirroring `Done.flush`'s one-liner), which makes
+  done.py's "nothing in the pipeline calls it" true again — the docstring
+  stands unedited; `save_pose_cache` instead gained a docstring warning off
+  the next tool author. New `migration_root` asks `identity.resolve_root`
+  and refuses the "subdir" case before any write.
+- ~~3 (--skip-embed manifest)~~, ~~4 (gemini pin)~~, ~~--repose nit~~ —
+  "Three refusals in the CLI". `save_run_params` is guarded by
+  `not args.skip_embed`; the gemini arm rejects an org/model-shaped pin ahead
+  of the gcloud checks, symmetric with glm's; `--repose` under a forced
+  `--up-axis` is refused like the rest of its family. The manifest tests
+  needed a new harness (`a_run_that_reaches_the_driver`): the existing
+  helper dies in the model load, *before* the write site, so it could not
+  falsify the guard — a positive control now pins the write half too.
+- ~~5 (GLM tile cap)~~, ~~transport split~~, ~~parse_tile_answer~~,
+  ~~arbiter_id~~ — "pose: cap GLM's solo tiles, and give the transport split
+  one home". Solo tiles ride `SHEET_THUMB` like every other send path
+  (bit-identical at the default size); `_split_transport` is the retry
+  contract's single home, pinned by the two byte-unchanged contract tests;
+  bool is excluded from tile answers; `arbiter_id("claude", None)` stamps
+  bare "claude". A pre-existing "claude/None" stamp would read as foreign to
+  `--repose`, but no cache in this repo's use has one (every embed-cache512
+  escalation was answered by gemini-3.5-flash).
+- ~~FOV coupling~~, ~~/poses overpromise~~, ~~version cross-ref~~,
+  ~~load_embed print~~, ~~/status covers~~, ~~load_siglip retry~~,
+  ~~dead unpacks~~ — "Pin the couplings a comment was holding".
+  `renderer.FOV_DEG` now feeds both sides (no RECIPE_VERSION bump — same
+  float, same pixels); surface.md promises *distinct* paths as keys with the
+  duplicate collapse stated and tested; the narrowed retry propagates a
+  device-transfer OSError instead of silently going online.
+- **/under prose (minor, first half): already fixed** before this pass —
+  commit c075498 rewrote exactly that section; the claim described a state
+  the tree had moved past. Only the /poses sentence needed work.
+- **"Two stale comments in the degrade path" (nit): not located.** A close
+  read of every degrade-related comment in src/pose.py found them internally
+  consistent. Needs the reviewer's line references to action. Nearest
+  candidate is not a comment: the retired ollama backend is still fully
+  present as unreachable code (`_ask_ollama`, `ollama_available`, the
+  `ask_vlm_up` branch) while `poser.VLM_BACKENDS` rejects it — removing it
+  is a separate decision, left open here.
