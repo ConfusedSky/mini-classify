@@ -61,13 +61,27 @@ it, both below: a scope that matches nothing is a **404** rather than an
 `required: false, present: null`, meaning nobody looked, as against the
 `present: false` of a server whose drive is gone.
 
+`input` still scopes it: pose-cache.json enumerates the whole collection, and
+the load keeps only the entries under the input's root-relative prefix, so a
+server started on a subdirectory serves that subdirectory under either mode.
+And it is **refused** against a cache built with a forced `--up-axis`: that
+run's embeddings are keyed from the flag and it writes no pose entries, so
+there is nothing to enumerate them from and a mixed cache would serve a
+silently smaller index. Start without `--no-volume` there, or with the
+`--up-axis` the cache was built under.
+
 **The index is a snapshot, and one thing about it cannot be checked.** Nothing
 prunes pose-cache.json, so it outlives the files it describes. A file
 re-exported since its last classify run leaves two identities behind, and the
-loader keeps the newest — one row per path, matching what a walk would have
-stat'd. A file **deleted or renamed** cannot be caught that way: its orphaned
-identity names a path that exists nowhere, and with no disk to ask, that model
-stays in the index and answers queries as if it were there. The scale is
+loader keeps the newest — one row per path. That is what a walk would have
+stat'd whenever the file on disk is its latest export, which is the ordinary
+case; it is not the walk's rule. Restore a file to an older export (old bytes
+and old mtime both back, as a backup restore gives) and the two diverge: the
+walk serves what is on disk, the manifest serves the newest identity it has,
+and only a walk can know which is current. A file **deleted or renamed** cannot
+be caught at all: its orphaned identity names a path that exists nowhere, and
+with no disk to ask, that model stays in the index and answers queries as if it
+were there. The scale is
 measurable — docs/cache-rebuild.md counted 3540 pose entries against 3396
 loaded models on embed-cache2 — and this is the cost the flag buys its
 availability with; a normal load is what trims those rows, because only a walk
@@ -402,7 +416,10 @@ Returns `{n_models, missing, volume, loaded_at, ready}`, where `volume` is
 `{present, root, missing, required}` — `present` is `true` loaded, `false`
 checked and gone, `null` not checked; `required` is `false` only under
 `--no-volume`, which is what makes that `null` legible as "nobody looked"
-rather than "still warming". `ready` is here because a
+rather than "still warming". `required` is read off the process's own flags,
+never off a load, so it is present in **every** `volume` block — a warming
+server included, which is the one state the key exists to disambiguate and the
+one it was missing from until 2026-09-02. `ready` is here because a
 reload can succeed while the server still is not (the collection half worked,
 the model half did not). **It does not require the server to be ready**,
 deliberately: it is the retry a failed startup asks for, so a server that

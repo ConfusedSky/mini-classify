@@ -53,11 +53,15 @@ def load_embedding_matrix(files, args, root):
 def _recency(ident, parts):
     """Order two identities of one file: the newer export sorts higher.
 
-    `(mtime, size)` is the identity's own second half, so this reproduces the
-    choice a walk makes by stat without one. A field that is not an integer is
-    not something this cache wrote and loses to any field that is — the same
-    call as dropping an identity that does not split into three, and total
-    rather than a raise, since pose-cache.json is hand-editable. The identity
+    `(mtime, size)` is the identity's own second half, so this orders exports
+    the way a stat would without taking one — not the same thing as making the
+    walk's choice, which is the file's current identity and not the newest
+    known (see `load_embedding_matrix_from_poses`; F5).
+
+    A field that is not an integer is not something this cache wrote and loses
+    to any field that is — the same call as dropping an identity that does not
+    split into three, and total rather than a raise, since pose-cache.json is
+    hand-editable. The identity
     string breaks the remaining ties, which makes the winner deterministic
     across runs rather than a function of dict order."""
     try:
@@ -66,7 +70,7 @@ def _recency(ident, parts):
         return (0, 0, 0, ident)
 
 
-def load_embedding_matrix_from_poses(poses, args, root):
+def load_embedding_matrix_from_poses(poses, args, root, prefix=()):
     """The same array, enumerated from the pose cache instead of from a walk —
     the `--no-volume` load (serve_api.py, `Collection.load`).
 
@@ -74,6 +78,15 @@ def load_embedding_matrix_from_poses(poses, args, root):
     plus the identity behind each row. The identities are handed back because
     recomputing them is `pose.file_identity`, which stats the file — the one
     thing this path exists not to do.
+
+    `prefix` is the input's offset from the collection root as parts
+    (`collection._input_prefix`), and it buys the parity the mode rests on: a
+    walk serves only what is under `args.input`, so an unscoped enumeration of
+    the whole pose cache made a server started on `root/a` answer for `root/b`
+    as well — the two loaders disagreeing about which models exist, which is
+    the one thing they may not do. An identity outside the prefix is **not**
+    counted in `missing`: it is out of scope, not absent, exactly as a walk of
+    a subdirectory never sees it and never reports it.
 
     **No filesystem access outside `cache_dir`.** A pose entry is keyed by
     `rel|mtime|size`, which is byte-identical to what `cache_key` builds from a
@@ -105,8 +118,16 @@ def load_embedding_matrix_from_poses(poses, args, root):
     would appear twice in one result list under two scores. Not hypothetical:
     docs/cache-rebuild.md measured 3540 pose entries against 3396 loaded models
     on embed-cache2 — 144 orphans. Newest wins, by `(mtime, size)` descending
-    with an unparseable field losing to any parseable one, which is the same
-    ordering the walk would have produced by stat.
+    with an unparseable field losing to any parseable one.
+
+    That matches the walk exactly when the file on disk is its latest export,
+    which is the ordinary case and the one worth optimising for — but it is not
+    the walk's rule, and saying so overclaimed (F5). Restore a file to an older
+    export (old bytes *and* old mtime back, as a backup restore gives) and the
+    two diverge: the walk stats the file and serves the older identity, this
+    loader serves the newest identity it has, and only a walk can know which
+    one is current. Keep-newest is still the right call without a disk — the
+    alternative is guessing — it is just a guess, not a reproduction.
 
     **The residual, which is the trade the flag opts into.** A file *deleted or
     renamed* in the library leaves an orphaned identity at a rel that exists
@@ -123,12 +144,20 @@ def load_embedding_matrix_from_poses(poses, args, root):
             f"  run: serve_api.py without --no-volume to index from the STL "
             f"volume instead")
     cache_dir = embeds_dir(args.cache_dir)
+    # Compared as a posix string rather than by parts, because the stored rel
+    # *is* a posix string (`identity.rel_path`) and splitting it back into
+    # parts to compare would only invent a second spelling of the same test.
+    # The trailing "/" is what keeps `a` from claiming `ab`.
+    scope = "/".join(prefix)
     by_rel, missing = {}, 0
     for ident, entry in poses.items():
         parts = ident.rsplit("|", 2)
         if len(parts) != 3:
             missing += 1
             continue
+        if scope and not (parts[0] == scope
+                          or parts[0].startswith(scope + "/")):
+            continue                    # out of scope, not missing (F3)
         # An identity for a file outside the root carries an absolute posix
         # path (`identity.rel_path`'s fallback), and joining an absolute path
         # onto the root yields that path — which is the right answer for a
@@ -153,7 +182,20 @@ def load_embedding_matrix_from_poses(poses, args, root):
             by_rel[parts[0]] = row
     rows = [r[1:] for r in by_rel.values()]
     if not rows:
-        raise SystemExit("no cached embeddings found — run classify_stls.py first")
+        # Not the walk loader's "run classify_stls.py first": classify cannot
+        # run where the volume does not go, so that is advice this mode's
+        # operator can never take (F7). Pose entries were read, and none of
+        # them keyed a `.npy` — which is the signature of args that name a
+        # different cache identity than the one on disk, not of a cache that
+        # was never built. `run:` is the line `Collection.load` harvests into
+        # `CacheUnusable.hint`.
+        raise SystemExit(
+            f"pose entries were read from {args.cache_dir}, and none names a "
+            f"cached embedding under the keys these args build — most likely "
+            f"the cache-identity flags do not name the cache that is there "
+            f"(--views/--elevations/--render-size/--model/--compile).\n"
+            f"  run: compare those flags against {args.cache_dir}/"
+            f"run-params.json, which records what the classify run used")
     # The walk's order, reproduced. The two loaders index the same collection,
     # and a row number that names a different model depending on how the server
     # was started is not one anything can hold — `Scope.rows` and every hit

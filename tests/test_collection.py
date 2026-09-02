@@ -20,6 +20,7 @@ import numpy as np
 import pytest
 
 from src import cachedir
+from src import identity
 from src import pose
 from src.cachedir import (CACHE_VERSION, cache_key, embeds_dir, find_stls,
                           stamp_cache_version, view_config)
@@ -1084,6 +1085,88 @@ def test_a_cache_with_no_poses_names_the_reason_it_cannot_be_served(tmp_path):
     assert "pose entries" in e.value.message and "--no-volume" in e.value.message
     assert "up-axis" in e.value.message
     assert e.value.hint and "--no-volume" in e.value.hint
+
+
+def test_a_manifest_load_with_no_matching_embeddings_blames_the_args(tmp_path):
+    """"run classify_stls.py first" is advice this mode's operator cannot
+    take: classify cannot run where the volume does not go. Pose entries were
+    read and none of them keyed a `.npy`, which is the signature of args naming
+    a different cache identity than the one on disk — so the message has to
+    say that and point at run-params.json."""
+    args, *_ = build(tmp_path, ["a/one.stl"])
+    for p in embeds_dir(args.cache_dir).glob("*.npy"):
+        p.unlink()
+
+    with pytest.raises(CacheUnusable) as e:
+        Collection.load(_replace(args, no_volume=True))
+    assert "pose entries" in e.value.message
+    assert "cache-identity flags" in e.value.message
+    assert "classify_stls" not in e.value.message    # the wrong advice
+    assert e.value.hint and "run-params.json" in e.value.hint
+
+
+def test_manifest_mode_refuses_a_cache_keyed_under_a_forced_up_axis(tmp_path):
+    """A forced `--up-axis` writes no pose entries — `route` builds the Pose
+    from the flag — so such a run's `.npy` keys are unreachable from
+    pose-cache.json and manifest mode has nothing to enumerate them from.
+
+    The dangerous shape is the *mixed* cache this fixture is: entries left by
+    an earlier auto run, embeddings keyed under the forced axis. Enumerating it
+    would serve a silently smaller index with `missing` counting none of the
+    loss, so the mode is refused outright, on the CLI's --repose precedent. The
+    walk is unaffected: it stats the files and never needed the entries."""
+    args, *_ = build(tmp_path, ["a/one.stl", "b/two.stl"], up_axis="z")
+    assert len(Collection.load(args).files) == 2         # walk mode still fine
+
+    with pytest.raises(CacheUnusable) as e:
+        Collection.load(_replace(args, no_volume=True))
+    assert "--up-axis z" in e.value.message
+    assert "pose-cache.json" in e.value.message
+    assert e.value.hint and "--up-axis auto" in e.value.hint
+
+
+def test_a_manifest_load_is_scoped_to_its_input_like_a_walk(tmp_path):
+    """A walk serves only what is under `args.input`. Enumerating the whole
+    pose cache made a server started on `root/a` answer for `root/b` too —
+    the two loaders disagreeing about which models exist, which is the one
+    thing they may not do (measured before the fix: 1 row walked, 2 manifest).
+
+    `ab` is here because the prefix is a string compare: without the trailing
+    separator, a scope of `a` claims it."""
+    args, root, _ = build(tmp_path, ["a/one.stl", "ab/two.stl", "b/three.stl"],
+                          input=str(tmp_path / "stl" / "a"))
+    walked = Collection.load(args)
+    manifest = Collection.load(_replace(args, no_volume=True))
+
+    assert [f.name for f in walked.files] == ["one.stl"]
+    assert manifest.files == walked.files
+    assert np.array_equal(manifest.matrix, walked.matrix)
+    assert manifest._keys == walked._keys and manifest._ident == walked._ident
+    assert len(manifest.resolve(None).rows) == 1
+    # out of scope is not missing: a walk of a subdirectory never sees those
+    # files and never reports them either
+    assert manifest.missing == walked.missing == 0
+
+
+def test_a_manifest_load_keys_its_renders_without_touching_the_volume(tmp_path,
+                                                                     monkeypatch):
+    """`identity.render_key` resolves its argument, so computing one per file
+    was a stat walk of the volume — the third place this mode reached for the
+    storage it promised not to touch. The stored rel is what `rel_path`
+    produced at classify time, so `render_key_from_rel` reaches the same key
+    by construction; parity with the walk is asserted alongside, because a key
+    that no longer matches the saved renders is worse than a slow one."""
+    def refuse(*a, **k):
+        raise AssertionError("render_key stats the volume; --no-volume must "
+                             "not call it")
+
+    args, *_ = build(tmp_path, ["a/one.stl", "b/two.stl"])
+    walked = Collection.load(args)
+    monkeypatch.setattr(identity, "render_key", refuse)
+
+    manifest = Collection.load(_replace(args, no_volume=True))
+    assert manifest._keys == walked._keys
+    assert all(k.startswith(("one_", "two_")) for k in manifest._keys)
 
 
 def test_a_manifest_scope_answers_from_the_index_not_from_a_stat(tmp_path):

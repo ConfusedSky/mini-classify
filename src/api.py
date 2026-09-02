@@ -308,12 +308,21 @@ class ServerState:
         reporting `present: true` off the last successful load, and that is the
         one a consumer acts on when deciding whether to offer the affordance
         (review, 2026-08-19). Serving 200s from the intact local matrix stays
-        right; claiming the volume is there does not."""
+        right; claiming the volume is there does not.
+
+        `required` is on the not-yet-loaded arm too, and it has to be: it is
+        read off the *args*, which are known before any load, and it is the
+        only thing that tells a healthy `--no-volume` server (`present: null`
+        forever, by design) from a warming one (`present: null` for now) —
+        the exact pair the key was invented to disambiguate (surface.md
+        §`GET /status`). Omitting it here left the consumer branching on a
+        key that was absent in precisely the state it was needed (F1)."""
         if isinstance(self.load_error, VolumeUnavailable):
             return self.load_error.as_dict()
         if c is not None:
             return c.volume
-        return {"present": None, "root": None, "missing": None}
+        return {"present": None, "root": None, "missing": None,
+                "required": not getattr(self.args, "no_volume", False)}
 
     @property
     def failure(self) -> dict | None:

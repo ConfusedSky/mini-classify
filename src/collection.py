@@ -210,10 +210,7 @@ class Collection:
         # scope silently matched nothing and `rel_path` came out with a doubled
         # leading slash (review, 2026-08-19).
         self._inp = Path(args.input)
-        try:
-            self._prefix = _real(self._inp).relative_to(self._real_root).parts
-        except ValueError:
-            self._prefix = ()
+        self._prefix = _input_prefix(self._inp, self._real_root)
         # Everything below is why a request needs no filesystem: paths as
         # tuples for prefix matching, identities for the pose lookup, and the
         # render key and display name — all one stat each here rather than per
@@ -226,7 +223,21 @@ class Collection:
         # this line reach for a volume that is not there.
         self._ident = list(idents) if idents is not None else \
             [pose.file_identity(f, root) for f in files]
-        self._keys = [identity.render_key(f, root) for f in files]
+        # `render_key` resolves its argument, so this line was a per-file
+        # lstat walk of the volume whenever one happened to be mounted — the
+        # third place the manifest path reached for storage it had promised not
+        # to touch, after the walk and `file_identity` (F4; the commit that
+        # added the mode removed two and said there were none left). Worse than
+        # slow on a hung mount: a symlink inside the tree resolves to a
+        # different rel than the stored one, so `hit.id` differed between a
+        # mounted and an unmounted run of the same command. The identity's
+        # first field *is* what `rel_path` returned at classify time, so the
+        # keys are identical by construction on an unchanged tree — and under
+        # --no-volume the stored spelling is the truth, there being nothing
+        # else to ask.
+        self._keys = [identity.render_key_from_rel(i.rsplit("|", 2)[0])
+                      for i in self._ident] if idents is not None else \
+            [identity.render_key(f, root) for f in files]
         self._names = [self._display_name(f) for f in files]
         # path -> row, so `row_of` is a dict get rather than a scan of `_rel`
         # per path: `POST /poses` asks about up to 1024 of them at once. Two
@@ -261,10 +272,14 @@ class Collection:
         comes from the cache's own records instead: pose-cache.json enumerates
         the collection and `identity.cache_key_from_identity` rebuilds every
         embedding key from the identities it is keyed by, so nothing outside
-        `cache_dir` is read. `scanned` is then the indexed set itself — there
-        is no walk to compare it against — which is what makes `partial` and
-        `unindexed` unreachable in that mode and a scope's 404 an
-        index-membership answer rather than a stat (`resolve`)."""
+        `cache_dir` is read. It is refused outright under a forced `--up-axis`,
+        which writes no pose entries to enumerate (F2), and its enumeration is
+        scoped to `args.input` the way the walk is, so a server pointed at a
+        subdirectory serves that subdirectory in both modes (F3). `scanned` is
+        then the indexed set itself — there is no walk to compare it against —
+        which is what makes `partial` and `unindexed` unreachable in that mode
+        and a scope's 404 an index-membership answer rather than a stat
+        (`resolve`)."""
         inp = Path(args.input)
         no_volume = getattr(args, "no_volume", False)
         # Everything that reads the cache runs inside one boundary. The two
@@ -290,10 +305,30 @@ class Collection:
                 # `cache_root` stays: it reads run-params.json for the anchor
                 # and resolves the input non-strictly, which a missing path
                 # answers as well as a present one.
+                if args.up_axis in pose.FORCED_UPS:
+                    # A forced axis writes no pose entries at all — `route`
+                    # builds the Pose from the flag — so the embedding keys of
+                    # such a run are unreachable from pose-cache.json, and a
+                    # cache holding *some* entries under these args would
+                    # enumerate a silently smaller collection with `missing`
+                    # counting none of the loss. Refused on the CLI's --repose
+                    # precedent: a mode that cannot answer says so rather than
+                    # answering short (F2).
+                    raise CacheUnusable(
+                        f"--no-volume cannot index a cache built with "
+                        f"--up-axis {args.up_axis}: manifest mode enumerates "
+                        f"the collection from pose-cache.json, and a forced "
+                        f"axis keys its embeddings without writing pose "
+                        f"entries to enumerate them from",
+                        "run: serve_api.py without --no-volume to index from "
+                        "the STL volume, or with --up-axis auto if that is "
+                        "what built this cache")
                 require_cache_version(args.cache_dir)
                 poses = pose.load_pose_cache(args.cache_dir)
                 matrix, files, idents, missing = \
-                    load_embedding_matrix_from_poses(poses, args, root)
+                    load_embedding_matrix_from_poses(
+                        poses, args, root,
+                        prefix=_input_prefix(inp, _real(root)))
                 scanned = files
             else:
                 cls._require_volume(root, inp, args.cache_dir)
@@ -638,6 +673,29 @@ def _real(p: Path) -> Path:
     lstats every component, which is why the root's is computed once at load
     and never per request."""
     return Path(p).resolve()
+
+
+def _input_prefix(inp, real_root) -> tuple:
+    """The input's offset from the collection root, as parts.
+
+    `()` when the input *is* the root, and also when it lies outside it
+    entirely — something usable beats raising, on `_parts`' reasoning, and a
+    prefix that matches everything is the honest reading of "this run is not
+    scoped to a subtree of the anchor".
+
+    Non-strict: `Path.resolve()` answers on a path that is not there, which is
+    what lets `--no-volume` ask this without the volume. It is a fixed cost in
+    the *depth* of two paths and never in the size of the collection — the
+    per-file resolve is the one that mode has to stay away from (F4).
+
+    One definition because two callers need the same answer: `__init__` uses it
+    to relate walked paths to the root, and `load` to scope the manifest
+    enumeration the way a walk of a subdirectory is scoped (F3). They drifting
+    apart would mean the two loaders disagreeing about which models exist."""
+    try:
+        return _real(inp).relative_to(real_root).parts
+    except ValueError:
+        return ()
 
 
 def _with(args, **over):

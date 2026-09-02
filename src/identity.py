@@ -32,7 +32,7 @@ Two things this does NOT make portable, both deliberate:
   the correct response to a directory tree that moved.
 """
 import hashlib
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 
 def collection_root(inp):
@@ -227,5 +227,25 @@ def render_key(f, root):
     The path hashed is relative to the collection root, so moving the library
     does not orphan every render. The child writes these files and the parent's
     render index reads them, which is why the definition is here and not in
-    either (module docstring)."""
-    return f"{f.stem}_{hashlib.sha1(rel_path(f, root).encode()).hexdigest()[:6]}"
+    either (module docstring).
+
+    Takes a *file*, so it stats: `rel_path` resolves. The formula itself is
+    `render_key_from_rel`, which does not — see there for who needs that."""
+    return render_key_from_rel(rel_path(f, root))
+
+
+def render_key_from_rel(rel):
+    """`render_key`'s formula, from a rel string that is already known.
+
+    Pure: no stat, no resolve, nothing outside the argument. A file identity is
+    `rel|mtime|size` and its first field is exactly what `rel_path` returned at
+    classify time, so a consumer holding pose-cache.json can rebuild every
+    render key from its records the way `cache_key_from_identity` rebuilds
+    every embedding key — which is what `--no-volume` needs, the volume being
+    the one thing it must not touch (F4).
+
+    One formula, not two: `render_key` delegates here rather than repeating it.
+    Two byte-identical copies of this string is the exact failure that moved it
+    into this module (E-R1-5), and a copy that agrees only until someone edits
+    one of them would re-open it."""
+    return f"{PurePosixPath(rel).stem}_{hashlib.sha1(rel.encode()).hexdigest()[:6]}"

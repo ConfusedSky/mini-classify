@@ -738,6 +738,22 @@ def test_status_says_the_volume_was_never_required_under_no_volume(tmp_path):
     assert client.post("/query", json={"text": "x"}).status_code == 200
 
 
+@pytest.mark.parametrize("no_volume,required", [(False, True), (True, False)])
+def test_a_warming_server_already_says_whether_it_needs_a_volume(tmp_path,
+                                                                 no_volume,
+                                                                 required):
+    """`required` is read off the process's flags, not off a load, so it is
+    answerable before one — and it has to be answered there. `present: null`
+    is both "still warming" and "never going to look", and this key is the
+    only thing that separates them; leaving it out of the warming block
+    dropped it from precisely the state it was invented for."""
+    client, _, _ = serve(tmp_path / str(no_volume), layout=["a/one.stl"],
+                         ready=False, no_volume=no_volume)
+    v = client.get("/status").json()["volume"]
+    assert v["present"] is None                  # nothing loaded yet, either way
+    assert v["required"] is required
+
+
 def test_a_no_volume_server_refuses_a_rescan_and_reloads_without_one(tmp_path):
     """A rescan re-walks the input directory, which `--no-volume` promised the
     process would never touch — refused rather than quietly downgraded, on the
