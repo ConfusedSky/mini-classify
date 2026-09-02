@@ -213,6 +213,13 @@ notes at the bottom are amended in place. Open work is tracked separately in
   queries better, matching the pilot's +0.015–0.018 prediction in
   direction and order. `eval/renderer_pilot/ev2_check.py`.
 
+- [Elevation rings, finally measured](docs/learnings/2026-09-01-elevation-rings.md)
+  — the −20° ring costs **−0.005 nDCG@20** to drop (0.886 → 0.881, GLM
+  judge, pilot sample, live embed-cache512) — inside pilot noise, and half
+  the tight-framing gain; halving by ring beats halving by azimuth
+  (−0.011). A `--elevations 20` rebuild would halve render/embed cost and
+  cache size; not acted on. `eval/renderer_pilot/elev_check.py`.
+
 
 ## Evergreen notes
 

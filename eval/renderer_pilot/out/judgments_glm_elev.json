@@ -1,0 +1,134 @@
+{
+"barbarian warrior with a sword|115": {
+"relevance": 1,
+"reason": "This is a fantasy sword with a dragon/bat-wing crossguard, not a barbarian warrior figure. It's an accessory/weapon component that could belong to a barbarian, but the model itself contains no warrior",
+"tok": 2915,
+"usd": 0.0004579
+},
+"bust of a character|10": {
+"relevance": 0,
+"reason": "This is a full-body miniature of a horned, tailed female character, not a bust (head-and-shoulders sculpture).",
+"tok": 3034,
+"usd": 0.00046945
+},
+"bust of a character|148": {
+"relevance": 0,
+"reason": "This is a full-body miniature figure of a Napoleonic-era officer, not a bust. A bust depicts only the head and shoulders/torso, so this does not match the search.",
+"tok": 1029,
+"usd": 0.00017255
+},
+"bust of a character|177": {
+"relevance": 0,
+"reason": "This is an abstract rocky sculpture/claw-like formation holding a sphere, not a bust of a character. There is no face, head, or humanoid figure present.",
+"tok": 2901,
+"usd": 0.0004516
+},
+"dragon|180": {
+"relevance": 0,
+"reason": "The model is a giant turtle with a cargo crate, not a dragon.",
+"tok": 3018,
+"usd": 0.00046285
+},
+"dragon|254": {
+"relevance": 1,
+"reason": "This is a primitive gate/archway made of wooden posts with a large bone or possibly dragon-related element (skull fragment/jaw) as the crossbeam, hung with cloth. It's terrain/scenery that may incorpo",
+"tok": 2923,
+"usd": 0.000464
+},
+"goblin|112": {
+"relevance": 0,
+"reason": "The model is an armored humanoid warrior (vampire/elf-like figure with cape and skull), not a goblin.",
+"tok": 2889,
+"usd": 0.00044665
+},
+"rider mounted on a horse or beast|124": {
+"relevance": 0,
+"reason": "The model is a single standing beast-like warrior (troll/brute with axe and shield), not a rider mounted on a horse or beast.",
+"tok": 3040,
+"usd": 0.0004714
+},
+"rider mounted on a horse or beast|222": {
+"relevance": 0,
+"reason": "The model is a single standing armored warrior with a horned helmet and sword; there is no horse or beast to ride, so it does not match a mounted rider search.",
+"tok": 3045,
+"usd": 0.0004739
+},
+"rider mounted on a horse or beast|241": {
+"relevance": 0,
+"reason": "The model is a ruined stone archway/gate terrain piece with no rider, horse, or beast present.",
+"tok": 3032,
+"usd": 0.0004674
+},
+"rider mounted on a horse or beast|267": {
+"relevance": 0,
+"reason": "This is a bust of an armored warrior with a plumed helmet, not a rider mounted on a horse or beast. No mount is present.",
+"tok": 2900,
+"usd": 0.00045005
+},
+"robot or mech|69": {
+"relevance": 0,
+"reason": "The model is a crossbow (fantasy weapon), not a robot or mech.",
+"tok": 2883,
+"usd": 0.0004433
+},
+"robot or mech|217": {
+"relevance": 0,
+"reason": "The model is a workbench/table with tools, a toolbox, and a weapon-like object on top \u2014 not a robot or mech, nor a component of one.",
+"tok": 2899,
+"usd": 0.0004513
+},
+"robot or mech|221": {
+"relevance": 1,
+"reason": "This is a samurai warrior figure with a hat, cape, and sword. While it has some armor plating that could suggest slight cybernetic/mecha-inspired elements, it is primarily a humanoid samurai character",
+"tok": 2916,
+"usd": 0.0004598
+},
+"stone golem|26": {
+"relevance": 0,
+"reason": "The model is a horned barbarian/warrior figure, not a stone golem.",
+"tok": 3024,
+"usd": 0.00046515
+},
+"treasure chest|203": {
+"relevance": 0,
+"reason": "The model is a rocky outcrop with a wooden platform, ladder, and a barrel with a shovel/pickaxe \u2014 terrain scenery, not a treasure chest.",
+"tok": 2898,
+"usd": 0.0004508
+},
+"treasure chest|271": {
+"relevance": 0,
+"reason": "The model is a spiked wooden fence/gate section (fortification terrain), not a treasure chest or any chest-like container.",
+"tok": 2891,
+"usd": 0.0004473
+},
+"troll|179": {
+"relevance": 0,
+"reason": "The model is clearly a giant toad/frog creature, not a troll. While it could appear in fantasy settings alongside trolls, its subject is an amphibian, so it does not match a search for 'troll'.",
+"tok": 3050,
+"usd": 0.0004785
+},
+"troll|184": {
+"relevance": 1,
+"reason": "The model is an archer figure with pointed ears, likely an elf or goblin archer, not clearly a troll. It could be argued as a fantasy creature but does not clearly depict a troll.",
+"tok": 3045,
+"usd": 0.000476
+},
+"wizard casting a spell|63": {
+"relevance": 0,
+"reason": "The model depicts a bird-like humanoid warrior standing behind a spiked wooden palisade, not a wizard casting a spell. There are no spellcasting gestures, magical effects, robes, or arcane elements.",
+"tok": 2907,
+"usd": 0.00045495
+},
+"wizard casting a spell|145": {
+"relevance": 0,
+"reason": "The model is a waiter/butler figure carrying a tray with bottles, a pitcher, and a goblet \u2014 not a wizard casting a spell.",
+"tok": 2897,
+"usd": 0.00044995
+},
+"wizard casting a spell|177": {
+"relevance": 1,
+"reason": "It's an abstract rocky sculpture with a floating sphere, evoking magical energy or a spell effect, but there is no wizard figure; it could be a spell effect accessory rather than the wizard itself.",
+"tok": 3046,
+"usd": 0.0004758
+}
+}

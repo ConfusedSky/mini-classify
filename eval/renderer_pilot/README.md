@@ -46,3 +46,10 @@ kept (≈25k PNGs); the scripts regenerate them in ~30 minutes.
 ev2 rebuild — before from the archived `arm_open3d.npy`, after from the live
 rebuilt cache, one GLM judge for both sides — and delta-judges only pairs the
 new ranking surfaces. The rebuild's write-up: LEARNINGS, "The ev2 rebuild".
+
+`elev_check.py` (2026-09-01) asks whether the −20° elevation ring earns its
+half of the cache: the same 12 queries from the live cache's rows, view
+subsets sliced from the `(n, 16, 1152)` matrix (views 0–7 are the +20° ring
+— elevation-major), delta-judging into `out/judgments_glm_elev.json`.
+Dropping the ring costs −0.005 nDCG@20; write-up: LEARNINGS, "Elevation
+rings, finally measured".
