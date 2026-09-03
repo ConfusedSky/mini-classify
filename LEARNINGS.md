@@ -221,6 +221,15 @@ notes at the bottom are amended in place. Open work is tracked separately in
   cache size; not acted on. `eval/renderer_pilot/elev_check.py`.
 
 
+- [Parts, duplicates, and whether SigLIP can see part-ness](docs/learnings/2026-09-03-parts-duplicates-and-the-probe.md)
+  — the duplicate census (98 md5-identical groups; 57 DM Stash `75_` scale
+  twins the `75mm` tag never met; scale twins invisible to byte-dedupe by
+  construction) and `eval/part_probe.py`: zero-shot part-ness over
+  embed-cache512's cached embeddings reads ~41% of the corpus as parts at
+  ~90% recall, **0%** on handless bodies, 0.4% true character FPs — not too
+  wide. Shipped: `"standalone"` tag + anchored `^75_` rule, 3,380 → 3,092
+  files. The two-tier flag is the repo issue "Part/accessory handling".
+
 ## Evergreen notes
 
 - [Queries and filters](docs/learnings/queries-and-filters.md) — open-set
