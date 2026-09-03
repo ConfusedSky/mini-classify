@@ -97,3 +97,35 @@ def test_matching_ignores_case():
 def test_the_two_groups_make_up_the_tag_list():
     from src.naming import NON_MODEL_TAGS, SUPPORT_TAGS
     assert SKIP_TAGS == SUPPORT_TAGS + NON_MODEL_TAGS
+
+
+@pytest.mark.parametrize("name", [
+    "75_Unsupported_AlphaAlm_Body.stl",   # DM Stash's scale spelling, file
+    "75_Unsupported_Aimar_BodyMask.stl",
+])
+def test_a_75_prefix_is_a_scale_duplicate(name):
+    # DM Stash writes the 75mm duplicate as a bare "75_" prefix; every such
+    # file in the 2026-09-03 census had an exact 32_ sibling in the walk
+    assert skip(name)
+
+
+@pytest.mark.parametrize("name", [
+    "32_Unsupported_AlphaAlm_Body.stl",   # the twin that stays
+    "1975_Tank.stl",                      # contains "75_", not a scale variant
+    "Beast Slayer_75 mm scale",           # spaced spelling: unique kit, kept
+    "UndeadKnight_Bust 150mm_STL_V1",     # 150mm: unique kit, kept
+])
+def test_the_75_prefix_is_anchored_and_scale_kits_without_twins_stay(name):
+    assert not skip(name)
+
+
+@pytest.mark.parametrize("name", [
+    "Standalone Weapons & Hands",         # the five directory spellings...
+    "Standalone Weapons and Hands",
+    "Minoc Standalone Weapons",
+    "Standalone Hands & Weapons & Spells",
+    "Standalone_Draugr_Shield.stl",       # ...and the loose accessory files
+    "Standalone_Barbarian_2H_Axe (repaired).stl",
+])
+def test_standalone_accessories_are_not_models(name):
+    assert skip(name)

@@ -23,11 +23,27 @@ import re
 SUPPORT_TAGS = ("presupported", "pre-supported", "pre_supported", "supported",
                 "lychee", "chitubox")
 
-# Not a model in its own right: a bare base disc, a hollowed print variant, or
-# the 75mm duplicate of a model we already have at 32mm.
-NON_MODEL_TAGS = ("base", "hollow", "75mm")
+# Not a model in its own right: a bare base disc, a hollowed print variant,
+# the 75mm duplicate of a model we already have at 32mm, or a standalone
+# accessory piece. "standalone" is Artisan Guild's own word for the class —
+# five directory spellings ("Standalone Weapons & Hands", "Minoc Standalone
+# Weapons", "Standalone Hands & Weapons & Spells", ...) plus 80 loose
+# "Standalone_<Weapon>.stl" files outside those dirs, and the 2026-09-03
+# census found no occurrence anywhere in the library that is not an
+# accessory. Its 202-file directory class was also the largest source of
+# byte-identical duplicates (98 md5-identical groups collection-wide).
+NON_MODEL_TAGS = ("base", "hollow", "75mm", "standalone")
 
 SKIP_TAGS = SUPPORT_TAGS + NON_MODEL_TAGS
+
+# DM Stash spells the 75mm scale duplicate as a bare "75_" prefix —
+# "75_Unsupported_AlphaAlm_Body.stl" beside its "32_" twin; 57 files in the
+# 2026-09-03 census, every one with an exact 32_ sibling in the walk. A
+# prefix match rather than a substring tag, deliberately: "1975_Tank.stl"
+# would contain "75_" and is not a scale variant. (The spaced "75 mm scale"
+# and "150mm" kits stay indexed on purpose — they have no 32mm twin, so the
+# NON_MODEL_TAGS rationale does not cover them.)
+SCALE_PREFIX = re.compile(r"^75_")
 
 
 # Every way this collection says "no supports", which all contain the thing they
@@ -61,4 +77,5 @@ def skip(name):
     directory is a large win on slow media), and of archive names when deciding
     what is worth unpacking. Passing an archive its own name works because these
     sets name a zip after the folder it contains."""
-    return any(t in _searchable(name) for t in SKIP_TAGS)
+    return bool(SCALE_PREFIX.match(name)) or \
+        any(t in _searchable(name) for t in SKIP_TAGS)
