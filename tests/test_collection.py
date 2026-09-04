@@ -1218,3 +1218,33 @@ def test_importing_collection_costs_no_torch_or_open3d(tmp_path):
     r = subprocess.run([sys.executable, "-c", code], cwd=repo,
                        capture_output=True, text=True, timeout=120)
     assert r.returncode == 0, f"forbidden imports: {r.stdout}\n{r.stderr}"
+
+
+def test_a_manifest_load_honors_the_walk_filter_vocabulary(tmp_path):
+    """A model cut from `naming.SKIP_TAGS` after it was cached still has its
+    pose entry and `.npy` on disk. The walk never sees it again — `find_stls`
+    prunes by name — so the manifest load must not resurrect it, or the two
+    loaders disagree about which models exist (the F3 rule) by exactly the
+    size of the last filter change."""
+    args, root, _ = build(tmp_path, ["a/one.stl", "b/two.stl"])
+    ghost = root / "a" / "Standalone_Sword.stl"     # skip() catches the name
+    ghost.write_bytes(b"solid x\nendsolid x\n")
+    cache = Path(args.cache_dir) / "pose-cache.json"
+    entries = json.loads(cache.read_text())
+    ident = pose.file_identity(ghost, root)
+    entries[ident] = {"up": [0.0, 0.0, 1.0], "confidence": 0.9,
+                      "source": "geometry", "margin": 0.5,
+                      "v": pose.POSE_CACHE_VERSION}
+    cache.write_text(json.dumps(entries))
+    token = pose.embed_cache_token(entries[ident], args.up_axis)
+    vec = np.full((args.views * len(args.elevations), DIM), 0.3, dtype=np.float32)
+    np.save(embeds_dir(args.cache_dir) / f"{cache_key(ghost, args, token, root)}.npy",
+            vec)
+
+    walked = Collection.load(args)
+    manifest = Collection.load(_replace(args, no_volume=True))
+    assert [f.name for f in walked.files] == ["one.stl", "two.stl"]
+    assert manifest.files == walked.files
+    assert np.array_equal(manifest.matrix, walked.matrix)
+    # never seen, never reported — the walk does not count what it prunes
+    assert manifest.missing == walked.missing == 0

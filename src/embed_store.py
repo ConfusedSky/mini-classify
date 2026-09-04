@@ -24,6 +24,7 @@ import numpy as np
 from src import pose
 from src.cachedir import cache_key, embeds_dir
 from src.identity import cache_key_from_identity
+from src.naming import skip
 
 
 def load_embedding_matrix(files, args, root):
@@ -158,6 +159,17 @@ def load_embedding_matrix_from_poses(poses, args, root, prefix=()):
         if scope and not (parts[0] == scope
                           or parts[0].startswith(scope + "/")):
             continue                    # out of scope, not missing (F3)
+        if any(skip(seg) for seg in parts[0].split("/")):
+            # The walk applies `naming.skip` to every directory and filename
+            # it visits, so a model cut from the vocabulary still has its pose
+            # entry and .npy on disk from before the tag existed — enumerated
+            # from the records alone it would come back from the dead, and the
+            # two loaders would disagree about which models exist (the F3
+            # rule) by exactly the size of the last filter change. skip() is
+            # pure string matching, so this costs the mode nothing it
+            # promised not to spend. Not counted in `missing`: the walk never
+            # sees these files and never reports them either.
+            continue
         # An identity for a file outside the root carries an absolute posix
         # path (`identity.rel_path`'s fallback), and joining an absolute path
         # onto the root yields that path — which is the right answer for a
