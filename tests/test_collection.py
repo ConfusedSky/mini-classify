@@ -1248,3 +1248,28 @@ def test_a_manifest_load_honors_the_walk_filter_vocabulary(tmp_path):
     assert np.array_equal(manifest.matrix, walked.matrix)
     # never seen, never reported — the walk does not count what it prunes
     assert manifest.missing == walked.missing == 0
+
+
+def test_the_manifest_vocabulary_check_is_the_walks_whole_predicate(tmp_path):
+    """Review 2026-09-03, findings 1 and 2 on the vocabulary guard.
+
+    The walk's predicate is dotted-name pruning *then* skip(), applied only
+    below the input — os.walk never tests its own start directory. So a
+    dotted rel must not resurrect under --no-volume (finding 1), and a serve
+    scoped to a directory named `Database` must not lose its whole index to
+    the "base" substring the walk never tested (finding 2)."""
+    args, root, _ = build(tmp_path, [".staging/kit/ghost.stl", "a/keep.stl"])
+    # build() writes cache entries for the dotted file the walk would prune;
+    # exactly the state a scoped classify run through such a path leaves
+    walked = Collection.load(args)
+    manifest = Collection.load(_replace(args, no_volume=True))
+    assert [f.name for f in walked.files] == ["keep.stl"]
+    assert manifest.files == walked.files
+
+    args2, root2, _ = build(tmp_path / "scoped", ["Database/kit/one.stl",
+                                                  "Database/kit/two.stl"])
+    scoped = _replace(args2, input=str(root2 / "Database"))
+    walked2 = Collection.load(scoped)
+    manifest2 = Collection.load(_replace(scoped, no_volume=True))
+    assert [f.name for f in walked2.files] == ["one.stl", "two.stl"]
+    assert manifest2.files == walked2.files

@@ -159,16 +159,32 @@ def load_embedding_matrix_from_poses(poses, args, root, prefix=()):
         if scope and not (parts[0] == scope
                           or parts[0].startswith(scope + "/")):
             continue                    # out of scope, not missing (F3)
-        if any(skip(seg) for seg in parts[0].split("/")):
-            # The walk applies `naming.skip` to every directory and filename
-            # it visits, so a model cut from the vocabulary still has its pose
-            # entry and .npy on disk from before the tag existed — enumerated
-            # from the records alone it would come back from the dead, and the
-            # two loaders would disagree about which models exist (the F3
-            # rule) by exactly the size of the last filter change. skip() is
-            # pure string matching, so this costs the mode nothing it
-            # promised not to spend. Not counted in `missing`: the walk never
-            # sees these files and never reports them either.
+        if not parts[0].startswith("/") and \
+                any(seg.startswith(".") or skip(seg)
+                    for seg in parts[0].split("/")[len(prefix):]):
+            # The walk applies its predicate — dotted-name pruning, then
+            # `naming.skip` — to every directory and filename it visits, so a
+            # model cut from the vocabulary still has its pose entry and .npy
+            # on disk from before the tag existed; enumerated from the records
+            # alone it would come back from the dead, and the two loaders
+            # would disagree about which models exist (the F3 rule) by
+            # exactly the size of the last filter change. Three edges of
+            # fidelity, all from review (2026-09-03):
+            #   * the dot rule is the walk's too — `find_stls` prunes dotted
+            #     names before skip() is ever consulted;
+            #   * only segments below `prefix` are tested, because os.walk
+            #     never tests its own start directory — a serve scoped to
+            #     root/Database must not lose its whole index to the "base"
+            #     substring;
+            #   * an outside-root identity (absolute rel — `rel_path`'s
+            #     symlink fallback) is not tested at all: the walk judged the
+            #     *symlink's* spelling under the root, which the identity
+            #     does not record, so there is nothing faithful to test it
+            #     against. That row keeping its seat is a documented residual
+            #     beside deletion/rename above, not a filter defect.
+            # skip() is pure string matching, so this costs the mode nothing
+            # it promised not to spend. Not counted in `missing`: the walk
+            # never sees these files and never reports them either.
             continue
         # An identity for a file outside the root carries an absolute posix
         # path (`identity.rel_path`'s fallback), and joining an absolute path
