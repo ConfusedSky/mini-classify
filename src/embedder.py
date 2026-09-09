@@ -26,6 +26,7 @@ server and the eval harnesses that used to call `from_pretrained` themselves
 """
 from __future__ import annotations
 
+import threading
 from typing import Sequence
 
 import numpy as np
@@ -117,10 +118,98 @@ def as_tensor(feat):
 # so there is one arrangement of the forward and the suite has nothing left to
 # diverge.
 
+def count_tokens(processor, text: str) -> int:
+    """Tokens `embed_raw` would hand the model for `text`, its EOS included."""
+    return len(processor.tokenizer(text)["input_ids"])
+
+
+# One token held back from every budget, for the tokenizer's own seam.
+#
+# The templates' cost is measured against an *empty* slot, and a real text does
+# not always cost what it costs alone: a leading space can be absorbed by the
+# template's own whitespace piece and split the word behind it, so `" nü …"`
+# wraps 10 tokens wider than it measures rather than 9. Found by fuzzing 4,000
+# mixed ASCII/CJK/emoji/accented strings against all three templates, where 10
+# was the worst seen and 9 the usual. A reserve rather than a smarter probe
+# because the failure is data-dependent and one token is cheap; `embed_raw`'s
+# clipping is what catches anything this still misses, which is why an
+# unreserved budget was a wrong embedding and never a crash.
+JOIN_RESERVE = 1
+
+
+def query_budget(model, processor) -> int:
+    """The longest *user* text this pair will embed, in tokens.
+
+    The tower is `max_position_embeddings` wide — 64 on SigLIP2 — and going
+    past it is a raise, not a degradation, which is why `embed_raw` clips and
+    why `/query` refuses (issue #5). What a caller sends is not what is
+    embedded, though: unless it asks for `raw`, its text is wrapped in
+    `PROMPT_TEMPLATES` first, so the budget subtracts the worst template's own
+    tokens (9 for "a 3D render of a {} miniature": 10 empty, less the EOS a
+    bare text pays anyway) and `JOIN_RESERVE` for what the wrapping can cost
+    beyond that.
+
+    One number for both modes, not two: `raw` loses ten tokens of headroom it
+    could have had, and in exchange the surface states a single limit a
+    consumer can bound its own input against (`/status`'s `text_budget`,
+    surface.md).
+
+    Read off the loaded model rather than written down here, so a different
+    checkpoint reports its own number and no constant can go stale against it.
+    """
+    positions = model.config.text_config.max_position_embeddings
+    return positions - max(count_tokens(processor, t.format(""))
+                           for t in PROMPT_TEMPLATES) + 1 - JOIN_RESERVE
+
+
+def text_seam(model, processor, device):
+    """`(embed, tokens, budget)`: the server's whole text pass over one model.
+
+    Here rather than in `serve_api` because of the lock. Both halves go through
+    the same fast tokenizer, and a fast tokenizer is *mutable*: every call
+    reconfigures the Rust backend's padding and truncation before encoding, so
+    two threads in it at once raise `RuntimeError: Already borrowed`. The API
+    runs handlers in a threadpool and counts tokens outside its GPU lock — 4
+    counting threads against 2 embedding threads produced 117,725 of those in
+    8 seconds (measured, 2026-09-08). That is the same unhandled-500 shape
+    issue #5 exists to remove, so the count and the forward share one lock, and
+    it lives beside the processor they share rather than in the route that
+    happens to call them. Counting costs ~0.1 ms; serialising it is free.
+
+    `embed` is `(texts, raw) -> (dim, n_texts)`, the shape `query.score` takes:
+    templated by default and verbatim under `raw`, the same choice the REPL's
+    `:raw` toggle makes. Both are the same matmul downstream, so it stays the
+    caller's."""
+    lock = threading.Lock()
+
+    def embed(texts, raw=False):
+        fn = embed_raw if raw else embed_texts
+        with lock:
+            return fn(model, processor, texts, device).float().cpu().numpy().T
+
+    def tokens(text: str) -> int:
+        with lock:
+            return count_tokens(processor, text)
+
+    return embed, tokens, query_budget(model, processor)
+
+
 @torch.no_grad()
 def embed_raw(model, processor, texts, device):
-    """Embed raw text strings (no category templates), row-normalized."""
-    inputs = processor(text=list(texts), padding="max_length",
+    """Embed raw text strings (no category templates), row-normalized.
+
+    `truncation=True` because the text tower is 64 positions wide and the
+    processor's `padding="max_length"` pads *to* 64 but does not clip past it:
+    a longer text reached `SiglipTextModel` as a 122-token batch and it raised
+    `ValueError: Sequence length must be less than max_position_embeddings`.
+    Through the API that unhandled raise was a 500 and a closed keep-alive
+    connection, which the consumer's pooled next request read as the service
+    being absent rather than as one bad query (issue #5). Clipping is the only
+    behaviour the model has room for; `/query` refuses past the budget with a
+    422 naming both numbers (`src.api._within_budget`) and an absurd body at
+    the schema (`src.api.QUERY_BODY_MAX`), so a caller sending prose hears the
+    limit instead of getting a silent half-answer."""
+    inputs = processor(text=list(texts), padding="max_length", truncation=True,
                        return_tensors="pt").to(device)
     feat = as_tensor(model.get_text_features(**inputs))
     return torch.nn.functional.normalize(feat, dim=-1)  # (n_texts, dim)

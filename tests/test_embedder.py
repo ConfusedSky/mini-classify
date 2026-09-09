@@ -28,6 +28,8 @@ processor and device.
 from __future__ import annotations
 
 import sys
+import threading
+import time
 import types
 from pathlib import Path
 
@@ -37,11 +39,20 @@ import torch
 
 import src.embedder
 from src import pose
-from src.embedder import DEFAULT_MODEL, PROMPT_TEMPLATES, Embedder, load_siglip
+from src.embedder import (DEFAULT_MODEL, JOIN_RESERVE, PROMPT_TEMPLATES,
+                          Embedder, count_tokens, load_siglip,
+                          query_budget, text_seam)
 from src.messages import Embedded, EmbedTilesRequest, EmbedViews, TileEmbeds
 from src.pose import Pose
 
 DIM = 6  # the fake model's embedding width
+
+
+class _WordTokenizer:
+    """A tokenizer's one behaviour `count_tokens` uses: ids for a string, with
+    the trailing EOS every real one appends."""
+    def __call__(self, text):
+        return {"input_ids": text.split() + ["</s>"]}
 
 
 # --- tier (a): the faked stack ----------------------------------------------
@@ -55,8 +66,11 @@ class FakeBatch(dict):
 class FakeProcessor:
     def __init__(self):
         self.image_calls: list[int] = []   # images per call, in call order
+        self.tokenizer = _WordTokenizer()
 
-    def __call__(self, images=None, text=None, padding=None, return_tensors="pt"):
+    def __call__(self, images=None, text=None, padding=None, truncation=None,
+                 return_tensors="pt"):
+        self.truncation = truncation
         if images is not None:
             self.image_calls.append(len(images))
             px = torch.stack([
@@ -69,6 +83,10 @@ class FakeProcessor:
 
 class FakeModel:
     """Deterministic per-input features, fp16 like the real fp16 load."""
+    # the width `query_budget` reads, in the place a real config keeps it
+    config = types.SimpleNamespace(
+        text_config=types.SimpleNamespace(max_position_embeddings=64))
+
     def to(self, device):
         return self
 
@@ -158,6 +176,53 @@ def test_text_embeds_shape_and_norm(fake):
     assert emb.text_embeds.dtype == torch.float16
     norms = emb.text_embeds.float().norm(dim=-1)
     assert torch.allclose(norms, torch.ones(2), atol=5e-3)
+
+
+def test_query_budget_subtracts_the_worst_template_from_the_towers_width(fake):
+    """The number `/query` refuses against and `/status` publishes.
+
+    It is derived, not written down: the tower's own width minus the room the
+    templates take, so a checkpoint with different positions or a fourth
+    template reports its own budget instead of drifting from a constant here.
+    The `+ 1` is the EOS an empty template counts and a bare text pays anyway —
+    without it every query loses a token to arithmetic."""
+    emb, proc = fake
+    tok = _WordTokenizer()
+    proc.tokenizer = tok
+    model = types.SimpleNamespace(
+        config=types.SimpleNamespace(
+            text_config=types.SimpleNamespace(max_position_embeddings=64)))
+    worst = max(count_tokens(proc, t.format("")) for t in PROMPT_TEMPLATES)
+    assert query_budget(model, proc) == 64 - worst + 1 - JOIN_RESERVE
+
+
+def test_the_budget_bounds_the_templated_text_it_is_computed_for(fake):
+    """What the subtraction is *for*: a text at the budget must still fit after
+    the templates wrap it. Checked against every template rather than the one
+    the max came from — the point is that no template can overflow the tower
+    for a text this module said was small enough."""
+    _, proc = fake
+    proc.tokenizer = _WordTokenizer()
+    model = types.SimpleNamespace(
+        config=types.SimpleNamespace(
+            text_config=types.SimpleNamespace(max_position_embeddings=64)))
+    budget = query_budget(model, proc)
+    text = " ".join(["orc"] * (budget - 1))              # budget tokens, +EOS
+    assert count_tokens(proc, text) == budget
+    for t in PROMPT_TEMPLATES:
+        assert count_tokens(proc, t.format(text)) <= 64
+
+
+def test_the_text_pass_clips_to_the_towers_64_positions(fake):
+    """Issue #5. `padding="max_length"` pads *to* the tower's 64 positions but
+    does not clip past them, so a longer text arrived as a 122-token batch and
+    `SiglipTextModel` raised. Every text forward in the project goes through
+    here, so the flag belongs here and not at the one caller that noticed: the
+    API's 422 bounds what a *query* may say, while this is what stops the model
+    from being handed a sequence it has no positions for."""
+    emb, proc = fake
+    emb._embed_raw(["a dragon " * 200])
+    assert proc.truncation is True
 
 
 def test_prompt_banks_numpy(fake):
@@ -289,6 +354,134 @@ def test_views_batching_matches_whole_and_tiles_ignore_it(monkeypatch):
 
 
 # --- tier (b): real SigLIP on the 4060 --------------------------------------
+
+def test_the_real_tokenizers_budget_and_what_it_promises():
+    """The number itself, and the promise behind it, for the real tokenizer.
+
+    54: the tower's 64 positions, less the 9 the longest template costs around
+    a text, less `JOIN_RESERVE`. `patch14-384` and the `patch16-512` that built
+    embed-cache512 agree — they differ in the image tower, not the text one.
+    A change here is a change to a published contract (`/status`'s
+    `text_budget`, surface.md).
+
+    The promise is the second half: a text *at* the budget still fits the tower
+    after every template wraps it, the leading-space case included. That case
+    is why the reserve exists — `" nü …"` re-segments at the join and wraps a
+    token wider than it measures alone, so an unreserved budget let a 65-token
+    prompt into a 64-position tower and the clip silently ate the template's
+    last word.
+
+    Needs the model's processor and config in the local HF cache and nothing
+    else — no weights, no GPU — so it skips rather than downloads."""
+    from transformers import AutoConfig, AutoProcessor
+    try:
+        proc = AutoProcessor.from_pretrained(DEFAULT_MODEL, local_files_only=True)
+        cfg = AutoConfig.from_pretrained(DEFAULT_MODEL, local_files_only=True)
+    except OSError:
+        pytest.skip("the model is not in the local HF cache")
+    positions = cfg.text_config.max_position_embeddings
+    assert positions == 64
+    assert query_budget(types.SimpleNamespace(config=cfg), proc) == 54
+
+
+def test_a_text_at_the_budget_still_fits_after_the_templates_wrap_it():
+    """The promise the budget makes, against the real tokenizer and the
+    derived number rather than the pinned one.
+
+    The leading-space prefixes are the point: `" nü …"` re-segments at the join
+    — the template's own whitespace piece absorbs the space and splits the word
+    behind it — so it wraps a token wider than it measures alone. Without
+    `JOIN_RESERVE` this builds a 65-token prompt for a 64-position tower, and
+    the clip that keeps it from raising eats the template's last word instead.
+    """
+    from transformers import AutoConfig, AutoProcessor
+    try:
+        proc = AutoProcessor.from_pretrained(DEFAULT_MODEL, local_files_only=True)
+        cfg = AutoConfig.from_pretrained(DEFAULT_MODEL, local_files_only=True)
+    except OSError:
+        pytest.skip("the model is not in the local HF cache")
+    positions = cfg.text_config.max_position_embeddings
+    budget = query_budget(types.SimpleNamespace(config=cfg), proc)
+
+    def at_budget(prefix):
+        """`prefix` padded with words until one more would break the budget."""
+        text = prefix
+        while count_tokens(proc, text + " orc") <= budget:
+            text += " orc"
+        return text
+
+    for prefix in ["orc", " nü", " y", "龍", "🐉"]:
+        text = at_budget(prefix)
+        assert count_tokens(proc, text) <= budget
+        for t in PROMPT_TEMPLATES:
+            assert count_tokens(proc, t.format(text)) <= positions
+
+
+def test_the_seam_never_lets_two_threads_into_the_tokenizer(fake, monkeypatch):
+    """The lock `text_seam` exists for.
+
+    A fast tokenizer reconfigures its Rust backend on every call, so two
+    threads inside it raise `RuntimeError: Already borrowed` — and the API
+    calls the counter outside its GPU lock, in Starlette's threadpool, while
+    the forward runs. Four counting threads against two embedding threads on
+    the real tokenizer produced 117,725 of those in 8 seconds (2026-09-08);
+    unhandled, each is the 500 issue #5 exists to remove.
+
+    The fake tokenizer cannot raise that, so what is asserted is the property
+    that prevents it: no two threads in the shared processor at once. The sleep
+    is what makes an unlocked seam fail this rather than pass it by luck."""
+    emb, proc = fake
+    seen = {"in": 0, "overlap": 0}
+
+    def watch(fn):
+        def wrapped(*a, **kw):
+            seen["in"] += 1
+            seen["overlap"] += seen["in"] > 1
+            time.sleep(0.002)
+            try:
+                return fn(*a, **kw)
+            finally:
+                seen["in"] -= 1
+        return wrapped
+
+    monkeypatch.setattr(FakeProcessor, "__call__", watch(FakeProcessor.__call__))
+    proc.tokenizer = watch(proc.tokenizer)
+    embed, tokens, budget = text_seam(emb.model, proc, "cpu")
+    assert budget == 64 - max(count_tokens(proc, t.format(""))
+                              for t in PROMPT_TEMPLATES) + 1 - JOIN_RESERVE
+
+    stop = time.monotonic() + 0.4
+
+    def hammer(fn):
+        while time.monotonic() < stop:
+            fn()
+
+    threads = ([threading.Thread(target=hammer, args=(lambda: tokens("a dragon"),))
+                for _ in range(4)]
+               + [threading.Thread(target=hammer, args=(lambda: embed(["a dragon"], True),))
+                  for _ in range(2)])
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert seen["overlap"] == 0
+
+
+def test_the_clip_is_the_tokenizers_and_not_just_a_flag():
+    """`truncation=True` is asserted against the fake above; this is the real
+    tokenizer actually clipping, which is the behaviour issue #5 turns on. 402
+    tokens without it — and that is what reached the tower and raised."""
+    from transformers import AutoProcessor
+    try:
+        proc = AutoProcessor.from_pretrained(DEFAULT_MODEL, local_files_only=True)
+    except OSError:
+        pytest.skip("the model's processor is not in the local HF cache")
+    long = "dragon knight " * 200
+    clipped = proc(text=[long], padding="max_length", truncation=True,
+                   return_tensors="pt")["input_ids"]
+    loose = proc(text=[long], padding="max_length", return_tensors="pt")["input_ids"]
+    assert clipped.shape[1] == 64 < loose.shape[1]
+
 
 @pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs the 4060")

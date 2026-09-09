@@ -32,7 +32,7 @@ import logging
 import sys
 import threading
 
-from src.api import ServerState, create_app
+from src.api import Loaded, ServerState, create_app
 from src.cachedir import add_cache_args, apply_run_params
 from src.collection import Collection
 
@@ -71,21 +71,18 @@ def main():
         # Deferred: importing torch is the slow half of the warmup and must not
         # happen while the port is being bound.
         import torch
-        from src.embedder import embed_raw, embed_texts, load_siglip
+        from src.embedder import load_siglip, text_seam
         device = "cuda" if torch.cuda.is_available() else "cpu"
         log.info("loading %s on %s", args.model, device)
         model, processor = load_siglip(args.model, device)
-
-        def embed(texts, raw=False):
-            """(dim, n_texts) of unit rows — the shape `query.score` takes.
-
-            Templated by default and verbatim under `raw`, the same choice the
-            REPL's `:raw` toggle makes; both are the same matmul downstream, so
-            it stays the caller's."""
-            fn = embed_raw if raw else embed_texts
-            return fn(model, processor, texts, device).float().cpu().numpy().T
-
-        return embed, args.model, device
+        # The seam is built where the model is, lock and budget included
+        # (`embedder.text_seam`): the tokenizer both halves share is mutable,
+        # and the budget is read off this model rather than written down. The
+        # budget travels with the seam that has to honour it — `/query`
+        # refuses past it and `/status` publishes it, so a consumer bounds its
+        # search box in tokens instead of guessing in characters (issue #5).
+        embed, tokens, budget = text_seam(model, processor, device)
+        return Loaded(embed, args.model, device, tokens, budget)
 
     # uvicorn configures only its own loggers, so `mini_classify.api`'s records
     # reach no handler and the per-request lines vanish — verified against a

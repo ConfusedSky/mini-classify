@@ -436,6 +436,71 @@ def test_the_batch_is_bounded_and_the_refusal_is_the_schemas_own(tmp_path):
     assert (at.status_code, over.status_code) == (200, 422)
 
 
+def _budgeted(tmp_path, budget=8):
+    """A client whose seam counts in words, so the refusal can be exercised
+    without SigLIP. The counter is the one thing production's differs from —
+    what is under test is the route's arithmetic and its message, not a
+    tokenizer's."""
+    args, _, _ = build(tmp_path, ["a/one.stl", "a/two.stl"])
+    state = ServerState(args, collection=Collection.load(args),
+                        embed=stub_embed(), model="stub-model", device="cpu",
+                        tokens=lambda t: len(t.split()) + 1, text_budget=budget)
+    return TestClient(create_app(state), raise_server_exceptions=False), state
+
+
+def test_an_over_budget_query_is_a_422_that_names_both_numbers(tmp_path):
+    """Issue #5, as corrected: the limit is token-shaped, so the refusal counts
+    tokens and states the budget. A 4xx with a body is the whole ask — the
+    failure it replaces was an unhandled raise from the text tower, a 500, and
+    a caller unable to tell "too long" from "gone"."""
+    client, _ = _budgeted(tmp_path, budget=8)
+    at = client.post("/query", json={"text": "orc " * 7})        # 8 with EOS
+    over = client.post("/query", json={"text": "orc " * 8})      # 9
+    assert (at.status_code, over.status_code) == (200, 422)
+    assert "9 tokens" in over.text and "embeds 8" in over.text
+
+
+def test_the_budget_refusal_precedes_the_scope_one(tmp_path):
+    """A request wrong in both ways hears about the half it can fix without
+    knowing what this server indexes: the text bound is about the body alone
+    and needs no collection."""
+    client, _ = _budgeted(tmp_path, budget=8)
+    r = client.post("/query", json={"text": "orc " * 20, "path": "nowhere"})
+    assert r.status_code == 422 and "tokens" in r.text
+
+
+def test_a_seam_that_cannot_count_enforces_no_budget(tmp_path):
+    """Every other test in this file serves through a stub with no tokenizer.
+    It must not acquire an invented bound — a number no model stated would be
+    this module testing its own guess."""
+    client, state, _ = serve(tmp_path)
+    assert (state.tokens, state.text_budget) == (None, None)
+    assert client.post("/query", json={"text": "orc " * 500}).status_code == 200
+
+
+def test_an_absurd_body_is_refused_before_anything_tokenizes_it(tmp_path):
+    """The coarse guard, and only that: it sits far above anything the model
+    can read, so ordinary text always trips the token check first and gets the
+    message naming the real unit. Characters are not a proxy for tokens (100
+    CJK characters are 101, 60 emoji are 61 — measured against the real
+    tokenizer, see the 2026-09-08 learnings entry) — this bound is about the
+    size of the request, not about what SigLIP can embed."""
+    from src.api import QUERY_BODY_MAX
+    assert QUERY_BODY_MAX == 4000, "surface.md states the number; change both"
+    client, _ = _budgeted(tmp_path)
+    over = client.post("/query", json={"text": "x" * (QUERY_BODY_MAX + 1)})
+    assert over.status_code == 422 and "at most 4000 characters" in over.text
+
+
+def test_status_publishes_the_budget_a_consumer_should_bound_against(tmp_path):
+    """The other half of the ask: a caller can only bound the right unit if it
+    can read the number. `null` before the model lands, since it is read off
+    the model and this server refuses to guess it."""
+    client, _ = _budgeted(tmp_path, budget=55)
+    assert client.get("/status").json()["text_budget"] == 55
+    assert client_of(tmp_path, ready=False).get("/status").json()["text_budget"] is None
+
+
 def test_poses_never_touches_the_gpu_lock(tmp_path):
     """A store lookup: no text forward, so nothing to serialise. If this ever
     took the lock a listing's batch could queue behind a query, which is the

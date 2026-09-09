@@ -118,7 +118,7 @@ it back.
 
 No params. Cache identity (the block above), model, device, `n_models`,
 `n_views`, `dim`, cache version, `missing` (walked but not in the cache),
-loaded-at timestamp — and **`collection_root`**, which the Hono server needs
+loaded-at timestamp, **`text_budget`** — and **`collection_root`**, which the Hono server needs
 to decide whether a path the user is browsing is even addressable here before
 it offers a semantic-search affordance over it.
 
@@ -145,6 +145,14 @@ load that started four seconds ago and stop re-probing (and read differently in
 the UI) one that has plainly gone wrong. Neither side has to pretend to know
 how long is left.
 
+**`text_budget` (int, `null` while warming) is the bound a consumer should
+apply to its own search box**, in tokens — see §`POST /query`. It is here
+rather than only in the refusal body because a caller that can read the number
+can stop a query that cannot be answered before it is sent; one that cannot
+only learns the limit by tripping it. `null` while no seam has
+reported one — normally that means still warming, since the number is read off
+the model and this server will not guess it.
+
 **`collection_root` comparison is the caller's, and prefix equality is a
 trap.** model-browser has no configured root — `/api/dir` takes any absolute
 path — so gating on this field is the only scoping that exists on that side.
@@ -157,13 +165,41 @@ minimum; volume identity would be better.
 
 | field | type | default | note |
 |---|---|---|---|
-| `text` | string | required | |
+| `text` | string | required | at most `text_budget` **tokens** (54 today); longer is a **422** |
 | `path` | string | whole collection | directory or file prefix to search within — see **scope** |
 | `raw` | bool | `false` | verbatim text instead of the miniature templates (`:raw`) |
 | `pool` | `mean\|max\|softmax` | server default | `:pool` |
 | `top` | int | — | at most this many, of whatever `min_score` let through |
 | `min_score` | float | — | every model at or above (`:min`) |
 | `cap` | int | 500 | hard ceiling on returned hits, whatever the bounds; at most **10000** |
+
+**`text` is bounded in tokens, not characters, because the model is.**
+SigLIP2's text tower is 64 positions wide, and going past it raises rather than
+degrades. `/query` refuses an over-budget text with a **422** naming both
+numbers — `query is 61 tokens; this model embeds 54 (see /status text_budget)`
+— so a caller can tell *too long* from *gone*, and can bound the right unit.
+
+The budget is **54** for both serving checkpoints: the tower's 64 positions,
+minus the 9 the longest miniature template costs around a text ("a 3D render of
+a {} miniature"), minus one held back for the tokenizer's own seam — a leading
+space can be absorbed by the template's whitespace piece and split the word
+behind it, so a text can wrap a token wider than it measures alone. One number
+covers `raw` and templated alike; a raw query simply keeps ten tokens of
+headroom it could have spent. It is computed from the loaded model, not written
+down in the code, and **published as `text_budget` on `/status`** — read it
+there rather than hardcoding 54, which is this checkpoint's number and not a
+property of the surface. It is `null` until a loaded model reports one.
+
+Characters are not a proxy: 100 CJK characters are 101 tokens, 60 emoji are 61,
+500 characters of ASCII words are 97. A consumer bounding its own input at 500
+*characters* therefore still sent queries this could not embed — a 100-character
+CJK query is a fifth of that bound and nearly twice this budget — which is how
+the limit was found (issue #5). The ratio is not even stable within one script:
+`"龍"` ×100 is 101 tokens where 100 characters of spaced CJK prose are 57, so
+only the tokenizer can answer and `embedder.count_tokens` is what asks it.
+`text` also carries a coarse **4000-character**
+ceiling, refused by the schema — a guard on the size of the body, not a
+statement about the model; ordinary text always trips the token bound first.
 
 **The two bounds compose, and absent means not in force.** `min_score` filters,
 then `top` caps what survived: *the best N of everything at least this similar*.

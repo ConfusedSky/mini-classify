@@ -230,6 +230,17 @@ notes at the bottom are amended in place. Open work is tracked separately in
   wide. Shipped: `"standalone"` tag + anchored `^75_` rule, 3,380 → 3,092
   files. The two-tier flag is the repo issue "Part/accessory handling".
 
+
+- [The query text budget: characters are not tokens](docs/learnings/2026-09-08-the-query-text-budget.md)
+  — `/query`'s 500 on a long text was SigLIP2's 64-position tower reached
+  without `truncation`, not a character limit: 60 emoji are 61 tokens, 100 CJK
+  characters 101, 500 ASCII characters 97. Fixed by clipping in `embed_raw`, a
+  422 naming both numbers, and `text_budget` (**54** = 64 − the templates' 9 −
+  1 for re-segmentation at the join) published on `/status`. The counter shares
+  the forward's lock: a fast tokenizer is mutable, and unlocked it raised
+  `Already borrowed` 117,725 times in 8 s. Issue #5, measured against
+  embed-cache512.
+
 ## Evergreen notes
 
 - [Queries and filters](docs/learnings/queries-and-filters.md) — open-set

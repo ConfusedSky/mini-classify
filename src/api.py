@@ -34,7 +34,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Literal
+from typing import Literal, NamedTuple
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
@@ -54,6 +54,16 @@ POOL = Literal["mean", "max", "softmax"]
 # the caller asks about one directory at a time — and it is what keeps the
 # response dict bounded by the request rather than by the collection.
 POSES_MAX = 1024
+
+# A body guard on `/query`'s `text`, in characters, and deliberately far above
+# anything the model can read: the *semantic* bound is the token budget below,
+# because the tower's limit is token-shaped and characters are not a proxy for
+# it (100 CJK characters are 101 tokens, 60 emoji are 61, 500 ASCII words'
+# worth is 97 — measured, and the correction on issue #5 that retired an earlier
+# 500-character bound here). This one exists only so an absurd body is refused
+# before anything tokenizes it; ordinary text always trips the token check
+# first and gets the message that names the real unit.
+QUERY_BODY_MAX = 4000
 
 # The ceiling on what any one response will serialise, shared by `/query`'s
 # `cap` and `/under`'s `limit` because it is one statement about this server
@@ -104,6 +114,22 @@ def _tb(e: BaseException | None) -> BaseException | None:
     return None if isinstance(e, (CacheUnusable, VolumeUnavailable)) else e
 
 
+class Loaded(NamedTuple):
+    """What `load_embed` produces: the text seam, and what a caller must know
+    to use it without tripping over the model.
+
+    The last two default to `None` because they are optional in exactly one
+    sense — any callable can be the seam, and one that cannot say how it
+    tokenizes simply enforces no budget (every stub in the API tests is such a
+    callable, which is what keeps that suite GPU-free). Production always sets
+    both: `serve_api.load_embed` reads them off the model it just loaded."""
+    embed: object                       # (texts, raw) -> (dim, n_texts)
+    model: str | None
+    device: str | None
+    tokens: object = None               # (text) -> int, the seam's own count
+    text_budget: int | None = None      # the most tokens it will embed
+
+
 class ServerState:
     """Everything a handler needs, and the only mutable thing in the process.
 
@@ -113,10 +139,17 @@ class ServerState:
     and until it flips the two scoring routes answer 503."""
 
     def __init__(self, args, *, collection=None, embed=None, pool="softmax",
-                 model=None, device=None):
+                 model=None, device=None, tokens=None, text_budget=None):
         self.args = args
         self.collection: Collection | None = collection
         self.embed = embed                  # (texts, raw) -> (dim, n_texts)
+        # The text seam's second half: how it counts, and how much it takes.
+        # Bound wherever `embed` is bound and never apart from it — a budget
+        # read off one model while another does the forward would refuse the
+        # wrong queries. `None` means this seam declines to say, and `/query`
+        # then enforces nothing (see `Loaded`).
+        self.tokens = tokens
+        self.text_budget = text_budget
         self.default_pool = pool
         self.model, self.device = model, device
         self.gpu = threading.Lock()
@@ -158,6 +191,19 @@ class ServerState:
         server whose first load failed had no way back except a restart, even
         once the drive was mounted again (review, 2026-08-19)."""
         return self.is_ready(self.collection)
+
+    def _bind_embed(self, got: Loaded) -> None:
+        """Publish a completed load. Called under `bind` by warm and by
+        `retry_embed`, which are the only two things that ever load SigLIP —
+        one place so the five fields cannot be bound in four."""
+        # `embed` last, and that ordering is the whole reason this is one
+        # method: it is the field `_live` gates on, so binding it after the
+        # rest means nothing that passed the gate can see a half-bound seam —
+        # a request reading `text_budget is None` off a seam that has one
+        # would skip a check the server was ready to make.
+        self.tokens, self.text_budget = got.tokens, got.text_budget
+        self.model, self.device = got.model, got.device
+        self.embed = got.embed
 
     def warm(self, load_collection, load_embed) -> None:
         """Load in the background so `/status` can answer throughout.
@@ -219,9 +265,9 @@ class ServerState:
                 # a mid-warm /reload may have run the retry path already;
                 # a second SigLIP load would only double the wait
                 if self.embed is None:
-                    embed, model, device = load_embed()
+                    got = Loaded(*load_embed())
                     with self.bind:
-                        self.embed, self.model, self.device = embed, model, device
+                        self._bind_embed(got)
             with self.bind:
                 # `loaded_at` follows the bind, not the generation: it
                 # describes the collection that is actually bound, and a
@@ -276,12 +322,11 @@ class ServerState:
         try:
             if self.embed is None:
                 try:
-                    embed, model, device = self._load_embed()
+                    got = Loaded(*self._load_embed())
                 except Exception as e:      # noqa: BLE001 - reported by /reload
                     return e
                 with self.bind:
-                    self.embed = embed
-                    self.model, self.device = model, device
+                    self._bind_embed(got)
         finally:
             self.embed_loading.release()
         return None
@@ -348,7 +393,7 @@ class ServerState:
 # --- request bodies: surface.md's tables, as schema -------------------------
 
 class QueryRequest(BaseModel):
-    text: str
+    text: str = Field(..., max_length=QUERY_BODY_MAX)
     path: str | None = None
     raw: bool = False
     pool: POOL | None = None
@@ -426,6 +471,42 @@ def create_app(state: ServerState) -> FastAPI:
             raise HTTPException(status_code=503, detail=_unready(c))
         return c
 
+    def _within_budget(text: str) -> None:
+        """Refuse a text the model has no positions for, in the unit the limit
+        is actually in.
+
+        The tower is 64 tokens wide and characters do not predict tokens: 100
+        CJK characters are 101, 60 emoji are 61, and a consumer bounding its
+        input at 500 characters still sent queries this could not embed
+        (issue #5, model-browser's fourth review pass). So the refusal counts
+        tokens and *says* both numbers — the caller's and ours — because the
+        ask behind it is that a caller be able to bound the right unit, and
+        `/status` publishes the same budget for the bound it sets itself.
+
+        Before the scope resolve, unlike every other refusal on this route: it
+        is about the body alone, needs no collection, and a request that is
+        wrong in both ways should hear about the half it can fix without
+        knowing what this server indexes. After `_live`, though — the budget
+        is the loaded model's, and there is none to state before it lands.
+
+        The check is skipped, not guessed at, when the seam cannot count: a
+        stub embedder has no tokenizer and inventing a bound for it would test
+        this module against a number no model said.
+
+        The counter is the seam's, and it takes the seam's lock: a fast
+        tokenizer is mutable and this call runs outside `state.gpu`, in the
+        threadpool, concurrently with the forward that shares it
+        (`embedder.text_seam`)."""
+        count, budget = state.tokens, state.text_budget   # bound once, both
+        if count is None or budget is None:
+            return
+        n = count(text)
+        if n > budget:
+            raise HTTPException(
+                status_code=422,
+                detail=(f"query is {n} tokens; this model embeds "
+                        f"{budget} (see /status text_budget)"))
+
     def _pool(given: str | None) -> str:
         return given or state.default_pool
 
@@ -443,6 +524,11 @@ def create_app(state: ServerState) -> FastAPI:
             "failure": state.failure,
             "model": state.model or getattr(state.args, "model", None),
             "device": state.device,
+            # The bound a consumer should apply to its own search box, in the
+            # unit the model reads: `null` until the model is resident, since
+            # it is read off the model and this server refuses to guess it
+            # (issue #5). Characters are not a proxy — see `_within_budget`.
+            "text_budget": state.text_budget,
             "cache_dir": str(getattr(state.args, "cache_dir", "")),
             "views": getattr(state.args, "views", None),
             "elevations": list(getattr(state.args, "elevations", []) or []),
@@ -476,6 +562,7 @@ def create_app(state: ServerState) -> FastAPI:
     def post_query(req: QueryRequest) -> dict:
         t0 = time.monotonic()
         c = _live()
+        _within_budget(req.text)
         try:
             scope = c.resolve(req.path)
         except ScopeError as e:
