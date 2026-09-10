@@ -2,6 +2,7 @@
  "description": "Hand-labelled up axis for STL pose evaluation. Labelled by eye from 6-tile up-candidate contact sheets. Models whose upright is genuinely undefined (loose hands, wings, swords, pipes, pins) were excluded.",
  "history": [
   "2026-09-09: five labels pointed at DM Stash `75_Unsupported_*` files, which the walk's anchored `^75_` rule stopped indexing (commit ea1ef04), so they had silently left the measurable set. Four were re-pointed at their `32_` twins — verified the same mesh at a different scale: identical vertex counts, identical scale-normalised bounding boxes, identical geometry pick, and a contact sheet that reads the same, so the axis carries over unchanged. The fifth, 75_Unsupported_Wajoski_Wolf2, was dropped rather than re-pointed: its `32_` twin was already labelled here, so `orig` had been carrying the same wolf twice (vertex counts differ by 27 of 2.7M) and every pooled figure quoted on 44 models was really 43 distinct ones.",
+  "2026-09-09: two `expand` labels were withdrawn after review as parts rather than models. `Apprentice_Grimoire_L` is one of 31 interchangeable hand options in a modular wizard's directory, beside `Apprentice_Dagger_R` and `Apprentice_Grimoire_R`; it carries the `_L` marker `pose_label_expand.LIKELY_PART` matches, and only reached a sheet because seeds 909 and 5150 were drawn before that filter existed. `32mm_OdDracnesThrone_B` is the one no naming rule can see: it is one of A/B/C/D that assemble into a single throne, and its `_B` is a component letter, not a left/right marker. What identifies it is the directory, not the name. A lettered-family sweep over the whole set found no third case.",
   "2026-09-09: `sprue` joined the walk's NON_MODEL_TAGS — a sprue is the packing, a raft carrying several pieces (or five of one) that the same directory already indexes individually. That cut `Damaged Metal Sheet Sprue` from the holdout, which is why it is no longer here. tests/test_naming.py::test_no_labelled_model_is_cut_by_the_vocabulary now fails whenever a vocabulary change orphans a label, so this class of silent shrink cannot recur."
  ],
  "axes": [
@@ -15,7 +16,9 @@
  "sets": {
   "orig": "first 40-model random sample; probes and the min-max scheme were tuned against these, so numbers on this set are optimistic",
   "holdout": "fresh sample from files the first never touched; method frozen",
-  "hard": "models added by hand, chosen for being failure-prone rather than by random draw. Deliberately selected, so accuracy on this set is not comparable to orig/holdout and must not be pooled into a headline number without saying so."
+  "hard": "models added by hand, chosen for being failure-prone rather than by random draw. Deliberately selected, so accuracy on this set is not comparable to orig/holdout and must not be pooled into a headline number without saying so.",
+  "expand": "random draw from the collection walk, seed 909, 5150, excluding every path already labelled; proposed by a labeller measured on the first 49 and confirmed by hand from the same six-tile sheets — so these are model-proposed and human-confirmed, not hand-labelled the way orig/holdout were. Drawn without the likely-part filter, so it is a sample of the collection rather than of its whole models. Method frozen as of this draw.",
+  "expand2": "random draw from the collection walk, seed 7777, excluding every path already labelled, and every name carrying a left/right marker or a lettered-family sibling — so this set is a sample of the collection's *whole* models, not of the collection, and its rates are not comparable to `expand`'s. Differs from `expand` in one more way that matters: there the human decided part-vs-model first and the labeller only proposed axes; here the labeller proposed **both**, and the human adjudicated both on their own review pages. Agreement on that review: 62/66 on part-vs-model and 36/38 on the axis, with every disagreement but one falling inside the proposals the labeller had flagged as uncertain. Method frozen as of this draw."
  },
  "labels": [
   {
@@ -299,6 +302,960 @@
    "set": "hard",
    "up": "+Y",
    "path": "Loot Studios/Orconspiracy/Enemies_Part4_V2/Orguss the Tall - Green Dragon/32mm/No Supports/32mm_Orguss_Head.stl"
+  },
+  {
+   "stem": "Mars_Warlord_Standing_Right_Foot",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Warhammer/Stroganoff/epic-scale-mars-warlord-titan/Mars_Warlord_Standing_Right_Foot.stl"
+  },
+  {
+   "stem": "32mm_HauntingBanshee",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/HauntingBanshee_32mm_NoSupports/32mm_HauntingBanshee.stl"
+  },
+  {
+   "stem": "BartholomewRiberdani_Bust_Torso",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Sandy Dunes of Lutba/All_Busts/BaronBartholomewRiberdani_Bust/No Supports/BartholomewRiberdani_Bust_Torso.stl"
+  },
+  {
+   "stem": "32mm_Warthog",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Nuclear Wasteland/DownloadAll_32mm/2- Enemies/Enemies_32mm_NoSupports/Enemies_32mm_NoSupports/Warthog_32mm_NoSupports/32mm_Warthog.stl"
+  },
+  {
+   "stem": "32mm_MarineSniper",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/War for Humanity/DownloadAll_32/Heroes_32mm_NoSuports/MarineSniper_32mm_NoSupports/32mm_MarineSniper.stl"
+  },
+  {
+   "stem": "32mm_Rumbottle2",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Ship Ahoy/All_Objects/RumBottle2/No Supports/32mm_Rumbottle2.stl"
+  },
+  {
+   "stem": "Princess_Kseerkix (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Maneaters Nagarots/31 Maneaters Nagarots - November 2021 AG/Princess Kseerix (pinup)/Princess_Kseerkix (repaired).stl"
+  },
+  {
+   "stem": "32mm_LutbaRobotRider",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Sandy Dunes of Lutba/All_WarriorsOfLutba_Part2/LutbaRobotRider/32mm/No Supports/32mm_LutbaRobotRider.stl"
+  },
+  {
+   "stem": "Skutagaard_Draugr_B",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Darkness of the Lich Lord/37 Darkness of the Lich Lord - May 2022 AG/Skutagaard Draugar/Skutagaard Draugr B/Skutagaard_Draugr_B.stl"
+  },
+  {
+   "stem": "Dragonpeak_Smilodon_A_(no_saddle) (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider A (m)/Dragonpeak_Smilodon_A_(no_saddle) (repaired).stl"
+  },
+  {
+   "stem": "32mm_Imperator_Tiberius",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/The Crimson Sand Arena/ImperatorTiberius/32mm/No Supports/32mm_Imperator_Tiberius.stl"
+  },
+  {
+   "stem": "32mm_Hyena",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Cult Of Hunger/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/Hyena_32mm_NoSupports/32mm_Hyena.stl"
+  },
+  {
+   "stem": "Mounted_Lenora (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Vampiric Barbajiann/Mounted_Lenora (repaired).stl"
+  },
+  {
+   "stem": "Leaking_Metal_Drum_",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Basing/Industrial Drums & Canisters/Leaking_Metal_Drum_.stl"
+  },
+  {
+   "stem": "Merrian_Silverfinger(repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Troubles in Taverns 10 Heroes/Merrian Silverfinger/Merrian_Silverfinger(repaired).stl"
+  },
+  {
+   "stem": "32mm_Ben",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Damn Nation/All_32mm/All_32mm/TheMisfits_32mm_NoSupported/Ben_32mm_NoSupports/32mm_Ben.stl"
+  },
+  {
+   "stem": "Volrunax_Runebeard",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Archanists Guild/Volrunax Runebeard - The Guildmaster/Volrunax_Runebeard.stl"
+  },
+  {
+   "stem": "Bloodfiend_Rider_C_(f)_(repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Bloodfiend Riders/Bloodfiend RIder C/Bloodfiend_Rider_C_(f)_(repaired).stl"
+  },
+  {
+   "stem": "Minoc_Horse_B1_(no_harness) (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Order of the Labyrinth/34 Order of the Labyrinth - February 2022 AG/Minoc Chariots/Minoc Chariot B/Minoc_Horse_B1_(no_harness) (repaired).stl"
+  },
+  {
+   "stem": "Nagarot_Crawler_B_(m) (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Maneaters Nagarots/31 Maneaters Nagarots - November 2021 AG/Nagarot Crawlers & Giant Snakes/Nagarot Crawler & Snake B/Nagarot_Crawler_B_(m) (repaired).stl"
+  },
+  {
+   "stem": "Arcanist_Apprentice_F_(No_Hood)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Archanists Guild/Apprentice Arcanists/Apprentice Arcanist F/Kit II (No Hood, Spell & Grimoire)/Arcanist_Apprentice_F_(No_Hood).stl"
+  },
+  {
+   "stem": "Triangular_Tent_C (repaired)",
+   "set": "expand",
+   "up": "-X",
+   "path": "Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Adventurer Camp/Modular Tents/Triangular_Tent_C (repaired).stl"
+  },
+  {
+   "stem": "32mm_FunghySkirmisher",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/FunghySkirmisher_32mm_NoSupports/32mm_FunghySkirmisher.stl"
+  },
+  {
+   "stem": "32mm_EWChest",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Eye of the Watcher/All_32mm/Objects_32mm_NoSupports/EWChest_32mm_NoSupports/32mm_EWChest.stl"
+  },
+  {
+   "stem": "Baal_the_Daemon_Lord",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal - Daemon Lord/Kit I (Daemon Lord)/Baal_the_Daemon_Lord.stl"
+  },
+  {
+   "stem": "32mm_PowerLoader_Empty",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Spacecraft-Crasher/All_Crew_Part1_V3/All_Crew_Part1_V2_/PowerLoaderV2/32mm/No Supports/32mm_PowerLoader_Empty.stl"
+  },
+  {
+   "stem": "Metal_Drum",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Basing/Industrial Drums & Canisters/Metal_Drum.stl"
+  },
+  {
+   "stem": "Cornelius_Greathat",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Archanists Guild/Cornelius Greathat/Cornelius_Greathat.stl"
+  },
+  {
+   "stem": "Concrete Pile (3)",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Basing/Concrete Piles/Concrete Pile (3).stl"
+  },
+  {
+   "stem": "Weapon_rack_small__x2_ (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Weapon Racks/Weapon_rack_small__x2_ (repaired).stl"
+  },
+  {
+   "stem": "32mm_Cannon",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Panshaw Under Siege/DownloadAll_32mm/3 - Environment/Cannon/Cannon_NoSupports/32mm_Cannon.stl"
+  },
+  {
+   "stem": "Baal's_Demonhound_Rider_B_(Hood)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider B/Kit I (Warlok Rider)/Baal's_Demonhound_Rider_B_(Hood).stl"
+  },
+  {
+   "stem": "32mm_MutantBehemoth",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Nuclear Wasteland/DownloadAll_32mm/2- Enemies/Enemies_32mm_NoSupports/Enemies_32mm_NoSupports/MutantBehemoth_32mm_NoSupports/32mm_MutantBehemoth.stl"
+  },
+  {
+   "stem": "32_Unsupported_Tygrin_Body",
+   "set": "expand",
+   "up": "+Z",
+   "path": "DM Stash/DM Stash Jan '22 Brawn & Brains STLs - Unsupported/Tygrin - Unsupported/Unsupported/32_Unsupported_Tygrin_Body.stl"
+  },
+  {
+   "stem": "32mm_ZombiePirate",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Ship Ahoy/All_CordesPirateCrew_V3/ZombiePirate_V2/32mm/No Supports/32mm_ZombiePirate.stl"
+  },
+  {
+   "stem": "Dragonpeak_Barbarian_B_(m) (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian B (m)/Dragonpeak_Barbarian_B_(m) (repaired).stl"
+  },
+  {
+   "stem": "32mm_GrayRender",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/GrayRender_32mm_NoSupports/32mm_GrayRender.stl"
+  },
+  {
+   "stem": "32mm_Rafi",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Damn Nation/All_32mm/All_32mm/TheMisfits_32mm_NoSupported/Rafi_32mm_NoSupports/32mm_Rafi.stl"
+  },
+  {
+   "stem": "32mm_Barrel",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Ship Ahoy/All_Objects/Barrel/No Supports/32mm_Barrel.stl"
+  },
+  {
+   "stem": "32_Unsupported_Melancholy_BodyMask",
+   "set": "expand",
+   "up": "+Z",
+   "path": "DM Stash/Crimson Masquerade/Melancholy - Unsupported/32_Unsupported_Melancholy_BodyMask.stl"
+  },
+  {
+   "stem": "Cultist-Zealot",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Bestarium/Welcome Pack/Cultists/Cultist-Zealot.stl"
+  },
+  {
+   "stem": "32mm_RoboticEnvoy",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Mercs and Miners/All_32mm/Mercenaries_32mm_NoSupports/CoreRoboticEnvoy_32mm_NoSupports/32mm_RoboticEnvoy.stl"
+  },
+  {
+   "stem": "Nagarot_Crawler_C_(f) (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Maneaters Nagarots/31 Maneaters Nagarots - November 2021 AG/Nagarot Crawlers & Giant Snakes/Nagarot Crawler & Snake C/Nagarot_Crawler_C_(f) (repaired).stl"
+  },
+  {
+   "stem": "32mm_Roboxer",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Neon Street 3k/All_32mm/TheMachine_32mm_NoSupports/Roboxer_32mm_NoSupports/32mm_Roboxer.stl"
+  },
+  {
+   "stem": "32mm_DrillAutomaton",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Stinky Ancient Ruins/All_32mm/Enemies_32mm_NoSupports/DrillAutomaton_32mm_NoSupports/32mm_DrillAutomaton.stl"
+  },
+  {
+   "stem": "32mm_SeaChest",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Going Down the Drain/DownloadAll_32mm/3 - Environment/Objects_32mm_NoSupports/Sea Chest_32mm_NoSupport/32mm_SeaChest.stl"
+  },
+  {
+   "stem": "32mm_Vanchu",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Going Down the Drain/DownloadAll_32mm/1 - Heroes/Heroes_32mm_NoSupports/Vanchu_32mm_NoSupports/32mm_Vanchu.stl"
+  },
+  {
+   "stem": "BoardwalkCurve_Front",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/3 - Environment/Objects_32mm_NoSupports/BoardwalkCurve_32mm_NoSupports/BoardwalkCurve_Front.stl"
+  },
+  {
+   "stem": "hero-the-witch-the-witch-full",
+   "set": "expand",
+   "up": "+Y",
+   "path": "the-witch/hero-the-witch-the-witch-full.stl"
+  },
+  {
+   "stem": "Gnome_Depth-Digger_Rider_B_(No_Hat)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Depth Digger Riders/Depth Digger B/Kit I (Crossbow Rider)/Gnome_Depth-Digger_Rider_B_(No_Hat).stl"
+  },
+  {
+   "stem": "Mylitta_Golemmar_Pinup",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Mylitta - Golemmar Pinup/Mylitta_Golemmar_Pinup.stl"
+  },
+  {
+   "stem": "Skutagaard_Ram_A_(saddle) (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Drarven Ram Riders/Dwarven Ram Rider A (m)/Skutagaard_Ram_A_(saddle) (repaired).stl"
+  },
+  {
+   "stem": "32mm_WFHCrate",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/War for Humanity/DownloadAll_32/Objects_32mm_NoSuports/WFHCrate_32mm_NoSupports/32mm_WFHCrate.stl"
+  },
+  {
+   "stem": "Baal's_Demonhound_Rider_B",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider B/Kit II (Bard Rider)/Baal's_Demonhound_Rider_B.stl"
+  },
+  {
+   "stem": "PetaloidScientist_Bust",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Spacecraft-Crasher/All_Busts/PetaloidScientist_Bust/No Supports/PetaloidScientist_Bust.stl"
+  },
+  {
+   "stem": "32mm_Boardwalk_1",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/3 - Environment/Objects_32mm_NoSupports/BoardWalk1_32mm_NoSupports/32mm_Boardwalk_1.stl"
+  },
+  {
+   "stem": "Krommir_Stronghammer (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Krommir Stronghammer/Krommir_Stronghammer (repaired).stl"
+  },
+  {
+   "stem": "pikachu_1gen_flowalistik",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Low-Poly_Pikachu/files/pikachu_1gen_flowalistik.STL"
+  },
+  {
+   "stem": "Golemmar_Gnome_D_(No_Hat)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome D/Kit I (Steamgauntlet and Pickaxe)/Golemmar_Gnome_D_(No_Hat).stl"
+  },
+  {
+   "stem": "32mm_TrafficLights",
+   "set": "expand",
+   "up": "-Y",
+   "path": "Loot Studios/Neon Street 3k/All_32mm/Objects_NoSupports/TrafficLights_NoSupports/32mm_TrafficLights.stl"
+  },
+  {
+   "stem": "Brent_of_Goobertown (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Troubles in Taverns 10 Heroes/Troubles in Taverns 10 Heroes/Brent of Goobertown/Brent_of_Goobertown (repaired).stl"
+  },
+  {
+   "stem": "Grass Tufts (1)",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Basing/Grass Tufts/Grass Tufts (1).stl"
+  },
+  {
+   "stem": "Dwarven_Mountaineer_E_(f) (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Dwarven Mountaineers/Dwarven Mountaineer E (f)/Dwarven_Mountaineer_E_(f) (repaired).stl"
+  },
+  {
+   "stem": "32mm_ModularStoneArch",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Nightmares of the Abyss/All_32mm/Objects_32mm_NoSupports/ModularStoneArch_32mm_NoSupports/32mm_ModularStoneArch.stl"
+  },
+  {
+   "stem": "F4_Deathclaw",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Fallout_4_Deathclaw/files/F4_Deathclaw.stl"
+  },
+  {
+   "stem": "32mm_GnollPackLord",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Cult Of Hunger/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/GnollLordV2_32mm_NoSupports/32mm_GnollPackLord.stl"
+  },
+  {
+   "stem": "Lenora_Drakenmiryan_(repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Lenora Drakenmiryan/Lenora_Drakenmiryan_(repaired).stl"
+  },
+  {
+   "stem": "32mm_AdultDiverger",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Fear the Eternal Embrace/DownloadAll_32mm/2- Enemies/Enemies_32mm_NoSupports/AdultDiverger_32mm_NoSupports/32mm_AdultDiverger.stl"
+  },
+  {
+   "stem": "32mm_HornetChimeromorph",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/War for Humanity/DownloadAll_32/Enemies_32mm_NoSuports/HornetChimeromorph_32mm_NoSupports/32mm_HornetChimeromorph.stl"
+  },
+  {
+   "stem": "32mm_Gate",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/A Light In the Shadow/All_32mm/Environments_32mm_NoSupports/Gate_32mm_NoSupports/32mm_Gate.stl"
+  },
+  {
+   "stem": "Bloodfiend_B_(saddle) (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Bloodfiend Riders/Bloodfiend RIder B/Bloodfiend_B_(saddle) (repaired).stl"
+  },
+  {
+   "stem": "Hauptblock_Doppelt_Turbine_eingebaut1",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Warhammer/Warhammer_40k_Terrain_Kombination_of_Energy_bridge_and_turbine/files/Hauptblock_Doppelt_Turbine_eingebaut1.stl"
+  },
+  {
+   "stem": "Bloodfiend_A_(no_saddle) (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Bloodfiend Riders/Bloodfiend Rider A/Bloodfiend_A_(no_saddle) (repaired).stl"
+  },
+  {
+   "stem": "Grisara_32mm",
+   "set": "expand",
+   "up": "-Y",
+   "path": "Loot Studios/Loyalty Reward 6 Months/All_32mm/Loyalty6_V3_32mm_Nosupports/Grisara_32mm_NoSupports/Grisara_32mm.stl"
+  },
+  {
+   "stem": "32mm_ProtoOsteotron2",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Spacecraft-Crasher/All_Aliens_Part2/ProtoOsteotron2/32mm/No Supports/32mm_ProtoOsteotron2.stl"
+  },
+  {
+   "stem": "Bloodfiend_A_(saddle) (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Bloodfiend Riders/Bloodfiend Rider A/Bloodfiend_A_(saddle) (repaired).stl"
+  },
+  {
+   "stem": "32mm_WerebatGoblin",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/WerebatGoblin_32mm_NoSupports/32mm_WerebatGoblin.stl"
+  },
+  {
+   "stem": "Arcanist_Apprentice_F_(Hood)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Archanists Guild/Apprentice Arcanists/Apprentice Arcanist F/Kit I (Arcane Sword & Staff)/Arcanist_Apprentice_F_(Hood).stl"
+  },
+  {
+   "stem": "Yoshigruzu Bust (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Busts/Yoshigruzu Bust (repaired).stl"
+  },
+  {
+   "stem": "Dragonpeak_Smilodon_Rider_C_(f) (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider C (f)/Dragonpeak_Smilodon_Rider_C_(f) (repaired).stl"
+  },
+  {
+   "stem": "32mm_CreditMachine",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Neon Street 3k/All_32mm/Objects_NoSupports/CreditMachine_NoSupports/32mm_CreditMachine.stl"
+  },
+  {
+   "stem": "32mm_SpaceAviatorHelmet",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Spacecraft-Crasher/All_Crew_Part1_V3/All_Crew_Part1_V2_/SpaceAviator_V2/SpaceAviator/32mm/No Supports/32mm_SpaceAviatorHelmet.stl"
+  },
+  {
+   "stem": "kdk-prime4",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Battletech/kdk-prime4.stl"
+  },
+  {
+   "stem": "House_Mora_Slathaai_E",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Slathaai of House Mora/28 Slathaai of House Mora - June 2022 AG/House Mora Slathaai/House Mora Slathaai E/House_Mora_Slathaai_E.stl"
+  },
+  {
+   "stem": "32mm_AncientWorm_Head",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Sandy Dunes of Lutba/AncientWorm_Part1/32mm/32mm_AncientWorm_Head/No Supports/32mm_AncientWorm_Head.stl"
+  },
+  {
+   "stem": "Campfire_Lit (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Adventurer Camp/Modular Campfire/Campfire_Lit (repaired).stl"
+  },
+  {
+   "stem": "32mm_BadassPI",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Neon Street 3k/All_32mm/TheWrench_32mm_NoSupports/BadassPI_32mm_NoSupports/32mm_BadassPI.stl"
+  },
+  {
+   "stem": "32mm_MechaLasher",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Damn Nation/All_32mm/All_32mm/TheAccursed_32mm_NoSupported/MechaLasher_32mm_NoSupports/32mm_MechaLasher.stl"
+  },
+  {
+   "stem": "Labyrinth_Minoc_E_(f) (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Order of the Labyrinth/34 Order of the Labyrinth - February 2022 AG/Modular Labirynth Minocs/Labyrinth Minoc E/Labyrinth_Minoc_E_(f) (repaired).stl"
+  },
+  {
+   "stem": "32mm_GoblinKing_Throne",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/SlugorGoblinKing_32mm_NoSupports/32mm_GoblinKing_Throne.stl"
+  },
+  {
+   "stem": "Depth_Digger_B_(Saddle)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Depth Digger Riders/Depth Digger B/Depth_Digger_B_(Saddle).stl"
+  },
+  {
+   "stem": "Bloodfiend_C_(saddle)_(repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Bloodfiend Riders/Bloodfiend RIder C/Bloodfiend_C_(saddle)_(repaired).stl"
+  },
+  {
+   "stem": "Ork6",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Warhammer/PhysUdo/orktober-sneaky-orks/Ork6.stl"
+  },
+  {
+   "stem": "FN2205AC11_32mm_FireElemental",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/City of Portals/All_32mm/CityDenizens_32mm_NoSupports/CityDenizens_32mm_NoSupports/AdornedFireElemental_32mm_NoSupports/FN2205AC11_32mm_FireElemental.stl"
+  },
+  {
+   "stem": "Halloween_cubone",
+   "set": "expand",
+   "up": "+Z",
+   "path": "halloween+cubone/files/Halloween_cubone.stl"
+  },
+  {
+   "stem": "X01_power_armor",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Different_Power_Armor_from_Fallout_4_Loading_Screens (1)/files/X01_power_armor.stl"
+  },
+  {
+   "stem": "32_Unsupported_Ferdinand_BodyNoMask",
+   "set": "expand",
+   "up": "+Z",
+   "path": "DM Stash/Crimson Masquerade/Ferdinand Vandame - Unsupported/32_Unsupported_Ferdinand_BodyNoMask.stl"
+  },
+  {
+   "stem": "FN2205AC07_32mm_Planetar",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/City of Portals/All_32mm/CityDenizens_32mm_NoSupports/CityDenizens_32mm_NoSupports/Planetar_32mm_NoSupports/FN2205AC07_32mm_Planetar.stl"
+  },
+  {
+   "stem": "32mm_ Alejandro_Bust",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Ship Ahoy/All_Busts/Alejandro/No Supports/32mm_ Alejandro_Bust.stl"
+  },
+  {
+   "stem": "Skutagaard_Ram_D_(no_saddle) (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Drarven Ram Riders/Dwarven Ram Rider D (f)/Skutagaard_Ram_D_(no_saddle) (repaired).stl"
+  },
+  {
+   "stem": "32mm_TrollLarge",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Orconspiracy/Enemies_Part3/Troll/32mm/No Supports/32mm_TrollLarge.stl"
+  },
+  {
+   "stem": "32mm_Table",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Ship Ahoy/All_Objects/Table/No Supports/32mm_Table.stl"
+  },
+  {
+   "stem": "32mm_CreditMerchant_Character",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Neon Street 3k/All_32mm/TheMachine_32mm_NoSupports/CreditMerchant_32mm_NoSupports/32mm_CreditMerchant_Character.stl"
+  },
+  {
+   "stem": "Mezzalfiend_of_the_Gorge_E_(Daemon_Mask)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/The Demon King Spawn/The Demon King Spawn/Mezzalfiends of the Gorge/Mezzalfiend of the Gorge E/Kit II (Daemon Mask - Weapon & Shield)/Mezzalfiend_of_the_Gorge_E_(Daemon_Mask).stl"
+  },
+  {
+   "stem": "32mm_ReanimatedAstronaut",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Savage Outbreak in Space/All_32mm/Enemies_32mm_NoSupports/ReaniAstro_V2_32mm_NoSupports/32mm_ReanimatedAstronaut.stl"
+  },
+  {
+   "stem": "Korg_Not_Modular (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Troubles in Taverns 10 Heroes/Korg 2 Headed Dragon/Old Korg (No Modular)/Korg_Not_Modular (repaired).stl"
+  },
+  {
+   "stem": "32mm_BoneDemon",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Nightmares of the Abyss/All_32mm/Enemies_32mm_NoSupports/BoneDemon_32mm_NoSupports/32mm_BoneDemon.stl"
+  },
+  {
+   "stem": "32mm_Crate",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Spacecraft-Crasher/All_Objects/Crate/No Supports/32mm_Crate.stl"
+  },
+  {
+   "stem": "Lilith_the_Matriarch",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/The Demon King Spawn/The Demon King Spawn/Lilit the Matriarch/Lilith_the_Matriarch.stl"
+  },
+  {
+   "stem": "32mm_PreciousRock1",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Fear the Eternal Embrace/DownloadAll_32mm/3- Environment/Environment_NoSupport/PreciousRock1_NoSupports/32mm_PreciousRock1.stl"
+  },
+  {
+   "stem": "32mm_HalfMechaSpiderMan",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Nuclear Wasteland/DownloadAll_32mm/2- Enemies/Enemies_32mm_NoSupports/Enemies_32mm_NoSupports/HalfMechaSpider_32mm_NoSupports/32mm_HalfMechaSpiderMan.stl"
+  },
+  {
+   "stem": "Labyrinth_Minoc_C_(m) (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Order of the Labyrinth/34 Order of the Labyrinth - February 2022 AG/Modular Labirynth Minocs/Labyrinth Minoc C/Labyrinth_Minoc_C_(m) (repaired).stl"
+  },
+  {
+   "stem": "FN2205AC06_32mm_GrofMortewielder",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/City of Portals/All_32mm/CityDenizens_32mm_NoSupports/CityDenizens_32mm_NoSupports/GrofMortewielder_32mm_NoSupports/FN2205AC06_32mm_GrofMortewielder.stl"
+  },
+  {
+   "stem": "Swarmlord",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Warhammer/dictator-of-the-anthill-extended-ver-supports-yet-t20210817-29354-1p15040/dictator-of-the-anthill-extended-ver-supports-yet-to-be-made/Swarmlord.stl"
+  },
+  {
+   "stem": "32mm_Sabertooth",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Snowy Mountain Summit/DownloadAll_32mm/2 - Enemies/Sabertooth/Sabertooth_32mm_NoSupports/32mm_Sabertooth.stl"
+  },
+  {
+   "stem": "32mm_ClawedZombie",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Loot Studios/Stinky Ancient Ruins/All_32mm/Enemies_32mm_NoSupports/ClawedZombie_32mm_NoSupports/32mm_ClawedZombie.stl"
+  },
+  {
+   "stem": "Weapon_rack_large__x6_ (repaired)",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Weapon Racks/Weapon_rack_large__x6_ (repaired).stl"
+  },
+  {
+   "stem": "32mm_ChitinousWatcher",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Eye of the Watcher/All_32mm/Enemies_32mm_NoSupports/ChithinousWatcher_32mm_NoSupports/32mm_ChitinousWatcher.stl"
+  },
+  {
+   "stem": "32mm_LampreyWatcher_IndentedIris",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Loot Studios/Eye of the Watcher/All_32mm/Enemies_32mm_NoSupports/LampreyWatcher_32mm_NoSupports/32mm_LampreyWatcher_IndentedIris.stl"
+  },
+  {
+   "stem": "tyrant_guard_merged",
+   "set": "expand",
+   "up": "+Z",
+   "path": "Warhammer/jimsbeanz/xeno-tyrant-guard/tyrant_guard_merged.STL"
+  },
+  {
+   "stem": "Cultist 1",
+   "set": "expand",
+   "up": "+Y",
+   "path": "Bestarium/Welcome Pack/Cultists/Cultist 1.stl"
+  },
+  {
+   "stem": "Pack Mule - Generic (repaired)",
+   "set": "expand2",
+   "up": "+Z",
+   "path": "Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Adventurer Camp/Pack Mule/Pack Mule - Generic (repaired).stl"
+  },
+  {
+   "stem": "32mm_NimbusGunslinger",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/Mercs and Miners/All_32mm/Mercenaries_32mm_NoSupports/NimbusGunslinger_32mm_NoSupports/32mm_NimbusGunslinger.stl"
+  },
+  {
+   "stem": "32mm_SpikeTrap_Desarmed",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/The Crimson Sand Arena/All_Objects/SpikeTrap_Desarmed/No Supports/32mm_SpikeTrap_Desarmed.stl"
+  },
+  {
+   "stem": "32mm_RoyalPriestess",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/Sandy Dunes of Lutba/All_Part2_RoyalCourtOfLutba/RoyalPriestess/32mm/No Supports/32mm_RoyalPriestess.stl"
+  },
+  {
+   "stem": "Dragonpeak_Barbarian_A_(m_helmet) (repaired)",
+   "set": "expand2",
+   "up": "+Z",
+   "path": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian A (m)/Dragonpeak_Barbarian_A_(m_helmet) (repaired).stl"
+  },
+  {
+   "stem": "Pikachu_X_Kakashi",
+   "set": "expand2",
+   "up": "+Z",
+   "path": "Pikachu_X_Kakashi.stl"
+  },
+  {
+   "stem": "32mm_CarrionGolem",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/Stinky Ancient Ruins/All_32mm/Enemies_32mm_NoSupports/CarrionGolem_32mm_NoSupports/32mm_CarrionGolem.stl"
+  },
+  {
+   "stem": "32mm_PreciousRock2",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/Fear the Eternal Embrace/DownloadAll_32mm/3- Environment/Environment_NoSupport/PreciousRock2_NoSupports/32mm_PreciousRock2.stl"
+  },
+  {
+   "stem": "Requiem_Demon_Hunter_F_(No_Hat)",
+   "set": "expand2",
+   "up": "+Z",
+   "path": "Artisan Guild/Requiem Demon Hunters/41 Requiem Demon Hunters (Complete)/Requiem Demon Hunters/Requiem Demon Hunter F/Kit II (No Hat Gun)/Requiem_Demon_Hunter_F_(No_Hat).stl"
+  },
+  {
+   "stem": "32MM_Floor2",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Floor_32mm_NoSupports/32MM_Floor2.stl"
+  },
+  {
+   "stem": "32mm_Cassandra_Hood",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/Damn Nation/All_32mm/All_32mm/TheMisfits_32mm_NoSupported/Cassandra_32mm_NoSupports/32mm_Cassandra_Hood.stl"
+  },
+  {
+   "stem": "Baal's_Demonhound_(Saddle)",
+   "set": "expand2",
+   "up": "+Z",
+   "path": "Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider B/Baal's_Demonhound_(Saddle).stl"
+  },
+  {
+   "stem": "32mm_StandardMarine_2",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/War for Humanity/DownloadAll_32/Heroes_32mm_NoSuports/StandardMarine2_32mm_NoSupports/32mm_StandardMarine_2.stl"
+  },
+  {
+   "stem": "32mm_Salamanderian",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/Saurian Native Diplomacy/All 32mm/SaurianNAtive_Enemies_32mm_NoSupports/Salamanderian_32mm_NoSupports/32mm_Salamanderian.stl"
+  },
+  {
+   "stem": "Svartwood_Troll_Hunter_A_(m)_(repaired)",
+   "set": "expand2",
+   "up": "+Z",
+   "path": "Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Svartwood Troll Hunters/Svartwood Troll Hunter A/Svartwood_Troll_Hunter_A_(m)_(repaired).stl"
+  },
+  {
+   "stem": "32mm_Wall4B",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Walls_32mm_NoSupports/32mm_Wall4B.stl"
+  },
+  {
+   "stem": "Bloodhunt_Knight_E_(f) (repaired)",
+   "set": "expand2",
+   "up": "+Z",
+   "path": "Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight E/Bloodhunt_Knight_E_(f) (repaired).stl"
+  },
+  {
+   "stem": "32mm_Grooze",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/Mercs and Miners/All_32mm/Mercenaries_32mm_NoSupports/GroozeTheMorphicOoze_32mm_NoSupports/32mm_Grooze.stl"
+  },
+  {
+   "stem": "Dragonpeak_Totem (repaired)",
+   "set": "expand2",
+   "up": "+Z",
+   "path": "Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Dragonpeak Totems/Dragonpeak_Totem (repaired).stl"
+  },
+  {
+   "stem": "32mm_Engineer",
+   "set": "expand2",
+   "up": "-Y",
+   "path": "Loot Studios/Spacecraft-Crasher/All_Crew_Part2/Engineer/32mm/No Supports/32mm_Engineer.stl"
+  },
+  {
+   "stem": "32mm_FroggySpearman",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/FroggySpearman_32mm_NoSupports/32mm_FroggySpearman.stl"
+  },
+  {
+   "stem": "32mm_Chair",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/Savage Outbreak in Space/All_32mm/Environment_NoSupport/Chair_NoSupports/32mm_Chair.stl"
+  },
+  {
+   "stem": "MechanicBay_Generator",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/Mercs and Miners/All_32mm/MechanicBay_32mm_NoSupports/MechanicBay_Generator.stl"
+  },
+  {
+   "stem": "Mezzalfiend_Trickster_F",
+   "set": "expand2",
+   "up": "+Z",
+   "path": "Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Mezzalfiend Tricksters/Mezzalfiend Trickster F/Kit I (Monk)/Mezzalfiend_Trickster_F.stl"
+  },
+  {
+   "stem": "32mm_Drone",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/Neon Street 3k/All_32mm/TheMachine_32mm_NoSupports/Drone_32mm_NoSupports/32mm_Drone.stl"
+  },
+  {
+   "stem": "Trollking_Throne_of_Svartwood (repaired)",
+   "set": "expand2",
+   "up": "+Z",
+   "path": "Artisan Guild/Epic Bosses/Epic Boss 12 - Trollking Drungvandel on his Throne/Trollking_Throne_of_Svartwood (repaired).stl"
+  },
+  {
+   "stem": "32mm_AlkaMyastan",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/Panshaw Under Siege/DownloadAll_32mm/1 - Heroes/AlkaMyastan/AlkaMyastan_32mm_NoSupports/32mm_AlkaMyastan.stl"
+  },
+  {
+   "stem": "Skutagaard_Wraith_B",
+   "set": "expand2",
+   "up": "+Z",
+   "path": "Artisan Guild/Darkness of the Lich Lord/37 Darkness of the Lich Lord - May 2022 AG/Skutagaard Wraiths/Skutagaard Wraith B/Skutagaard_Wraith_B.stl"
+  },
+  {
+   "stem": "32_Unsupported_Aimar_BodyMask",
+   "set": "expand2",
+   "up": "+Z",
+   "path": "DM Stash/Crimson Masquerade/Aimar - Unsupported/32_Unsupported_Aimar_BodyMask.stl"
+  },
+  {
+   "stem": "32mm_Wall4A",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Walls_32mm_NoSupports/32mm_Wall4A.stl"
+  },
+  {
+   "stem": "32mm_HunterShark",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/Ship Ahoy/All_DangersOfTheSea_Part2/HunterShark/32mm/No Supports/32mm_HunterShark.stl"
+  },
+  {
+   "stem": "32mm_ShipCannonCar",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/Ship Ahoy/All_Objects/ShipCannon/No Supports/32mm_ShipCannonCar.stl"
+  },
+  {
+   "stem": "32mm_Meowzer",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/The Rebels Strike Back/DownloadAll_32mm/1- Rebels/Rebels_32mm_NoSupports/BazookaMeowzer_32mm_NoSupports/32mm_Meowzer.stl"
+  },
+  {
+   "stem": "32_Unsupported_Theldranax_BodyWhole",
+   "set": "expand2",
+   "up": "+Z",
+   "path": "DM Stash/Crimson Masquerade/Theldranax - Unsupported/32_Unsupported_Theldranax_BodyWhole.stl"
+  },
+  {
+   "stem": "FN2205AC05_32mm_Succubus",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Loot Studios/City of Portals/All_32mm/CityDenizens_32mm_NoSupports/CityDenizens_32mm_NoSupports/Succubus_32mm_NoSupports/FN2205AC05_32mm_Succubus.stl"
+  },
+  {
+   "stem": "body-posed",
+   "set": "expand2",
+   "up": "+Z",
+   "path": "Warhammer/a-certain-catasftophical-event-that-led-to-destruct20210704-25771-14t7if0/a-certain-catasftophical-event-that-led-to-destruction-of-certain-space-ship-with-cool-name-ww1-soldier-not-included/body-posed.stl"
+  },
+  {
+   "stem": "32_Unsupported_Argulug_Body",
+   "set": "expand2",
+   "up": "+Z",
+   "path": "DM Stash/DM Stash Jan '22 Brawn & Brains STLs - Unsupported/Argulug - Unsupported/Unsupported/32_Unsupported_Argulug_Body.stl"
+  },
+  {
+   "stem": "Manhunter P2",
+   "set": "expand2",
+   "up": "+Y",
+   "path": "Bestarium/2022_02_Man Eaters Part 2/Release Files STL/Manhunter/Manhunter P2.stl"
   }
  ],
  "collection_root": "/run/media/masa/STLLibrary",

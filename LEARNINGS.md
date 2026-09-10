@@ -241,6 +241,19 @@ notes at the bottom are amended in place. Open work is tracked separately in
   `Already borrowed` 117,725 times in 8 s. Issue #5, measured against
   embed-cache512.
 
+
+- [Widening the labelled set: 49 to 206](docs/learnings/2026-09-09-widening-the-labelled-set.md)
+  — the honest scoring population went 20 → 179. **~50% of an unfiltered draw
+  cannot carry an up-axis label** (123 parts / 124 models, hand-triaged), and
+  the vocabulary's `standalone` catches **0** of them. Two draw-time signals
+  measured against that triage: `_L`/`_R`+`part`N takes 40% of parts, a
+  lettered family in one folder another 16%, together 52% for 0 of 119 models
+  wrongly cut — but a filtered draw still comes back 42% parts. A labeller
+  calibrated at 47/48 blind scored ~94% on fresh models with **5 of its 6
+  errors inside the proposals it had flagged**. Also: a sprue named `_Kit`, a
+  component letter that no rule can see, and the file-vs-scene axis
+  translation behind model-browser#8.
+
 ## Evergreen notes
 
 - [Queries and filters](docs/learnings/queries-and-filters.md) — open-set

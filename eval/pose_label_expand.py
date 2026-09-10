@@ -34,6 +34,7 @@ import html
 import json
 import os
 import random
+import re
 from pathlib import Path
 from urllib.parse import quote
 
@@ -42,6 +43,62 @@ from common import AX, IDX, OUT, REPO, load_labels
 from src import naming, pose
 
 RENDER_PX = 384
+
+# A left/right marker, or a numbered "part N": the two name shapes that mean
+# "this is a piece of something", measured against a 247-model hand triage on
+# 2026-09-09. Between them they name 41% of what a person called a loose part
+# (51 of 123) and **none** of what they called a model (0 of 124) — the only
+# two signals tested that were free on that side. A weapon word costs 4 of 124
+# and a body-part word costs 8, because `Body`, `Head` and `Torso` are what DM
+# Stash and Artisan Guild call the *main sculpt*: `32_Unsupported_Tygrin_Body`
+# is the character, not a piece of one.
+#
+# **This filters the labelling draw, not the collection.** It is deliberately
+# not in `src.naming`: a paired weapon or a spell effect is a real thing
+# someone searches for, and unlike a sprue or a `75_` twin it has no surviving
+# sibling that carries it. It only means "unlikely to hold still for an up
+# axis", which is a statement about ground truth, not about the library.
+# 0 of 124 is not 0% — at that sample size the true rate could be ~3% — so
+# `--all-shapes` draws without it when a run wants an unfiltered sample.
+LIKELY_PART = re.compile(r"(?:^|[_\s(])[LR](?:$|[_\s)])|part[_\s-]?\d",
+                         re.IGNORECASE)
+
+# The second part signal, and the only one that is not in the name: a file
+# whose stem ends in a bare capital letter *and* whose own directory holds
+# siblings lettered the same way — `32mm_OdDracnesThrone_B` beside A, C and D,
+# `32mm_DragonSkullManor_C` beside seven more. Those letters enumerate the
+# components of one object, where `_L`/`_R` enumerate a left and a right.
+#
+# Measured against 247 models triaged by hand, scored against the labels that
+# survived review: it catches 16% of parts on its own and **15 that the name
+# alone misses** — nearly all modular terrain (Manor, Cave, Igloo, Nest,
+# BunkerDoor) — for 0 of 119 models wrongly cut. Together with LIKELY_PART:
+# 52% of parts, still 0 models. 0 of 119 is not 0%; at that sample the true
+# rate could be ~2.5%.
+#
+# It survives the obvious objection — modular *character* kits letter their
+# variants too (`Dragonpeak_Barbarian_B`) — only because this library gives
+# each such variant its own directory, so the siblings are not beside it. That
+# is a fact about this collection, not about naming, and a library that packed
+# variants together would need this measured again.
+LETTERED = re.compile(r"^(.*?)[_ ]([A-Z])$")
+
+
+def lettered_family(stem: str, folder, index, n_min: int = 2) -> bool:
+    """Is `stem` a lettered member of a family of `n_min`+ in its own folder?"""
+    m = LETTERED.match(stem)
+    if not m:
+        return False
+    sibs = re.compile(re.escape(m.group(1)) + r"[_ ][A-Z]$")
+    return sum(bool(sibs.match(s)) for s in index.get(folder, ())) >= n_min
+
+
+def folder_index(files):
+    """{directory: [stem, ...]} for `lettered_family`."""
+    index: dict = {}
+    for f in files:
+        index.setdefault(f.parent, []).append(f.stem)
+    return index
 
 
 def newest_walk(repo=REPO):
@@ -54,7 +111,8 @@ def newest_walk(repo=REPO):
 
 
 def render(out: Path, walk: Path, n: int, seed: int, render_px: int,
-           thumb: int, exclude: list[Path] | None = None) -> None:
+           thumb: int, exclude: list[Path] | None = None,
+           skip_parts: bool = True) -> None:
     from PIL import Image
     import rig
 
@@ -64,8 +122,11 @@ def render(out: Path, walk: Path, n: int, seed: int, render_px: int,
     # second draw that re-renders them widens nothing (the same reason the
     # first draw skips the labelled set).
     for m in exclude or []:
-        root = json.loads(m.read_text()).get("collection_root", "")
-        labelled |= {str((Path(root) / e["path"]).resolve())
+        # `path` in a manifest is anchor-relative ("run/media/..."), so it is
+        # rooted with the anchor, not with collection_root — joining it onto
+        # the root built "/run/media/.../run/media/..." and matched nothing,
+        # which is how batch 2 re-drew six of batch 1's models (2026-09-09).
+        labelled |= {str(Path("/" + e["path"]).resolve())
                      for e in json.loads(m.read_text())["models"]}
     files = [Path(p) for p in json.loads(walk.read_text())["files"]]
     # A walk file is a record of what the vocabulary said *then*. Re-apply it
@@ -74,13 +135,22 @@ def render(out: Path, walk: Path, n: int, seed: int, render_px: int,
     # this the sample offers models the next walk will not index.
     files = [f for f in files if not any(naming.skip(part) for part in f.parts)]
     fresh = [f for f in files if str(f.resolve()) not in labelled]
+    drawn_from = len(fresh)
+    if skip_parts:
+        index = folder_index(files)
+        fresh = [f for f in fresh
+                 if not LIKELY_PART.search(f.stem)
+                 and not lettered_family(f.stem, f.parent, index)]
     if len(fresh) < n:
         raise SystemExit(f"walk holds {len(fresh)} unlabelled files, asked for {n}")
     sample = random.Random(seed).sample(fresh, n)
 
     out.mkdir(parents=True, exist_ok=True)
-    print(f"walk {walk}: {len(files)} files, {len(files) - len(fresh)} already "
-          f"labelled\nsampling {n} of the remaining {len(fresh)}, seed {seed}\n"
+    print(f"walk {walk}: {len(files)} files, {len(files) - drawn_from} already "
+          f"labelled or cut\n"
+          + (f"skipping {drawn_from - len(fresh)} likely parts (--all-shapes "
+             f"keeps them)\n" if skip_parts else "")
+          + f"sampling {n} of the remaining {len(fresh)}, seed {seed}\n"
           f"tiles at {render_px}px, sheets at {thumb}px -> {out}")
 
     r = rig.rig(render_px)
@@ -99,7 +169,8 @@ def render(out: Path, walk: Path, n: int, seed: int, render_px: int,
         print(f"[{i}/{n}] {f.stem[:52]:52} {sheet.name}", flush=True)
 
     (out / "manifest.json").write_text(json.dumps(
-        {"walk": str(walk), "seed": seed, "axes": AX, "render_px": render_px,
+        {"walk": str(walk), "seed": seed, "part_filter": bool(skip_parts),
+         "axes": AX, "render_px": render_px,
          "thumb": thumb, "collection_root": _root_of(sample[0]),
          "models": rows}, indent=1))
     print(f"\nwrote {len(rows)} sheets and manifest.json to {out}")
@@ -153,7 +224,11 @@ textarea { width:100%; height:150px; margin-top:12px; font-family:ui-monospace,
 
 PAGE_JS = """
 const KEYS = {"1":0,"2":1,"3":2,"4":3,"5":4,"6":5};
-const store = "poselabels:" + location.pathname;
+// Keyed by *which models this page asks about*, not by its URL: successive
+// pages are written to the same path, so a plain pathname key merged one
+// batch's answers into the next one's page (seen live: a 67-model triage
+// reporting "299 of 67 decided"). RUN is derived from the batch dirs.
+const store = "poselabels:" + location.pathname + ":" + RUN;
 let picks = {};
 try { picks = JSON.parse(localStorage.getItem(store) || "{}"); } catch (e) {}
 let cur = 0;
@@ -215,7 +290,8 @@ function exportJSON() {
 
 
 def page(dirs: list[Path], proposals_file: Path | None, page_dir: Path,
-         triage: bool = False) -> None:
+         triage: bool = False, decided_file: Path | None = None,
+         skip_parts: bool = False) -> None:
     """One page over one or more rendered batches.
 
     Two modes, because the two questions cost their own reader very different
@@ -227,29 +303,67 @@ def page(dirs: list[Path], proposals_file: Path | None, page_dir: Path,
 
     Splitting them is what keeps the expensive pass small: a proposal is only
     worth making for a model that can carry a label at all."""
-    models, sheets, stale = [], {}, []
+    models, sheets, stale, seen, prefiltered = [], {}, [], set(), []
+    part_index = None
+    if skip_parts:
+        walks = {json.loads((d / "manifest.json").read_text())["walk"] for d in dirs}
+        part_index = folder_index(
+            Path(p) for w in walks
+            for p in json.loads(Path(w).read_text())["files"])
     for d in dirs:
         manifest = json.loads((d / "manifest.json").read_text())
         for m in manifest["models"]:
+            # the same file drawn twice (see the exclude bug above) is one
+            # model, not two questions
+            if m["path"] in seen:
+                continue
+            seen.add(m["path"])
             # rendered before a vocabulary change that has since cut it: asking
             # for a label here would grow the set with a model the walk drops
             if any(naming.skip(part) for part in Path(m["path"]).parts):
                 stale.append(m["stem"])
                 continue
+            # a part signal added after this batch was drawn (the lettered
+            # family, 2026-09-09) still applies to it: asking a human to
+            # triage what a measured rule already answers is wasted attention
+            if part_index is not None:
+                folder = Path("/" + m["path"]).parent
+                if (LIKELY_PART.search(m["stem"])
+                        or lettered_family(m["stem"], folder, part_index)):
+                    prefiltered.append(m["stem"])
+                    continue
             models.append(m)
             # percent-encode, then HTML-escape: these filenames carry spaces,
             # apostrophes, ampersands and parentheses, and a bare `#` in one
             # would otherwise cut the URL short at a fragment
             rel = os.path.relpath(d / m["sheet"], page_dir)
-            sheets[m["stem"]] = quote(rel)
+            sheets[m["path"]] = quote(rel)
+    # A settled triage answer retires the model from the axis pass: a loose
+    # part has no axis to pick, and re-asking is the one thing guaranteed to
+    # make a second pass feel like the first one over again.
+    # already in the labels file: answered, and answered by a human. The
+    # exclude bug (see `render`) let two of batch 3 through as re-draws.
+    known = json.loads((REPO / "up_axis_labels.json").read_text())
+    root, done = known["collection_root"], {l["path"] for l in known["labels"]}
+    already = [m["stem"] for m in models
+               if str(Path("/" + m["path"]).relative_to(root)) in done]
+    if already:
+        models = [m for m in models if m["stem"] not in already]
+        print(f"dropped {len(already)} already labelled: " + ", ".join(already))
+    settled = {}
+    if decided_file:
+        raw = json.loads(decided_file.read_text())
+        settled = raw.get("picks", raw)
+    if settled and not triage:
+        models = [m for m in models if settled.get(m["stem"], "keep") != "undefined"]
     proposals = {}
     if proposals_file:
         raw = json.loads(proposals_file.read_text())
         proposals = raw.get("proposals", raw)
-    if triage:
-        # only the models nobody has ruled out yet, so a second triage pass
-        # over a topped-up draw does not re-ask what was already answered
-        models = [m for m in models if m["stem"] not in proposals]
+    # A *proposal* is not an answer. Only a human decision retires a model
+    # from triage, and that arrives through `--decided`; earlier this skipped
+    # anything with a proposal, which emptied the page the moment the labeller
+    # had judged every model — exactly when the page is most needed.
 
     cards = []
     for k, m in enumerate(models):
@@ -269,12 +383,20 @@ def page(dirs: list[Path], proposals_file: Path | None, page_dir: Path,
                 f'<button data-ax="{a}" onclick="pick({k},\'{a}\')">'
                 f'<span class="k">{i + 1}</span>{a}</button>'
                 for i, a in enumerate(AX))
-        note = (f'<div class="mine">proposed: {html.escape(mine)}</div>'
-                if mine and not risky else "")
+        bits = []
+        if mine and not risky:
+            bits.append("proposed: " + html.escape(
+                ("a loose part" if mine == "undefined" else "a model")
+                if triage else mine))
+        if why and not risky:
+            bits.append(html.escape(why))
+        if p.get("from"):
+            bits.append("<b>" + html.escape(p["from"]) + "</b>")
+        note = f'<div class="mine">{" &middot; ".join(bits)}</div>' if bits else ""
         cards.append(f"""<section class="m" id="m{k}">
  <div class="hd"><span class="n">{m['i']:03d}/{len(models)}</span>
  <span class="stem">{html.escape(m['stem'])}</span>{flag}</div>
- <img loading="lazy" src="{html.escape(sheets[m['stem']])}" alt="">
+ <img loading="lazy" src="{html.escape(sheets[m['path']])}" alt="">
  <div class="row">{buttons}
  <button class="und" data-ax="undefined" onclick="pick({k},'undefined')">
  <span class="k">u</span>{'a loose part — no upright' if triage
@@ -284,13 +406,19 @@ def page(dirs: list[Path], proposals_file: Path | None, page_dir: Path,
     # the pre-selection: everything the labeller was confident about, so the
     # human confirms rather than re-derives — but never on a flagged model,
     # where a default is the thing most likely to be waved through
-    seed = {m["stem"]: proposals[m["stem"]].get("up")
-            for m in models
-            if m["stem"] in proposals
-            and isinstance(proposals[m["stem"]], dict)
-            and not proposals[m["stem"]].get("risky")
-            and proposals[m["stem"]].get("up")}
+    # In triage the question is model-or-part, so a proposed *axis* seeds
+    # "keep" and only "undefined" seeds the part button. A flagged proposal
+    # seeds nothing either way — that is what the flag is for.
+    seed = {}
+    for m in models:
+        pr = proposals.get(m["stem"])
+        if not isinstance(pr, dict) or pr.get("risky") or not pr.get("up"):
+            continue
+        seed[m["stem"]] = (("undefined" if pr["up"] == "undefined" else "keep")
+                           if triage else pr["up"])
 
+    # identity of this page's question: the batches it covers, and the mode
+    run_id = ("triage:" if triage else "axis:") + ",".join(sorted(d.name for d in dirs))
     title = ("triage — is it a model?" if triage
              else f"up-axis labelling — {len(models)} models")
     keys = ("k keep &middot; u loose part &middot; n/p move" if triage
@@ -312,11 +440,17 @@ the same text here, in case the browser blocks a download from file://"></textar
 <script>
 const AXES = {json.dumps(AX)};
 const TRIAGE = {json.dumps(bool(triage))};
+const RUN = {json.dumps(run_id)};
 const MODELS = {json.dumps([{'stem': m['stem']} for m in models])};
 {PAGE_JS}
-// pre-seed unflagged proposals on first open only; a later visit keeps
-// whatever the human actually pressed
-if (!localStorage.getItem(store)) {{ picks = {json.dumps(seed)}; }}
+// Seed a proposal only where the human has not already decided that model.
+// Per-model rather than "first open only", so a page rebuilt with more
+// proposals mid-pass seeds the new ones without touching a single answer
+// already given — which is what lets the labeller and the reader work at
+// the same time.
+for (const [stem, up] of Object.entries({json.dumps(seed)})) {{
+  if (!(stem in picks)) picks[stem] = up;
+}}
 MODELS.forEach((_, i) => paint(i));
 save(); focus(0);
 </script>"""
@@ -326,15 +460,27 @@ save(); focus(0);
     if stale:
         print(f"dropped {len(stale)} the vocabulary now cuts: "
               + ", ".join(sorted(stale)))
+    if prefiltered:
+        print(f"dropped {len(prefiltered)} the part signals answer without "
+              f"asking: " + ", ".join(sorted(prefiltered)[:6])
+              + (" ..." if len(prefiltered) > 6 else ""))
     print(f"wrote {index} over {len(models)} models\n"
           + ("open it, mark the loose parts, Export JSON — then the axis pass "
              "runs over what survives" if triage else
              "open it, pick, Export JSON, then --merge"))
 
 
-def merge(out: Path, confirmed_file: Path, which: str) -> None:
-    manifest = json.loads((out / "manifest.json").read_text())
-    by_stem = {m["stem"]: m for m in manifest["models"]}
+def merge(dirs: list[Path], confirmed_file: Path, which: str) -> None:
+    """Write confirmed picks into `up_axis_labels.json`.
+
+    Takes every batch the page covered, not one: a page built over several
+    draws exports one file, and looking its picks up in a single manifest
+    would silently drop the models that came from the others."""
+    manifests = [json.loads((d / "manifest.json").read_text()) for d in dirs]
+    by_stem: dict[str, list] = {}
+    for manifest in manifests:
+        for m in manifest["models"]:
+            by_stem.setdefault(m["stem"], []).append(m)
     raw = json.loads(confirmed_file.read_text())
     confirmed = raw.get("picks", raw)
 
@@ -350,9 +496,20 @@ def merge(out: Path, confirmed_file: Path, which: str) -> None:
             continue
         if up not in IDX:
             raise SystemExit(f"{stem}: {up!r} is not one of {', '.join(AX)}")
-        m = by_stem.get(stem)
-        if m is None:
+        hits = by_stem.get(stem, [])
+        if not hits:
             raise SystemExit(f"{stem} is not in this run's manifest")
+        # A stem is a display name, not an identity: "tail1", "head" and
+        # "tile7" each name different files in different directories. Where
+        # one names several *distinct* paths there is no way to tell which the
+        # human answered, so refuse rather than label the wrong file.
+        paths = {h["path"] for h in hits}
+        if len(paths) > 1:
+            raise SystemExit(
+                f"{stem!r} names {len(paths)} different files in this draw; "
+                f"a pick keyed by stem cannot say which:\n  "
+                + "\n  ".join(sorted(paths)))
+        m = hits[0]
         rel = str(Path("/" + m["path"]).relative_to(root))
         if rel in have:
             skipped.append(stem)
@@ -360,11 +517,16 @@ def merge(out: Path, confirmed_file: Path, which: str) -> None:
         added.append({"stem": stem, "set": which, "up": up, "path": rel})
 
     labels["labels"].extend(added)
+    seeds = ", ".join(str(m["seed"]) for m in manifests)
+    filtered = all(m.get("part_filter") for m in manifests)
     labels.setdefault("sets", {})[which] = (
-        f"random draw from the collection walk, seed {manifest['seed']}, "
-        f"excluding every path already labelled; proposed by a labeller "
-        f"measured on the first 49 and confirmed by hand from the same "
-        f"six-tile sheets. Method frozen as of this draw.")
+        f"random draw from the collection walk, seed {seeds}, "
+        f"excluding every path already labelled"
+        + (", and every name carrying a left/right marker or a numbered part "
+           "— so this set is a sample of the collection's *whole* models, not "
+           "of the collection" if filtered else "")
+        + f"; proposed by a labeller measured on the first 49 and confirmed by "
+        f"hand from the same six-tile sheets. Method frozen as of this draw.")
     labels_file.write_text(json.dumps(labels, indent=1, ensure_ascii=False) + "\n")
     print(f"added {len(added)} labels to {labels_file} as set {which!r}\n"
           f"  {undefined} marked undefined and left out"
@@ -383,6 +545,9 @@ def main() -> None:
     ap.add_argument("--triage", action="store_true",
                     help="with --page: ask only model-or-part, over every "
                          "model the proposals file does not already cover")
+    ap.add_argument("--decided", default=None, metavar="TRIAGE.JSON",
+                    help="with --page: a triage export; models answered "
+                         "\"undefined\" there are dropped from the axis pass")
     ap.add_argument("--page-dir", default=None,
                     help="where index.html goes (default: the first --out dir)")
     ap.add_argument("--set", dest="which", default="expand",
@@ -390,6 +555,9 @@ def main() -> None:
     ap.add_argument("--walk", default=None, help="walk file (default: newest)")
     ap.add_argument("-n", type=int, default=170, help="models to sample")
     ap.add_argument("--seed", type=int, default=909)
+    ap.add_argument("--all-shapes", action="store_true",
+                    help="draw without the likely-part filter — an unfiltered "
+                         "random sample of the collection")
     ap.add_argument("--render-px", type=int, default=RENDER_PX)
     ap.add_argument("--thumb", type=int, default=pose.SHEET_THUMB)
     ap.add_argument("--exclude", action="append", default=[], metavar="MANIFEST",
@@ -405,12 +573,13 @@ def main() -> None:
     if args.render:
         render(out, Path(args.walk) if args.walk else newest_walk(),
                args.n, args.seed, args.render_px, args.thumb,
-               [Path(e) for e in args.exclude])
+               [Path(e) for e in args.exclude], not args.all_shapes)
     elif args.page is not None:
         page(dirs, Path(args.page) if args.page else None,
-             Path(args.page_dir) if args.page_dir else dirs[0], args.triage)
+             Path(args.page_dir) if args.page_dir else dirs[0], args.triage,
+             Path(args.decided) if args.decided else None, not args.all_shapes)
     elif args.merge:
-        merge(out, Path(args.merge), args.which)
+        merge(dirs, Path(args.merge), args.which)
     else:
         ap.error("pass --render, --page or --merge")
 
