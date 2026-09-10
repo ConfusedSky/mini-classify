@@ -115,6 +115,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--thumb", default="256,512")
     ap.add_argument("--efforts", default="low,high")
+    ap.add_argument("--baselines", default=None, metavar="JSON",
+                    help="pose_baseline.py output to score against, instead of "
+                         "the published 2026-08-12 predictions (44 models)")
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--out", default="glm_vlm.json")
     ap.add_argument("--report-only", action="store_true")
@@ -129,7 +132,14 @@ def main():
         return
 
     labels = load_labels()
-    base = load_baselines()
+    if args.baselines:
+        # same reason as gemini_vlm's: the published file is 44 models and the
+        # filter below is `in base`, so without this a 206-label run scores 44
+        raw = json.loads(Path(args.baselines).read_text())["baselines"]
+        base = {k: {"needs_arbiter": v["needs_arbiter"], "geometry": v["geometry"],
+                    "ensemble_2048": v["ensemble"]} for k, v in raw.items()}
+    else:
+        base = load_baselines()
     items = [dict(l, **{"arb": base[l["stem"]]["needs_arbiter"],
                         "geo": base[l["stem"]]["geometry"],
                         "ens": base[l["stem"]]["ensemble_2048"]})

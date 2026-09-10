@@ -103,10 +103,16 @@ def main():
     # `hard` models were chosen because they fail, so they are reported on their
     # own — folding them into a pooled figure silently redefines what "pooled"
     # means against every number already recorded in LEARNINGS.
-    sets = [("orig", [s for s in order if which[s] == "orig"]),
-            ("holdout", [s for s in order if which[s] == "holdout"]),
-            ("orig+hold", [s for s in order if which[s] in ("orig", "holdout")]),
-            ("hard", [s for s in order if which[s] == "hard"])]
+    # Every set in the file gets its own row, derived rather than written down:
+    # the set grew from 49 to 206 on 2026-09-09 and a hardcoded list would have
+    # reported the four original groups and silently dropped 159 labels. The two
+    # pooled rows are kept as named combinations because LEARNINGS quotes
+    # `orig+hold`, and because "everything that is a sample of something" is the
+    # honest headline — `hard` is excluded from both, as before.
+    present = list(dict.fromkeys(which[s] for s in order))
+    sets = [(n, [s for s in order if which[s] == n]) for n in present]
+    sets += [("orig+hold", [s for s in order if which[s] in ("orig", "holdout")]),
+             ("all but hard", [s for s in order if which[s] != "hard"])]
     sets = [(n, sel) for n, sel in sets if sel]
 
     print("\ngeometry alone (backbone- and resolution-independent): "

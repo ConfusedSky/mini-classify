@@ -254,6 +254,19 @@ notes at the bottom are amended in place. Open work is tracked separately in
   component letter that no rule can see, and the file-vs-scene axis
   translation behind model-browser#8.
 
+
+- [The pose benchmark on 206 labels](docs/learnings/2026-09-10-the-pose-benchmark-on-206.md)
+  — production shape on the widened set: ensemble **183/201 (91%)**,
+  **189/201 (94%)** with gemini-3.5-flash, 187/201 with GLM low at ~1/50th the
+  cost ($3.42 per 354-call run, measured). The gate fires on 26%, and the
+  arbiter is **+12 rescued / −6 broken** — the 44-model set showed +4 and no
+  regressions because only 9 of its models were gated. The old holdout turns
+  out *pessimistic* (80%), and 7 of the ensemble's 18 errors are min-max
+  discarding a correct geometry vote — `geo_floor.py`'s question, now with
+  enough n to answer. `pose_baseline.py` is new: the production tiers over any
+  label set, because the arbiter harnesses silently filtered to a 44-model
+  file.
+
 ## Evergreen notes
 
 - [Queries and filters](docs/learnings/queries-and-filters.md) — open-set

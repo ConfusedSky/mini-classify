@@ -119,6 +119,9 @@ def main():
     ap.add_argument("--out", default="gemini_vlm.json",
                     help="prediction dump under eval/out; name it per run so a "
                          "new model sweep cannot overwrite a published one")
+    ap.add_argument("--baselines", default=None, metavar="JSON",
+                    help="pose_baseline.py output to score against, instead of "
+                         "the published 2026-08-12 predictions (44 models)")
     ap.add_argument("--report-only", action="store_true",
                     help="re-print the tables from the --out file without calling the API")
     args = ap.parse_args()
@@ -132,11 +135,25 @@ def main():
         return
 
     labels = load_labels()
-    base = load_baselines()
+    if args.baselines:
+        # `pose_baseline.py`'s output: the production tiers over *this* label
+        # file. The published 2026-08-12 file covers 44 models, and the filter
+        # below is `in base` — so on the 206-label set the default would score
+        # the original 44 and silently ignore 162.
+        raw = json.loads(Path(args.baselines).read_text())["baselines"]
+        base = {k: {"needs_arbiter": v["needs_arbiter"], "geometry": v["geometry"],
+                    "ensemble_2048": v["ensemble"]} for k, v in raw.items()}
+    else:
+        base = load_baselines()
     items = [dict(l, **{"arb": base[l["stem"]]["needs_arbiter"],
                         "geo": base[l["stem"]]["geometry"],
                         "ens": base[l["stem"]]["ensemble_2048"]})
              for l in labels if l["stem"] in base]
+    missing = [l["stem"] for l in labels if l["stem"] not in base]
+    if missing:
+        print(f"WARNING: {len(missing)} labels have no baseline and are not "
+              f"scored: {', '.join(missing[:4])}"
+              + (" ..." if len(missing) > 4 else ""))
     print(f"{len(items)} labelled models ({sum(i['set']=='orig' for i in items)} orig + "
           f"{sum(i['set']=='holdout' for i in items)} holdout) | sheets {thumbs} | "
           f"{len(models)} models\n")
@@ -184,10 +201,26 @@ def report(items, thumbs, models):
     keys = [f"{m}_sheet{t}" for t in thumbs for m in models]
     ref = [f"{m}_sheet{t}" for t in thumbs for m in PUBLISHED
            if f"{m}_sheet{t}" not in keys]
+    # The published columns are a *comparison*, and they cover 44 models. A
+    # label set wider than that has no published answer to show, which is not
+    # an error — it was `base[stem]` raising KeyError and losing a finished
+    # 206-call run at the reporting step (2026-09-09).
     base = load_baselines()
     for it in items:
         for k in ref:
-            it.setdefault(k, base[it["stem"]].get(k))
+            it.setdefault(k, base.get(it["stem"], {}).get(k))
+    # A published column answers 44 models. Scored against a wider label set it
+    # reports a "pipeline n/206" built from 44 answers and 162 blanks — a
+    # number that looks comparable and is not. Keep the column only where it
+    # covers every model being scored, and say so when it is dropped.
+    ref, partial = ([k for k in ref if all(it.get(k) for it in items)],
+                    [k for k in ref if not all(it.get(k) for it in items)
+                     and any(it.get(k) for it in items)])
+    if partial:
+        n = sum(1 for it in items if it.get(partial[0]))
+        print(f"\n(published columns cover {n} of {len(items)} models and are "
+              f"left out rather than scored on a subset: "
+              f"{', '.join(k.rsplit('_', 1)[0] for k in partial)})")
 
     print(f"\n{'model':30} {'gold':>5} {'geo':>5} {'ens':>5} "
           + " ".join(f"{k.replace('gemini-','')[:12]:>13}" for k in keys))
