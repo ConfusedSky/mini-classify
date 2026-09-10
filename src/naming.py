@@ -24,15 +24,27 @@ SUPPORT_TAGS = ("presupported", "pre-supported", "pre_supported", "supported",
                 "lychee", "chitubox")
 
 # Not a model in its own right: a bare base disc, a hollowed print variant,
-# the 75mm duplicate of a model we already have at 32mm, or a standalone
-# accessory piece. "standalone" is Artisan Guild's own word for the class —
+# the 75mm duplicate of a model we already have at 32mm, a standalone
+# accessory piece, or a sprue.
+#
+# A sprue is a print-convenience plate — several pieces (or five copies of
+# one) laid out on a raft, usually with the supports printed in. It is the
+# packing, not a model: of the 21 in the walk on 2026-09-09, every one sits in
+# a directory that also indexes the individual pieces it carries, between 3
+# and 16 of them ("Concrete Chunk Sprue A" beside ten loose Concrete Chunks;
+# "Metal Containers Sprue" beside all ten drums and canisters; the "5x" pipe
+# plates beside their single pipe). Classifying one asks SigLIP to describe a
+# tray, and its embedding is a blend of pieces that are each already in the
+# collection on their own.
+#
+# "standalone" is Artisan Guild's own word for the class —
 # five directory spellings ("Standalone Weapons & Hands", "Minoc Standalone
 # Weapons", "Standalone Hands & Weapons & Spells", ...) plus 80 loose
 # "Standalone_<Weapon>.stl" files outside those dirs, and the 2026-09-03
 # census found no occurrence anywhere in the library that is not an
 # accessory. Its 202-file directory class was also the largest source of
 # byte-identical duplicates (98 md5-identical groups collection-wide).
-NON_MODEL_TAGS = ("base", "hollow", "75mm", "standalone")
+NON_MODEL_TAGS = ("base", "hollow", "75mm", "standalone", "sprue")
 
 SKIP_TAGS = SUPPORT_TAGS + NON_MODEL_TAGS
 

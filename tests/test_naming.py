@@ -1,6 +1,11 @@
+import json
+from pathlib import Path
+
 import pytest
 
 from src.naming import SKIP_TAGS, skip
+
+REPO = Path(__file__).resolve().parent.parent
 
 
 # every spelling that actually appears across the collection and its archives
@@ -100,6 +105,28 @@ def test_the_two_groups_make_up_the_tag_list():
 
 
 @pytest.mark.parametrize("name", [
+    "Concrete Chunk Sprue A.stl",         # a plate of the loose chunks beside it
+    "Medium Pipe Straight Long 5x Sprue.stl",   # five copies of one pipe
+    "Grass Tufts Sprue.stl",
+    "Damaged Metal Containers Sprue.stl",
+])
+def test_a_sprue_is_the_packing_not_a_model(name):
+    # A sprue lays several pieces (or five of one) on a raft, supports printed
+    # in. All 21 in the 2026-09-09 walk sat in a directory that also indexed
+    # the individual pieces they carry, 3-16 of them.
+    assert skip(name)
+
+
+@pytest.mark.parametrize("name", [
+    "Concrete Chunk (6).stl",             # the loose piece the sprue carries
+    "Medium Pipe Straight Long.stl",
+    "Spruce Tree.stl",                    # "spruce" is not "sprue"
+])
+def test_the_pieces_a_sprue_carries_stay_indexed(name):
+    assert not skip(name)
+
+
+@pytest.mark.parametrize("name", [
     "75_Unsupported_AlphaAlm_Body.stl",   # DM Stash's scale spelling, file
     "75_Unsupported_Aimar_BodyMask.stl",
 ])
@@ -129,3 +156,26 @@ def test_the_75_prefix_is_anchored_and_scale_kits_without_twins_stay(name):
 ])
 def test_standalone_accessories_are_not_models(name):
     assert skip(name)
+
+
+def test_no_labelled_model_is_cut_by_the_vocabulary():
+    """Ground truth must describe the collection the walk actually indexes.
+
+    This is the guard the `75_` cut needed and did not have: commit ea1ef04
+    stopped indexing DM Stash's `75_` prefix, and five entries in
+    `up_axis_labels.json` quietly stopped being measurable — the holdout that
+    "21/21" is quoted against had become 18 models, and nothing said so until
+    somebody re-derived the walk by hand (2026-09-09). A label the vocabulary
+    excludes is not a hard failure anywhere; it just silently leaves the
+    denominator.
+
+    Every path segment is checked, not only the filename, because `skip` is
+    asked of directory names too while walking — a label under a pruned
+    directory is just as unreachable."""
+    labels = json.loads((REPO / "up_axis_labels.json").read_text())["labels"]
+    assert labels, "the labels file is the point of this test"
+    cut = [l["path"] for l in labels
+           if any(skip(part) for part in Path(l["path"]).parts)]
+    assert not cut, (
+        "these labelled models would not survive the collection walk:\n  "
+        + "\n  ".join(cut))

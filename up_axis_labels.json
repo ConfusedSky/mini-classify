@@ -1,5 +1,9 @@
 {
  "description": "Hand-labelled up axis for STL pose evaluation. Labelled by eye from 6-tile up-candidate contact sheets. Models whose upright is genuinely undefined (loose hands, wings, swords, pipes, pins) were excluded.",
+ "history": [
+  "2026-09-09: five labels pointed at DM Stash `75_Unsupported_*` files, which the walk's anchored `^75_` rule stopped indexing (commit ea1ef04), so they had silently left the measurable set. Four were re-pointed at their `32_` twins — verified the same mesh at a different scale: identical vertex counts, identical scale-normalised bounding boxes, identical geometry pick, and a contact sheet that reads the same, so the axis carries over unchanged. The fifth, 75_Unsupported_Wajoski_Wolf2, was dropped rather than re-pointed: its `32_` twin was already labelled here, so `orig` had been carrying the same wolf twice (vertex counts differ by 27 of 2.7M) and every pooled figure quoted on 44 models was really 43 distinct ones.",
+  "2026-09-09: `sprue` joined the walk's NON_MODEL_TAGS — a sprue is the packing, a raft carrying several pieces (or five of one) that the same directory already indexes individually. That cut `Damaged Metal Sheet Sprue` from the holdout, which is why it is no longer here. tests/test_naming.py::test_no_labelled_model_is_cut_by_the_vocabulary now fails whenever a vocabulary change orphans a label, so this class of silent shrink cannot recur."
+ ],
  "axes": [
   "+Z",
   "-Z",
@@ -57,12 +61,6 @@
    "path": "Basing/Industrial Drums & Canisters/Pressurized_Container_2.stl"
   },
   {
-   "stem": "75_Unsupported_Wajoski_Wolf2",
-   "set": "orig",
-   "up": "+Z",
-   "path": "DM Stash/DM Stash Jan '22 Brawn & Brains STLs - Unsupported/Wajsoki - Unsupported/Unsupported/75_Unsupported_Wajoski_Wolf2.stl"
-  },
-  {
    "stem": "32mm_FemaleOrcWarrior",
    "set": "orig",
    "up": "+Y",
@@ -87,10 +85,10 @@
    "path": "DM Stash/DM Stash Jan '22 Brawn & Brains STLs - Unsupported/Thilinos - Unsupported/Unsupported/32_Unsupported_Psyflayer_Body.stl"
   },
   {
-   "stem": "75_Unsupported_Catarina_BodyMask",
+   "stem": "32_Unsupported_Catarina_BodyMask",
    "set": "orig",
    "up": "+Z",
-   "path": "DM Stash/Crimson Masquerade/Catarina von Strassen - Unsupported/75_Unsupported_Catarina_BodyMask.stl"
+   "path": "DM Stash/Crimson Masquerade/Catarina von Strassen - Unsupported/32_Unsupported_Catarina_BodyMask.stl"
   },
   {
    "stem": "Body",
@@ -165,10 +163,10 @@
    "path": "Battletech/ebj-prime4.stl"
   },
   {
-   "stem": "75_Unsupported_Benoit_BodyNoMask",
+   "stem": "32_Unsupported_Benoit_BodyNoMask",
    "set": "holdout",
    "up": "+Z",
-   "path": "DM Stash/Crimson Masquerade/Benoit - Unsupported/75_Unsupported_Benoit_BodyNoMask.stl"
+   "path": "DM Stash/Crimson Masquerade/Benoit - Unsupported/32_Unsupported_Benoit_BodyNoMask.stl"
   },
   {
    "stem": "32_Unsupported_Mortimer_BodyNoMask",
@@ -195,10 +193,10 @@
    "path": "fago_lapices_1.stl"
   },
   {
-   "stem": "75_Unsupported_Arkham_BodyNoMask",
+   "stem": "32_Unsupported_Arkham_BodyNoMask",
    "set": "holdout",
    "up": "+Z",
-   "path": "DM Stash/Crimson Masquerade/Arkham Ravenswood - Unsupported/75_Unsupported_Arkham_BodyNoMask.stl"
+   "path": "DM Stash/Crimson Masquerade/Arkham Ravenswood - Unsupported/32_Unsupported_Arkham_BodyNoMask.stl"
   },
   {
    "stem": "32mm_TatteredTrooper2",
@@ -207,16 +205,10 @@
    "path": "Loot Studios/Fear the Eternal Embrace/DownloadAll_32mm/2- Enemies/Enemies_32mm_NoSupports/TatteredTrooper2_32mm_NoSupports/32mm_TatteredTrooper2.stl"
   },
   {
-   "stem": "75_Unsupported_Aimar_BodyNoMask",
+   "stem": "32_Unsupported_Aimar_BodyNoMask",
    "set": "holdout",
    "up": "+Z",
-   "path": "DM Stash/Crimson Masquerade/Aimar - Unsupported/75_Unsupported_Aimar_BodyNoMask.stl"
-  },
-  {
-   "stem": "Damaged Metal Sheet Sprue",
-   "set": "holdout",
-   "up": "+Z",
-   "path": "Basing/Debris Scatter/Damaged Metal Sheet Sprue.stl"
+   "path": "DM Stash/Crimson Masquerade/Aimar - Unsupported/32_Unsupported_Aimar_BodyNoMask.stl"
   },
   {
    "stem": "Bunker_smal_roof",
