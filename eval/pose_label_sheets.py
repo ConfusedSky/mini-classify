@@ -11,7 +11,7 @@ the same pixels, the VLM arbiter is shown), lays them out with
 `pose.make_contact_sheet`, and writes one PNG per model plus an `index.json`
 carrying geometry's pick, its confidence, and the cached pose if the model has
 one. A human reads the sheet, writes the true axis into
-`../up_axis_labels.json`, and the labelled set grows.
+`../labels/up_axis_labels.json`, and the labelled set grows.
 
 Serves OPEN_QUESTIONS' root bottleneck — "widen the labelled set". Every
 accuracy number in this repo rests on 49 models, of which 5 were hand-picked
@@ -136,7 +136,7 @@ def main():
          "thumb": args.thumb, "models": rows}, indent=1))
     print(f"\nwrote {len(rows)} sheets and {index}\n"
           f"fill in each model's \"label\" (one of {', '.join(AX)}), then move the "
-          f"confirmed ones into ../up_axis_labels.json")
+          f"confirmed ones into ../labels/up_axis_labels.json")
     rig.exit_without_teardown()
 
 

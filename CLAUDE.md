@@ -96,6 +96,15 @@ against a scratch cache, not the project's entry point.
 - Ground-truth labels load through `common.load_labels()` — never re-derive
   them from a sample index; the collection grew mid-session once and the same
   seed stopped drawing the same models.
+- **All hand ground truth lives in `labels/`** and nowhere else — up axes and
+  part classes alike, resolved through `common.LABELS_FILE` /
+  `PART_CLASSES_FILE`, never by rebuilding a path. It is the one category of
+  artifact in this repo that a rerun cannot reproduce, and `eval/out/` is
+  gitignored scratch: the part classes sat there untracked from 2026-09-10
+  until 2026-09-11, one `git clean` from being lost, while the write-ups
+  citing them were safely committed. `labels/README.md` says what each file is
+  and, crucially, **which sets may be pooled** — `hard` never is, and
+  `reclaim` is an error set that is a sample of nothing.
 - Name the cache and the volume beside every measured number, in docs, commits
   and memory alike. Figures differ by cache — `embed-cache512` (primary since
   2026-08-21: SigLIP-2 @512 px, 16 views) vs `embed-cache2` (SigLIP-1, its

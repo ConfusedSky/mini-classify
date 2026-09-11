@@ -20,7 +20,7 @@ paid for:
   exactly the ones it would label wrong. So proposals here come from a labeller
   measured first against the existing 49 (`pose_label_calibration.py`), the
   page shows the six candidate tiles rather than the proposal alone, and what
-  lands in `up_axis_labels.json` is what the *human* pressed.
+  lands in `labels/up_axis_labels.json` is what the *human* pressed.
 * **`undefined` is a first-class answer.** The original set excluded models
   whose upright is genuinely undefined — loose hands, wings, swords, pipes,
   pins. A page that only offers six axes forces a lie on exactly those.
@@ -38,7 +38,7 @@ import re
 from pathlib import Path
 from urllib.parse import quote
 
-from common import AX, IDX, OUT, REPO, load_labels
+from common import AX, IDX, LABELS_FILE, OUT, REPO, load_labels
 
 from src import naming, pose
 
@@ -179,8 +179,8 @@ def render(out: Path, walk: Path, n: int, seed: int, render_px: int,
 
 def _root_of(sample_path: Path) -> str:
     """The mount the sample came from, recorded so the set can be relocated —
-    `up_axis_labels.json`'s own `collection_root` convention."""
-    labels = json.loads((REPO / "up_axis_labels.json").read_text())
+    `labels/up_axis_labels.json`'s own `collection_root` convention."""
+    labels = json.loads(LABELS_FILE.read_text())
     return labels["collection_root"]
 
 
@@ -374,7 +374,7 @@ def page(dirs: list[Path], proposals_file: Path | None, page_dir: Path,
     # make a second pass feel like the first one over again.
     # already in the labels file: answered, and answered by a human. The
     # exclude bug (see `render`) let two of batch 3 through as re-draws.
-    known = json.loads((REPO / "up_axis_labels.json").read_text())
+    known = json.loads(LABELS_FILE.read_text())
     root, done = known["collection_root"], {l["path"] for l in known["labels"]}
     already = {m["path"] for m in models
                if str(Path("/" + m["path"]).relative_to(root)) in done}
@@ -506,7 +506,7 @@ save(); focus(0);
 
 
 def merge(dirs: list[Path], confirmed_file: Path, which: str) -> None:
-    """Write confirmed picks into `up_axis_labels.json`.
+    """Write confirmed picks into `labels/up_axis_labels.json`.
 
     Takes every batch the page covered, not one: a page built over several
     draws exports one file, and looking its picks up in a single manifest
@@ -521,7 +521,7 @@ def merge(dirs: list[Path], confirmed_file: Path, which: str) -> None:
     raw = json.loads(confirmed_file.read_text())
     confirmed = raw.get("picks", raw)
 
-    labels_file = REPO / "up_axis_labels.json"
+    labels_file = LABELS_FILE
     labels = json.loads(labels_file.read_text())
     have = {l["path"] for l in labels["labels"]}
     root = labels["collection_root"]
@@ -589,7 +589,7 @@ def main() -> None:
     ap.add_argument("--page", metavar="PROPOSALS.JSON", nargs="?", const="",
                     default=None, help="build the picking page")
     ap.add_argument("--merge", metavar="CONFIRMED.JSON", default=None,
-                    help="write confirmed picks into up_axis_labels.json")
+                    help="write confirmed picks into labels/up_axis_labels.json")
     ap.add_argument("--mode", default="axis",
                     choices=sorted(CHOICES), help=
                     "with --page: which question to ask — `axis` (the six "

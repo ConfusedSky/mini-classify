@@ -45,7 +45,14 @@ OUT.mkdir(parents=True, exist_ok=True)
 AX = ["+Z", "-Z", "+Y", "-Y", "+X", "-X"]   # order must match pose.UP_CANDIDATES
 IDX = {a: i for i, a in enumerate(AX)}
 
-LABELS_FILE = REPO / "up_axis_labels.json"
+# Hand ground truth lives in `labels/`, not the repo root: the up axes and the
+# part classes are the same kind of artifact — human judgement that cost a
+# labelling session and is not derivable from anything — and `eval/out/` is
+# gitignored scratch, which is where the part classes were stranded until
+# 2026-09-11. Anything reading ground truth resolves it through here.
+LABELS_DIR = REPO / "labels"
+LABELS_FILE = LABELS_DIR / "up_axis_labels.json"
+PART_CLASSES_FILE = LABELS_DIR / "part_classes_by_path.json"
 
 
 def load_labels(which=None):

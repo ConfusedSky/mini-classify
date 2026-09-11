@@ -172,7 +172,7 @@ def test_no_labelled_model_is_cut_by_the_vocabulary():
     Every path segment is checked, not only the filename, because `skip` is
     asked of directory names too while walking — a label under a pruned
     directory is just as unreachable."""
-    labels = json.loads((REPO / "up_axis_labels.json").read_text())["labels"]
+    labels = json.loads((REPO / "labels" / "up_axis_labels.json").read_text())["labels"]
     assert labels, "the labels file is the point of this test"
     cut = [l["path"] for l in labels
            if any(skip(part) for part in Path(l["path"]).parts)]
