@@ -267,6 +267,18 @@ notes at the bottom are amended in place. Open work is tracked separately in
   label set, because the arbiter harnesses silently filtered to a 44-model
   file.
 
+- [The reclaim set and the arbiter floor](docs/learnings/2026-09-10-the-reclaim-set-and-the-arbiter-floor.md)
+  — the labelled set reaches **219**; the 13 new ones are the models an earlier
+  part triage *wrongly cut*, so `reclaim` is an error set, not a draw. SigLIP
+  scores **46%** on it against 79% pooled, and **both arbiters are a no-op**:
+  gemini +0 (11/13), GLM low −1 (10/13), while reading the sheets standalone at
+  9/13 and 5/13. Ground truth there never uses `+X`/`-X`/`-Y` and both models
+  scatter picks across all three — a guess, not a judgement. The gate fires
+  *most* on this set (38%), so it routes the hardest calls to the
+  worst-qualified decider. Pooled headline unmoved at **194/214 (91%)**. Also:
+  the stem-collision bug was only ever *refused*, never stopped; `merge` wrote
+  a path into `stem` and `build_tiles` used it as a filename.
+
 ## Evergreen notes
 
 - [Queries and filters](docs/learnings/queries-and-filters.md) — open-set

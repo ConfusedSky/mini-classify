@@ -184,6 +184,25 @@ def _root_of(sample_path: Path) -> str:
     return labels["collection_root"]
 
 
+# The page asks one of three questions, and the answer vocabulary is the only
+# thing that differs. `parts` exists because the axis benchmark was scored on a
+# population production never faces: ground truth excluded parts by convention
+# while the pipeline poses everything, so a headline accuracy described the
+# easy half of the collection (2026-09-10). A part with a defensible upright —
+# a backpack, a torso, a wall panel — is pose ground truth and belongs in the
+# benchmark; only the genuinely undefined ones are skip-list ground truth.
+CHOICES = {
+    "axis": [(str(i + 1), a, a) for i, a in enumerate(AX)],
+    "triage": [("k", "keep", "a model — label its up axis")],
+    "parts": [("a", "accessory", "accessory — worn or carried"),
+              ("c", "component", "component — part of one assembly")],
+}
+UNDEFINED_TEXT = {
+    "axis": "undefined",
+    "triage": "a loose part — no upright",
+    "parts": "neither — not a part at all",
+}
+
 PAGE_CSS = """
 :root { --bg:#f4f4f5; --card:#fff; --line:#d4d4d8; --ink:#18181b;
         --dim:#71717a; --pick:#2563eb; --warn:#b45309; --warnbg:#fef3c7; }
@@ -220,6 +239,9 @@ button.sel .k { color:#dbeafe; }
 textarea { width:100%; height:150px; margin-top:12px; font-family:ui-monospace,
            monospace; font-size:12px; border:1px solid var(--line);
            border-radius:6px; padding:8px; }
+.note { margin:10px 16px 0; padding:10px 12px; border-radius:6px;
+        background:#fff8e1; border:1px solid #e6d28a; color:#4a3c00;
+        font-size:13px; line-height:1.5; white-space:pre-wrap; }
 """
 
 PAGE_JS = """
@@ -241,9 +263,14 @@ function save() {
     done + " of " + MODELS.length + " decided \\u00b7 " + und + " undefined";
 }
 
+// A stem is a display name, not an identity: "tail1", "head", "tile7" and
+// "Gnomish_Miner_Backpack" each name different files in different folders.
+// Keying answers by stem gave two distinct models one shared answer — 161
+// models on the parts page produced 154 answers, and `merge` could only
+// refuse them afterwards. The answer is keyed by path; the stem is shown.
 function paint(i) {
   const m = MODELS[i], el = document.getElementById("m" + i);
-  const got = picks[m.stem];
+  const got = picks[m.path];
   el.classList.toggle("done", got !== undefined);
   el.querySelectorAll("button[data-ax]").forEach(b => {
     b.classList.toggle("sel", b.dataset.ax === got);
@@ -251,7 +278,7 @@ function paint(i) {
 }
 
 function pick(i, ax) {
-  picks[MODELS[i].stem] = ax;
+  picks[MODELS[i].path] = ax;
   paint(i); save();
   if (i === cur) focus(Math.min(cur + 1, MODELS.length - 1));
 }
@@ -266,8 +293,7 @@ function focus(i) {
 
 document.addEventListener("keydown", e => {
   if (e.target.tagName === "TEXTAREA") return;
-  if (!TRIAGE && e.key in KEYS) { pick(cur, AXES[KEYS[e.key]]); e.preventDefault(); }
-  else if (TRIAGE && e.key === "k") { pick(cur, "keep"); e.preventDefault(); }
+  if (e.key in KEYMAP) { pick(cur, KEYMAP[e.key]); e.preventDefault(); }
   else if (e.key === "u") { pick(cur, "undefined"); e.preventDefault(); }
   else if (e.key === "n" || e.key === "j" || e.key === "ArrowDown") {
     focus(Math.min(cur + 1, MODELS.length - 1)); e.preventDefault();
@@ -277,12 +303,16 @@ document.addEventListener("keydown", e => {
 });
 
 function exportJSON() {
-  const out = JSON.stringify({picks: picks}, null, 1);
+  const out = JSON.stringify({run: RUN, picks: picks}, null, 1);
   document.getElementById("out").value = out;
   try {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([out], {type: "application/json"}));
-    a.download = "confirmed.json";
+    // Name the file after the question it answers. Every page used to
+    // download "confirmed.json", so four passes produced four files with one
+    // name and the reader renamed them by hand — and a class export and an
+    // axis export are indistinguishable until something opens them.
+    a.download = "confirmed-" + RUN.replace(/[:,]/g, "-") + ".json";
     a.click();
   } catch (e) {}
 }
@@ -290,8 +320,8 @@ function exportJSON() {
 
 
 def page(dirs: list[Path], proposals_file: Path | None, page_dir: Path,
-         triage: bool = False, decided_file: Path | None = None,
-         skip_parts: bool = False) -> None:
+         mode: str = "axis", decided_file: Path | None = None,
+         skip_parts: bool = False, note: str = "") -> None:
     """One page over one or more rendered batches.
 
     Two modes, because the two questions cost their own reader very different
@@ -336,7 +366,8 @@ def page(dirs: list[Path], proposals_file: Path | None, page_dir: Path,
             # percent-encode, then HTML-escape: these filenames carry spaces,
             # apostrophes, ampersands and parentheses, and a bare `#` in one
             # would otherwise cut the URL short at a fragment
-            rel = os.path.relpath(d / m["sheet"], page_dir)
+            home = Path(m["sheet_dir"]) if m.get("sheet_dir") else d
+            rel = os.path.relpath(home / m["sheet"], page_dir)
             sheets[m["path"]] = quote(rel)
     # A settled triage answer retires the model from the axis pass: a loose
     # part has no axis to pick, and re-asking is the one thing guaranteed to
@@ -345,17 +376,22 @@ def page(dirs: list[Path], proposals_file: Path | None, page_dir: Path,
     # exclude bug (see `render`) let two of batch 3 through as re-draws.
     known = json.loads((REPO / "up_axis_labels.json").read_text())
     root, done = known["collection_root"], {l["path"] for l in known["labels"]}
-    already = [m["stem"] for m in models
-               if str(Path("/" + m["path"]).relative_to(root)) in done]
+    already = {m["path"] for m in models
+               if str(Path("/" + m["path"]).relative_to(root)) in done}
     if already:
-        models = [m for m in models if m["stem"] not in already]
-        print(f"dropped {len(already)} already labelled: " + ", ".join(already))
+        names = sorted(m["stem"] for m in models if m["path"] in already)
+        models = [m for m in models if m["path"] not in already]
+        print(f"dropped {len(already)} already labelled: " + ", ".join(names))
     settled = {}
     if decided_file:
         raw = json.loads(decided_file.read_text())
         settled = raw.get("picks", raw)
-    if settled and not triage:
-        models = [m for m in models if settled.get(m["stem"], "keep") != "undefined"]
+    if settled and mode != "triage":
+        # keyed by path, with the stem read as a fallback for the two exports
+        # written before the page keyed on path
+        models = [m for m in models
+                  if (settled.get(m["path"]) or settled.get(m["stem"], "keep"))
+                  != "undefined"]
     proposals = {}
     if proposals_file:
         raw = json.loads(proposals_file.read_text())
@@ -367,27 +403,22 @@ def page(dirs: list[Path], proposals_file: Path | None, page_dir: Path,
 
     cards = []
     for k, m in enumerate(models):
-        p = proposals.get(m["stem"], {})
+        p = proposals.get(m["path"], proposals.get(m["stem"], {}))
         if isinstance(p, str):
             p = {"up": p}
         mine, risky = p.get("up"), bool(p.get("risky"))
         why = p.get("why", "")
         flag = (f'<span class="flag">look closely — {html.escape(why)}</span>'
                 if risky else "")
-        if triage:
-            buttons = (
-                f'<button data-ax="keep" onclick="pick({k},\'keep\')">'
-                f'<span class="k">k</span>a model — label its up axis</button>')
-        else:
-            buttons = "".join(
-                f'<button data-ax="{a}" onclick="pick({k},\'{a}\')">'
-                f'<span class="k">{i + 1}</span>{a}</button>'
-                for i, a in enumerate(AX))
+        buttons = "".join(
+            f'<button data-ax="{val}" onclick="pick({k},\'{val}\')">'
+            f'<span class="k">{key}</span>{text}</button>'
+            for key, val, text in CHOICES[mode])
         bits = []
         if mine and not risky:
             bits.append("proposed: " + html.escape(
                 ("a loose part" if mine == "undefined" else "a model")
-                if triage else mine))
+                if mode == "triage" else mine))
         if why and not risky:
             bits.append(html.escape(why))
         if p.get("from"):
@@ -399,8 +430,7 @@ def page(dirs: list[Path], proposals_file: Path | None, page_dir: Path,
  <img loading="lazy" src="{html.escape(sheets[m['path']])}" alt="">
  <div class="row">{buttons}
  <button class="und" data-ax="undefined" onclick="pick({k},'undefined')">
- <span class="k">u</span>{'a loose part — no upright' if triage
-                          else 'undefined'}</button></div>{note}
+ <span class="k">u</span>{UNDEFINED_TEXT[mode]}</button></div>{note}
 </section>""")
 
     # the pre-selection: everything the labeller was confident about, so the
@@ -411,27 +441,29 @@ def page(dirs: list[Path], proposals_file: Path | None, page_dir: Path,
     # seeds nothing either way — that is what the flag is for.
     seed = {}
     for m in models:
-        pr = proposals.get(m["stem"])
+        pr = proposals.get(m["path"], proposals.get(m["stem"]))
         if not isinstance(pr, dict) or pr.get("risky") or not pr.get("up"):
             continue
-        seed[m["stem"]] = (("undefined" if pr["up"] == "undefined" else "keep")
-                           if triage else pr["up"])
+        seed[m["path"]] = (("undefined" if pr["up"] == "undefined" else "keep")
+                           if mode == "triage" else pr["up"])
 
     # identity of this page's question: the batches it covers, and the mode
-    run_id = ("triage:" if triage else "axis:") + ",".join(sorted(d.name for d in dirs))
-    title = ("triage — is it a model?" if triage
+    run_id = mode + ":" + ",".join(sorted(d.name for d in dirs))
+    title = ("triage — is it a model?" if mode == "triage"
              else f"up-axis labelling — {len(models)} models")
-    keys = ("k keep &middot; u loose part &middot; n/p move" if triage
-            else "1-6 pick &middot; u undefined &middot; n/p move")
+    keys = " &middot; ".join([f"{k} {t.split(' — ')[0]}" for k, _v, t in CHOICES[mode]]
+                             + [f"u {UNDEFINED_TEXT[mode]}", "n/p move"])
     doc = f"""<!doctype html>
 <meta charset="utf-8"><title>{title}</title>
 <style>{PAGE_CSS}</style>
 <header>
- <b>{'model or part?' if triage else 'up axis'}</b>
+ <b>{ {'triage': 'model or part?', 'parts': 'which kind of part?',
+        'axis': 'up axis'}[mode] }</b>
  <span class="count" id="count">0 of {len(models)} decided</span>
  <button onclick="exportJSON()">Export JSON</button>
  <span class="keys">{keys}</span>
 </header>
+{f'<div class="note">{html.escape(note)}</div>' if note else ''}
 <main>
 {''.join(cards)}
 <textarea id="out" placeholder="Export JSON writes confirmed.json — and drops \
@@ -439,23 +471,25 @@ the same text here, in case the browser blocks a download from file://"></textar
 </main>
 <script>
 const AXES = {json.dumps(AX)};
-const TRIAGE = {json.dumps(bool(triage))};
+const MODE = {json.dumps(mode)};
+const KEYMAP = {json.dumps({k: v for k, v, _t in CHOICES[mode]})};
 const RUN = {json.dumps(run_id)};
-const MODELS = {json.dumps([{'stem': m['stem']} for m in models])};
+const MODELS = {json.dumps([{'stem': m['stem'], 'path': m['path']} for m in models])};
 {PAGE_JS}
 // Seed a proposal only where the human has not already decided that model.
 // Per-model rather than "first open only", so a page rebuilt with more
 // proposals mid-pass seeds the new ones without touching a single answer
 // already given — which is what lets the labeller and the reader work at
 // the same time.
-for (const [stem, up] of Object.entries({json.dumps(seed)})) {{
-  if (!(stem in picks)) picks[stem] = up;
+for (const [path, up] of Object.entries({json.dumps(seed)})) {{
+  if (!(path in picks)) picks[path] = up;
 }}
 MODELS.forEach((_, i) => paint(i));
 save(); focus(0);
 </script>"""
     page_dir.mkdir(parents=True, exist_ok=True)
-    index = page_dir / ("triage.html" if triage else "index.html")
+    index = page_dir / {"triage": "triage.html", "parts": "parts.html",
+                        "axis": "index.html"}[mode]
     index.write_text(doc)
     if stale:
         print(f"dropped {len(stale)} the vocabulary now cuts: "
@@ -466,7 +500,8 @@ save(); focus(0);
               + (" ..." if len(prefiltered) > 6 else ""))
     print(f"wrote {index} over {len(models)} models\n"
           + ("open it, mark the loose parts, Export JSON — then the axis pass "
-             "runs over what survives" if triage else
+             "runs over what survives" if mode == "triage" else
+             "open it, sort them, Export JSON" if mode == "parts" else
              "open it, pick, Export JSON, then --merge"))
 
 
@@ -478,9 +513,11 @@ def merge(dirs: list[Path], confirmed_file: Path, which: str) -> None:
     would silently drop the models that came from the others."""
     manifests = [json.loads((d / "manifest.json").read_text()) for d in dirs]
     by_stem: dict[str, list] = {}
+    by_path: dict[str, list] = {}
     for manifest in manifests:
         for m in manifest["models"]:
             by_stem.setdefault(m["stem"], []).append(m)
+            by_path.setdefault(m["path"], []).append(m)
     raw = json.loads(confirmed_file.read_text())
     confirmed = raw.get("picks", raw)
 
@@ -496,13 +533,15 @@ def merge(dirs: list[Path], confirmed_file: Path, which: str) -> None:
             continue
         if up not in IDX:
             raise SystemExit(f"{stem}: {up!r} is not one of {', '.join(AX)}")
-        hits = by_stem.get(stem, [])
+        # Pages key their answers by path (a stem is a display name, not an
+        # identity: "tail1", "head" and "tile7" each name different files in
+        # different directories). Stem keys are still read, for the files two
+        # pages exported before that fix — but only where the stem is
+        # unambiguous in this draw, because there is otherwise no way to tell
+        # which file the human answered.
+        hits = by_path.get(stem) or by_stem.get(stem, [])
         if not hits:
             raise SystemExit(f"{stem} is not in this run's manifest")
-        # A stem is a display name, not an identity: "tail1", "head" and
-        # "tile7" each name different files in different directories. Where
-        # one names several *distinct* paths there is no way to tell which the
-        # human answered, so refuse rather than label the wrong file.
         paths = {h["path"] for h in hits}
         if len(paths) > 1:
             raise SystemExit(
@@ -514,12 +553,21 @@ def merge(dirs: list[Path], confirmed_file: Path, which: str) -> None:
         if rel in have:
             skipped.append(stem)
             continue
-        added.append({"stem": stem, "set": which, "up": up, "path": rel})
+        # the manifest's stem, never the confirmed file's key: that key is a
+        # path now, and writing it here put a full path in every `stem` field
+        # — which `common.build_tiles` then used as a *filename*.
+        added.append({"stem": m["stem"], "set": which, "up": up, "path": rel})
 
     labels["labels"].extend(added)
     seeds = ", ".join(str(m["seed"]) for m in manifests)
     filtered = all(m.get("part_filter") for m in manifests)
-    labels.setdefault("sets", {})[which] = (
+    # A manifest that was not built by `render` says what it is instead. The
+    # default sentence claims a random draw at a seed, and a set assembled some
+    # other way — reclaimed from an earlier triage, hand-picked — would inherit
+    # that claim and read as a sample of the collection when it is not. The
+    # sets are pooled by other harnesses on exactly that basis.
+    notes = [m["note"] for m in manifests if m.get("note")]
+    labels.setdefault("sets", {})[which] = " ".join(notes) if notes else (
         f"random draw from the collection walk, seed {seeds}, "
         f"excluding every path already labelled"
         + (", and every name carrying a left/right marker or a numbered part "
@@ -542,12 +590,19 @@ def main() -> None:
                     default=None, help="build the picking page")
     ap.add_argument("--merge", metavar="CONFIRMED.JSON", default=None,
                     help="write confirmed picks into up_axis_labels.json")
-    ap.add_argument("--triage", action="store_true",
-                    help="with --page: ask only model-or-part, over every "
-                         "model the proposals file does not already cover")
+    ap.add_argument("--mode", default="axis",
+                    choices=sorted(CHOICES), help=
+                    "with --page: which question to ask — `axis` (the six "
+                    "candidates), `triage` (model or loose part), or `parts` "
+                    "(accessory or assembly component)")
     ap.add_argument("--decided", default=None, metavar="TRIAGE.JSON",
                     help="with --page: a triage export; models answered "
                          "\"undefined\" there are dropped from the axis pass")
+    ap.add_argument("--note", default="", help=
+                    "with --page: a banner above the cards. A pass that asks "
+                    "the standing question differently — a convention, a "
+                    "changed meaning for `u` — has to say so where the reader "
+                    "is looking.")
     ap.add_argument("--page-dir", default=None,
                     help="where index.html goes (default: the first --out dir)")
     ap.add_argument("--set", dest="which", default="expand",
@@ -576,8 +631,9 @@ def main() -> None:
                [Path(e) for e in args.exclude], not args.all_shapes)
     elif args.page is not None:
         page(dirs, Path(args.page) if args.page else None,
-             Path(args.page_dir) if args.page_dir else dirs[0], args.triage,
-             Path(args.decided) if args.decided else None, not args.all_shapes)
+             Path(args.page_dir) if args.page_dir else dirs[0], args.mode,
+             Path(args.decided) if args.decided else None, not args.all_shapes,
+             args.note)
     elif args.merge:
         merge(dirs, Path(args.merge), args.which)
     else:

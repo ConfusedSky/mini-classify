@@ -808,3 +808,27 @@ Moved out of this file; the measurements are in `LEARNINGS.md`.
   `src/pose.py`; LEARNINGS, "Arbiter backends, sheet sizes, presentations and
   effort" has every number, including the ones that rule out GLM max, 1024
   sheets, f3d tiles and gpt-5.6-luna.
+- **Can a part carry pose ground truth at all? Parked 2026-09-10.** The 206-model
+  benchmark excludes parts from ground truth but production poses them anyway,
+  so 94% describes a population the collection does not have. The plan was to
+  label the up axis of the 160 triaged parts — those with a defensible upright
+  joining the benchmark, those without becoming an explicit skip list. The class
+  pass finished (56 accessory, 82 component, 16 that turned out not to be parts);
+  the axis pass stopped after 11 proposals because **the reader's judgement was
+  that most parts are genuinely ambiguous**, which is itself the finding: if a
+  human cannot name the upright of a shield, a wing panel or a lettered manor
+  wall, there is no ground truth to score against and the honest move may be to
+  keep excluding them — and instead measure what the *pipeline costs* on them
+  (the gate fires on 66% of parts against 26% of models, a projected 61-72% of
+  arbiter spend), rather than what it gets right. Unsettled and blocking: for a
+  worn or carried piece, is "up" as-worn/as-assembled or as it sits on a print
+  bed? The proposals so far assume as-worn. State: `eval/out/parts/` holds the
+  sheets, `manifest.json`, `classes.resolved.json` (path-keyed) and 11 axis
+  proposals; the page is `eval/out/parts/index.html`.
+  **Amended 2026-09-10:** the `reclaim` set gives the first measurement that
+  bears on this. On 13 models built from exactly the shapes that defeat a
+  name filter, the arbiter is **+0 (gemini) and −1 (GLM low)** while reading
+  the sheets standalone at 9/13 and 5/13 — so on the shapes where the gate
+  fires hardest it adds nothing. That argues the cheaper fix is a gate that
+  declines to call when there is no up-axis evidence to read, rather than a
+  better arbiter. See the dated learnings entry.

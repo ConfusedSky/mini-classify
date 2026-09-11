@@ -18,7 +18,8 @@
   "holdout": "fresh sample from files the first never touched; method frozen",
   "hard": "models added by hand, chosen for being failure-prone rather than by random draw. Deliberately selected, so accuracy on this set is not comparable to orig/holdout and must not be pooled into a headline number without saying so.",
   "expand": "random draw from the collection walk, seed 909, 5150, excluding every path already labelled; proposed by a labeller measured on the first 49 and confirmed by hand from the same six-tile sheets — so these are model-proposed and human-confirmed, not hand-labelled the way orig/holdout were. Drawn without the likely-part filter, so it is a sample of the collection rather than of its whole models. Method frozen as of this draw.",
-  "expand2": "random draw from the collection walk, seed 7777, excluding every path already labelled, and every name carrying a left/right marker or a lettered-family sibling — so this set is a sample of the collection's *whole* models, not of the collection, and its rates are not comparable to `expand`'s. Differs from `expand` in one more way that matters: there the human decided part-vs-model first and the labeller only proposed axes; here the labeller proposed **both**, and the human adjudicated both on their own review pages. Agreement on that review: 62/66 on part-vs-model and 36/38 on the axis, with every disagreement but one falling inside the proposals the labeller had flagged as uncertain. Method frozen as of this draw."
+  "expand2": "random draw from the collection walk, seed 7777, excluding every path already labelled, and every name carrying a left/right marker or a lettered-family sibling — so this set is a sample of the collection's *whole* models, not of the collection, and its rates are not comparable to `expand`'s. Differs from `expand` in one more way that matters: there the human decided part-vs-model first and the labeller only proposed axes; here the labeller proposed **both**, and the human adjudicated both on their own review pages. Agreement on that review: 62/66 on part-vs-model and 36/38 on the axis, with every disagreement but one falling inside the proposals the labeller had flagged as uncertain. Method frozen as of this draw.",
+  "reclaim": "the 16 models the 2026-09-09 part triage wrongly cut as parts, recovered by the 2026-09-10 class pass which ruled they are not parts at all — terrain, furniture and one figure with ordinary uprights. NOT a sample of anything: it is the error set of an earlier filter, so it is biased toward shapes that fooled that filter (flat slabs, lettered families, near-symmetric solids). Proposed by a labeller and confirmed by hand from the same six-tile sheets; 3 were ruled to have no defensible upright."
  },
  "labels": [
   {
@@ -1256,6 +1257,84 @@
    "set": "expand2",
    "up": "+Y",
    "path": "Bestarium/2022_02_Man Eaters Part 2/Release Files STL/Manhunter/Manhunter P2.stl"
+  },
+  {
+   "stem": "32mm_MasterBed",
+   "set": "reclaim",
+   "up": "+Y",
+   "path": "Loot Studios/Neon Street 3k/All_32mm/Objects_NoSupports/MasterBed_NoSupports/32mm_MasterBed.stl"
+  },
+  {
+   "stem": "Golemmar_Gnome_C_(Hat)",
+   "set": "reclaim",
+   "up": "+Z",
+   "path": "Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome C/Kit II (Hat, Hammer & Shield)/Golemmar_Gnome_C_(Hat).stl"
+  },
+  {
+   "stem": "32mm_LasgunTurret_Trooper",
+   "set": "reclaim",
+   "up": "-Z",
+   "path": "Loot Studios/Sandy Dunes of Lutba/All_Objects_Part1/LasgunTurret/No Supports/32mm_LasgunTurret_Trooper.stl"
+  },
+  {
+   "stem": "Log_Stool_4 (repaired)",
+   "set": "reclaim",
+   "up": "+Z",
+   "path": "Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Adventurer Camp/Modular Tents/Log_Stool_4 (repaired).stl"
+  },
+  {
+   "stem": "32mm_Antenna",
+   "set": "reclaim",
+   "up": "+Y",
+   "path": "Loot Studios/Nuclear Wasteland/DownloadAll_32mm/4- Environment/Environment_NoSupport/Antenna_NoSupports/32mm_Antenna.stl"
+  },
+  {
+   "stem": "Rohr_Gerade",
+   "set": "reclaim",
+   "up": "+Z",
+   "path": "Warhammer/Warhammer_40k_Terrain_Pipelines/files/Rohr_Gerade.stl"
+  },
+  {
+   "stem": "OutPost_wall_straight_right",
+   "set": "reclaim",
+   "up": "+Z",
+   "path": "Warhammer/Warhammer_40K_Outpost_-_smal/files/OutPost_wall_straight_right.stl"
+  },
+  {
+   "stem": "32mm_WallGateDamaged_Gate",
+   "set": "reclaim",
+   "up": "+Y",
+   "path": "Loot Studios/Sandy Dunes of Lutba/All_Objects_Part2/WallGateDamaged/No Supports/32mm_WallGateDamaged_Gate.stl"
+  },
+  {
+   "stem": "Bark Tree Feature (2)",
+   "set": "reclaim",
+   "up": "+Y",
+   "path": "Basing/Bark Trees/Bark Trees/Bark Tree Feature (2).stl"
+  },
+  {
+   "stem": "gargoyle1",
+   "set": "reclaim",
+   "up": "-Z",
+   "path": "Warhammer/mean-woman-flying-snek-bug-but-accually-not-potatoe20211223-751-1t61so/mean-woman-flying-snek-bug-but-accually-not-potatoe/gargoyle1.stl"
+  },
+  {
+   "stem": "Tent_Extra_-_Potions_&_Scrolls (repaired)",
+   "set": "reclaim",
+   "up": "+Z",
+   "path": "Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Adventurer Camp/Modular Tents/Tent_Extra_-_Potions_&_Scrolls (repaired).stl"
+  },
+  {
+   "stem": "Rohr_Adapter",
+   "set": "reclaim",
+   "up": "+Z",
+   "path": "Warhammer/Warhammer_40k_Terrain_Pipelines/files/Rohr_Adapter.stl"
+  },
+  {
+   "stem": "Me262_Kit",
+   "set": "reclaim",
+   "up": "+Z",
+   "path": "Me-262+Schwalbe+Kit+Card/files/Me262_Kit.stl"
   }
  ],
  "collection_root": "/run/media/masa/STLLibrary",
