@@ -89,8 +89,22 @@ def main():
     sets = {}
     for l in labels:
         sets.setdefault(l["set"], []).append(l["stem"])
+    # Rows are derived from the file, never written down. This table named the
+    # four sets that existed when it was written; the labelled set reached 219
+    # across six sets on 2026-09-11, so a hardcoded list reported 47 models and
+    # silently dropped 172 — the same failure `backbone_sweep.py` was fixed for
+    # on 2026-09-10, and the same disease as the arbiter harnesses filtering to
+    # a 44-model file. `hard` is hand-picked failures and stays out of both
+    # pooled rows, by the convention LEARNINGS quotes.
+    present = list(dict.fromkeys(l["set"] for l in labels))
     sets["orig+hold"] = sets.get("orig", []) + sets.get("holdout", [])
-    order = [n for n in ("orig", "holdout", "orig+hold", "hard") if sets.get(n)]
+    sets["all but hard"] = [l["stem"] for l in labels if l["set"] != "hard"]
+    order = [n for n in present if n != "hard"] + ["orig+hold", "all but hard", "hard"]
+    order = [n for n in order if sets.get(n)]
+    # The escalation rate has to be read on the same population as the accuracy
+    # it sits beside: a scheme that buys a model by escalating twice as often
+    # has bought nothing, and that trade cannot be judged across two samples.
+    esc_on = "all but hard"
 
     hdr = (f"{'scheme':34} " + " ".join(f"{n:>11}" for n in order)
            + f" {'escalates':>11}")
@@ -104,12 +118,12 @@ def main():
             for grp in order:
                 ok = sum(picks[s][0] == gold[s] for s in sets[grp])
                 cells.append(f"{ok}/{len(sets[grp])}")
-            esc = sum(pose.needs_arbiter_margin(picks[s][1]) for s in sets["orig+hold"])
+            esc = sum(pose.needs_arbiter_margin(picks[s][1]) for s in sets[esc_on])
             name = ("unweighted (pre-v3)" if p == 0 else
                     f"hard switch (p={p:g})" if p >= 99 else
                     f"floor {floor:g}, p={p:g}")
             print(f"{name:34} " + " ".join(f"{c:>11}" for c in cells)
-                  + f" {esc:>7}/{len(sets['orig+hold'])}")
+                  + f" {esc:>7}/{len(sets[esc_on])}")
             results[name] = {s: (AX[picks[s][0]], round(picks[s][1], 3),
                                  round(picks[s][2], 3)) for s in gold}
 

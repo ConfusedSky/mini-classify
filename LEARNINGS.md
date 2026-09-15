@@ -279,6 +279,18 @@ notes at the bottom are amended in place. Open work is tracked separately in
   the stem-collision bug was only ever *refused*, never stopped; `merge` wrote
   a path into `stem` and `build_tiles` used it as a filename.
 
+- [geo_floor confirmed at 214](docs/learnings/2026-09-15-geo-floor-confirmed-at-214.md)
+  — `GEO_FLOOR_POWER = 2` shipped with cache v3 on 49 models; on 214 it is
+  **+6 over pre-v3 (201/214 vs 195/214) while escalating *less*** (18 vs 22),
+  monotone in p, and p=99 does no better. **`orig`/`holdout` do not move at
+  all** — every gain is in `expand`/`expand2`/`reclaim`, so the 42-model set
+  could never have answered this. The gains cluster on flat and near-symmetric
+  shapes, the same population where the VLM arbiter was a no-op: a quieter
+  wrong input beats a better tie-breaker. Nothing in `src/` changed — this is
+  confirmation, not a proposal. Two harness bugs: the backbone was hardcoded to
+  the wrong tower (now `common.production_model()`), and the table reported 47
+  of 214 models. Third hardcoded-set-list bug in eight days.
+
 ## Evergreen notes
 
 - [Queries and filters](docs/learnings/queries-and-filters.md) — open-set
