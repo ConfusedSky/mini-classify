@@ -171,7 +171,9 @@ bakes `rotateX(-π/2)` into every STL on load and its `toSceneSpace` maps
 the second most common label here — so that is where a real mismatch would
 appear. Filed as model-browser#8, because `OrbitAxis` defaults to `'y'` and
 `+Z` resolves to `'y'`: for the commonest orientation the pill cannot
-distinguish "resolved from the index" from "nothing stored".
+distinguish "resolved from the index" from "nothing stored". **Closed
+2026-09-11** in that repo; the coordinate table above is the part that stays
+true regardless.
 
 ## Where the set stands
 

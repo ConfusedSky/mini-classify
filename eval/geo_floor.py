@@ -31,11 +31,15 @@ import argparse, json
 import numpy as np
 
 from common import (AX, ORBIT_N_AZ, ORBIT_PX, OUT,  # puts REPO on sys.path
-                    build_orbit_tiles, build_tiles, load_labels)
+                    build_orbit_tiles, build_tiles, load_labels,
+                    production_model)
 
 from src import pose
 
-BACKBONE = "google/siglip2-so400m-patch14-384"
+# Not a constant: `rig.embedder()`'s default and this file's old hardcoded
+# `patch14-384` are both the *wrong tower* for embed-cache512, and a wrong
+# tower moves exactly the low-margin picks this experiment is about.
+BACKBONE = production_model()
 
 
 def state(labels):

@@ -45,6 +45,31 @@ OUT.mkdir(parents=True, exist_ok=True)
 AX = ["+Z", "-Z", "+Y", "-Y", "+X", "-X"]   # order must match pose.UP_CANDIDATES
 IDX = {a: i for i, a in enumerate(AX)}
 
+
+def production_model() -> str:
+    """The backbone the newest cache was built with, not the Embedder default.
+
+    `rig.embedder()` defaults to `patch14-384`; embed-cache512 was built with
+    `patch16-512`. Taking the default scores a *different tower* than
+    production and moves low-margin picks — it moved 7 of 206 ensemble picks on
+    2026-09-10, and was only caught because two independent runs disagreed. Any
+    harness that wants to describe production resolves its backbone here, the
+    same way every entry point resolves cache identity.
+
+    Imports are deferred: this returns a plain string, but `src.identity` and
+    `src.cachedir` are not free, and `common` is imported by harnesses that
+    only ever build an argument parser.
+    """
+    from src.cachedir import load_run_params
+    from src.identity import DEFAULT_MODEL
+    caches = sorted(REPO.glob("embed-cache*/run-params.json"),
+                    key=lambda p: p.stat().st_mtime)
+    for rp in reversed(caches):
+        m = load_run_params(rp.parent).get("model")
+        if m:
+            return m
+    return DEFAULT_MODEL
+
 # Hand ground truth lives in `labels/`, not the repo root: the up axes and the
 # part classes are the same kind of artifact — human judgement that cost a
 # labelling session and is not derivable from anything — and `eval/out/` is

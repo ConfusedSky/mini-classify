@@ -23,23 +23,9 @@ import argparse, json
 
 from PIL import Image
 
-from common import AX, OUT, build_tiles, load_labels   # puts REPO on sys.path
+from common import AX, OUT, build_tiles, load_labels, production_model   # puts REPO on sys.path
 
 from src import pose
-
-
-def _production_model() -> str:
-    """The backbone the newest cache was built with, not the Embedder default."""
-    from src.cachedir import load_run_params
-    from src.identity import DEFAULT_MODEL
-    from common import REPO
-    caches = sorted(REPO.glob("embed-cache*/run-params.json"),
-                    key=lambda p: p.stat().st_mtime)
-    for rp in reversed(caches):
-        m = load_run_params(rp.parent).get("model")
-        if m:
-            return m
-    return DEFAULT_MODEL
 
 
 def main() -> None:
@@ -64,7 +50,7 @@ def main() -> None:
     # moved 7 of 206 ensemble picks, all of them low-margin. Read the cache's
     # own run-params instead, the way every other entry point resolves its
     # cache identity.
-    model = args.model or _production_model()
+    model = args.model or production_model()
     labels = load_labels(args.which)
     print(f"{len(labels)} labels | tiles at {args.render_px}px | "
           f"gate margin {args.up_margin} | backbone {model}")
