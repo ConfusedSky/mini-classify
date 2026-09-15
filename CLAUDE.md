@@ -20,8 +20,15 @@ proposal.
 - `LEARNINGS.md` — index of dated session write-ups in `docs/learnings/`.
   Every measured number in this repo has its story there; a citation like
   "LEARNINGS, Overlap and the thermal ceiling" resolves through the index.
-- `OPEN_QUESTIONS.md` — open work. Entries are amended in place with the
-  answer (often ~~struck through~~), not deleted.
+- `OPEN_QUESTIONS.md` — open work only: the open arguments and the reasoning
+  kept around them, amended in place as they evolve (often ~~struck through~~).
+  Two exits keep the file lean, both under Conventions: a discrete, closable
+  task graduates to a GitHub issue (a `→ #N` pointer stays in the entry), and a
+  *settled* question departs to `RESOLVED_QUESTIONS.md`.
+- `RESOLVED_QUESTIONS.md` — the settled counterpart: a flat one-line-per-answer
+  list, each linking the `docs/learnings/` write-up that holds the full story
+  where one exists. The quick "what did we decide about X" index; `LEARNINGS.md`
+  stays the measured record.
 - `docs/actor-refactor/` — the refactor, **shipped**: `interfaces.md` is the
   live spec (calling conventions, the wiring, the import-rule table — read it
   before adding a module or an import), `data_structures.md` the message and
@@ -93,6 +100,16 @@ against a scratch cache, not the project's entry point.
   line in `LEARNINGS.md`. Spike scripts live in `eval/` with a row in
   `eval/README.md`; raw output goes to `eval/out/` (gitignored) — the
   write-up is the record.
+- **`OPEN_QUESTIONS.md` holds only open work; settled questions leave it.** An
+  entry lives here while its question is open, amended in place as partial
+  answers land. It has two ways out. (1) When it becomes a single task someone
+  could pick up and close, open a GitHub issue and leave a `→ #N` pointer in
+  the entry (issues #3, #4, #6–#8 already did this). (2) When it is settled, add
+  a one-line entry to `RESOLVED_QUESTIONS.md` — the question, its answer, and a
+  link to the `docs/learnings/` write-up if one exists — and delete it from
+  here. A settled question worth a measured write-up gets its learnings entry
+  the same way any finding does (convention above); an argument-only decision
+  just needs the one line.
 - Ground-truth labels load through `common.load_labels()` — never re-derive
   them from a sample index; the collection grew mid-session once and the same
   seed stopped drawing the same models.
