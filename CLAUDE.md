@@ -11,7 +11,7 @@ parent that owns admission and drains results, one spawned render child doing
 all Open3D work, and SigLIP in the parent. `classify_stls.py` is the CLI entry
 and **nothing imports it**; the other top-level files are tools
 (`test_categories.py` is the REPL, plus `cluster_models.py`,
-`migrate_cache_keys.py`, `unpack_models.py`). Start from
+`migrate_cache_keys.py`, `migrate_pose_mtimes.py`, `unpack_models.py`). Start from
 `docs/actor-refactor/interfaces.md`: it is the spec of what exists, not a
 proposal.
 
