@@ -38,25 +38,36 @@ from src.identity import collection_root
 
 
 def rewritten_paths(manifest: Path):
-    """Collection-root-relative paths from fix_normals.py's manifest.
+    """{collection-root-relative path: set of sizes it was rewritten at}.
 
-    Its paths carry a leading tree name (`original/`, `clustered-hq/`) because
-    it walks several sibling trees of one corpus, while a cache is keyed under
-    whichever single tree it was built against. Stripping that component is what
-    lets a cache built on `deduplicated/` claim a rewrite recorded against
-    `original/` — which is the normal case, since the two are hardlinks to the
-    same inode and the rewrite lands on both.
+    The paths carry a leading tree name (`original/`, `clustered-hq/`) because
+    the rewriter walks several sibling trees of one corpus, while a cache is
+    keyed under whichever single tree it was built against. Stripping that
+    component is what lets a cache built on `deduplicated/` claim a rewrite
+    recorded against `original/` — the normal case, since those two are
+    hardlinks to one inode and a rewrite lands on both.
+
+    It also means a rewrite recorded against `clustered-hq/` would otherwise
+    license re-keying the `deduplicated/` file of the same name, which is a
+    different file that may never have been touched. Carrying the size the
+    rewriter saw is what closes that: a re-key has to match a size some tree
+    was actually rewritten at, not merely the size the file happens to have now.
     """
-    entries = json.loads(manifest.read_text())
-    return {str(Path(*Path(e["path"]).parts[1:])) for e in entries}
+    sizes = {}
+    for e in json.loads(manifest.read_text()):
+        rel = str(Path(*Path(e["path"]).parts[1:]))
+        sizes.setdefault(rel, set()).add(e["size"])
+    return sizes
 
 
-def plan(cache, root, rels):
+def plan(cache, root, rewrites):
     """(moves, already, absent, unclaimed) for the named rewrites.
 
     `moves` maps an old key to the current identity of the same file. A file is
     matched on its relative path and its byte count, never on mtime: the old
-    mtime is precisely what was lost.
+    mtime is precisely what was lost. The byte count has to agree three ways —
+    the cache key, the file on disk, and the size the rewriter recorded — or the
+    entry is left for the next run to resolve honestly.
     """
     by_rel = {}
     for key in cache:
@@ -64,7 +75,7 @@ def plan(cache, root, rels):
         by_rel.setdefault(rel, []).append((key, size))
 
     moves, already, absent, unclaimed = {}, [], [], []
-    for rel in sorted(rels):
+    for rel, rewritten_sizes in sorted(rewrites.items()):
         f = root / rel
         if not f.is_file():
             absent.append(rel)
@@ -73,8 +84,13 @@ def plan(cache, root, rels):
         if new in cache:
             already.append(rel)
             continue
-        size = str(f.stat().st_size)
-        candidates = [k for k, s in by_rel.get(rel, []) if s == size]
+        size = f.stat().st_size
+        if size not in rewritten_sizes:
+            # The name was rewritten in some tree, but not at this file's size,
+            # so this is not that file.
+            unclaimed.append(rel)
+            continue
+        candidates = [k for k, s in by_rel.get(rel, []) if s == str(size)]
         if not candidates:
             unclaimed.append(rel)
             continue
@@ -110,11 +126,11 @@ def main():
 
     path = cache_dir / "pose-cache.json"
     cache = json.loads(path.read_text())
-    rels = rewritten_paths(args.rewrites)
-    moves, already, absent, unclaimed = plan(cache, root, rels)
+    rewrites = rewritten_paths(args.rewrites)
+    moves, already, absent, unclaimed = plan(cache, root, rewrites)
 
     print(f"collection root {root}")
-    print(f"rewrites   {len(rels)} files named by the manifest")
+    print(f"rewrites   {len(rewrites)} files named by the manifest")
     print(f"poses      {len(moves)} to re-key of {len(cache)} cached"
           + (f", {len(already)} already current" if already else ""))
     paid = [k for k in moves if cache[k].get("source") == "vlm"]
@@ -127,8 +143,8 @@ def main():
     if unclaimed:
         # Either the model was never posed, or it was posed and then rewritten
         # at a *different* size, which this tool must not guess about.
-        print(f"           {len(unclaimed)} have no cached pose at their "
-              f"recorded size; they will be resolved on the next run")
+        print(f"           {len(unclaimed)} have no cached pose at a size the "
+              f"rewriter recorded; they will be resolved on the next run")
     print("renders and embeddings are left to miss on purpose: the mesh shades "
           "the other way round now, so the cached views are stale.")
 
