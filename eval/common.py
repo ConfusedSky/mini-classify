@@ -78,6 +78,31 @@ def production_model() -> str:
 LABELS_DIR = REPO / "labels"
 LABELS_FILE = LABELS_DIR / "up_axis_labels.json"
 PART_CLASSES_FILE = LABELS_DIR / "part_classes_by_path.json"
+TRIAGE_FILE = LABELS_DIR / "triage_by_path.json"
+
+
+def load_triage():
+    """Model-or-part ground truth as [{path, part, draws, filtered}].
+
+    The triage's answers, overruled where the later part-class pass read the
+    same file differently (labels/README.md): its `undefined` is a model, and a
+    triage `keep` it called a part is a conflict between two human answers,
+    so it is dropped. `filtered` marks a path drawn only by part-filtered draws.
+    """
+    raw = json.loads(TRIAGE_FILE.read_text())
+    classes = json.loads(PART_CLASSES_FILE.read_text())["picks"]
+    filtered = {d for d, v in raw["draws"].items() if v["part_filter"]}
+    out = []
+    for rel, t in raw["picks"].items():
+        part = t["triage"] == "undefined"
+        cls = classes.get(rel)
+        if cls == "undefined":
+            part = False
+        elif cls is not None and not part:
+            continue
+        out.append({"path": Path("/" + rel), "part": part, "draws": t["draws"],
+                    "filtered": all(d in filtered for d in t["draws"])})
+    return out
 
 
 def load_labels(which=None):

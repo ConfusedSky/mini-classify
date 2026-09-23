@@ -1,0 +1,2804 @@
+{
+ "draws": {
+  "label_expand": {
+   "seed": 909,
+   "part_filter": false,
+   "walk": "walk-e01f3c61998cfeef6b032f39d5910a26ac6b5ba1.json",
+   "models": 170
+  },
+  "label_expand2": {
+   "seed": 5150,
+   "part_filter": false,
+   "walk": "walk-e01f3c61998cfeef6b032f39d5910a26ac6b5ba1.json",
+   "models": 95
+  },
+  "label_expand3": {
+   "seed": 7777,
+   "part_filter": true,
+   "walk": "walk-e01f3c61998cfeef6b032f39d5910a26ac6b5ba1.json",
+   "models": 70
+  }
+ },
+ "picks": {
+  "run/media/masa/STLLibrary/Loot Studios/War for Humanity/DownloadAll_32/Objects_32mm_NoSuports/Container_32mm_NoSupports/32mm_Container_part09.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Basing/Grass Tufts/Grass Tufts Sprue.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Damn Nation/All_32mm/All_32mm/TheAccursed_32mm_NoSupported/HellishTripod_32mm_NoSupports/32mm_HellishTripod_Tube.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/Warhammer_40K_Outpost_-_Add-On_for_medium_Outpost/files/OutPost_Middle_ramp_short_plank.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/HauntingBanshee_32mm_NoSupports/32mm_HauntingBanshee.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Sandy Dunes of Lutba/All_Busts/BaronBartholomewRiberdani_Bust/No Supports/BartholomewRiberdani_Bust_Torso.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Nuclear Wasteland/DownloadAll_32mm/2- Enemies/Enemies_32mm_NoSupports/Enemies_32mm_NoSupports/Warthog_32mm_NoSupports/32mm_Warthog.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/The Demon King Spawn/The Demon King Spawn/Mephisto the Daemon Smith/Kit II (Daemon Prince)/Mephisto_Axe_R (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Neon Street 3k/All_32mm/Objects_NoSupports/MasterBed_NoSupports/32mm_MasterBed.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/War for Humanity/DownloadAll_32/Heroes_32mm_NoSuports/MarineSniper_32mm_NoSupports/32mm_MarineSniper.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/DragonSullManor_32mm_NoSupports/32mm_DragonSkullManor_B.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/space smurf nightmare/strongleg1.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Ship Ahoy/All_Objects/RumBottle2/No Supports/32mm_Rumbottle2.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian E (f)/Barbarian_Sword_R_(f_size) (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/Warhammer_40K_Outpost_-_Add-On_for_medium_Outpost/files/OutPost_Middle_frame_edge_top_holder.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/The Rebels Strike Back/DownloadAll_32mm/3- Space Ships/SpaceShips_32mm_NoSupports/RebelliousSavSpaceship_NoSupports/32mm_RebelliousSavSpaceship_R_Wing_Front.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Eye of the Watcher/All_32mm/Enemies_32mm_NoSupports/Ziadtroks_32mm_NoSupports/32mm_Ziadtroks_Tentacle_B.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/The Demon King Spawn/The Demon King Spawn/Lilit the Matriarch/Lilith_Blade_L.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Maneaters Nagarots/31 Maneaters Nagarots - November 2021 AG/Princess Kseerix (pinup)/Princess_Kseerkix (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Order of the Labyrinth/34 Order of the Labyrinth - February 2022 AG/Minoc Columns/Minoc_Column_A (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Sandy Dunes of Lutba/All_WarriorsOfLutba_Part2/LutbaRobotRider/32mm/No Supports/32mm_LutbaRobotRider.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Darkness of the Lich Lord/37 Darkness of the Lich Lord - May 2022 AG/Skutagaard Draugar/Skutagaard Draugr B/Skutagaard_Draugr_B.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider A (m)/Dragonpeak_Smilodon_A_(no_saddle) (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Archanists Guild/Apprentice Arcanists/Apprentice Arcanist B/Kit II (No Hood, Dagger & Staff)/Apprentice_Dagger_R.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Spacecraft-Crasher/All_Objects/AlienQueensNest/No Supports/32mm_AlienQueensNest_C.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/The Crimson Sand Arena/ImperatorTiberius/32mm/No Supports/32mm_Imperator_Tiberius.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Cult Of Hunger/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/Hyena_32mm_NoSupports/32mm_Hyena.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/War for Humanity/DownloadAll_32/Objects_32mm_NoSuports/KC3900Zeus_32mm_NoSupports/KC3900Zeus_Upside_Part_03.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Darkness of the Lich Lord/37 Darkness of the Lich Lord - May 2022 AG/Skutagaard Wraiths/Skutagaard Wraith A/Wraith_Scythe_R.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/little-dnaborrowers-kit20210724-29228-fsf3ga/little-dnaborrowers-kit/Armored Torso.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand",
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Troubles in Taverns 10 Heroes/Troubles in Taverns 10 Heroes/Korg 2 Headed Dragon/Korg_Crossbow_R (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Gammelgren the Elder/Gammelgren_Hand_R (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome C/Kit II (Hat, Hammer & Shield)/Golemmar_Gnome_C_(Hat).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/Warhammer_40K_Outpost_-_smal/files/OutPost_wall_straight_right.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Vampiric Barbajiann/Mounted_Lenora (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Maneaters Nagarots/31 Maneaters Nagarots - November 2021 AG/Nargskerak Darkscale/Nargskerak_Pointing_Blade_R (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Darkness of the Lich Lord/37 Darkness of the Lich Lord - May 2022 AG/King Skutagaard - the Lich Lord/Lich_Lord_Hand_R.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Basing/Industrial Drums & Canisters/Leaking_Metal_Drum_.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Nightmares of the Abyss/All_32mm/Enemies_32mm_NoSupports/Vrock_32mm_NoSupports/32mm_Vrock_Wing_Left.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Troubles in Taverns 10 Heroes/Merrian Silverfinger/Merrian_Silverfinger(repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Damn Nation/All_32mm/All_32mm/TheMisfits_32mm_NoSupported/Ben_32mm_NoSupports/32mm_Ben.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Archanists Guild/Volrunax Runebeard - The Guildmaster/Volrunax_Runebeard.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/The Demon King Spawn/The Demon King Spawn/Gorge Imps/Gorge Imp B/Kit II (Bare Hands)/Imp_Empty_Hand_L.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Sandy Dunes of Lutba/All_Objects_Part1/LasgunTurret/No Supports/32mm_LasgunTurret_Trooper.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Wood_32mm_NoSupports/32mm_Wood.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/Stroganoff/epic-scale-mars-warlord-titan/Mars_Warlord_Right_Shoulder_Armour.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Bloodfiend Riders/Bloodfiend RIder C/Bloodfiend_Rider_C_(f)_(repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Order of the Labyrinth/34 Order of the Labyrinth - February 2022 AG/Minoc Chariots/Minoc Chariot B/Minoc_Horse_B1_(no_harness) (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/War for Humanity/DownloadAll_32/Enemies_32mm_NoSuports/HornetChimeromorph_32mm_NoSupports/32mm_HornetChimeromorph.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/mean-woman-flying-snek-bug-but-accually-not-potatoe20211223-751-1t61so/mean-woman-flying-snek-bug-but-accually-not-potatoe/wing4.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Maneaters Nagarots/31 Maneaters Nagarots - November 2021 AG/Nagarot Crawlers & Giant Snakes/Nagarot Crawler & Snake B/Nagarot_Crawler_B_(m) (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Archanists Guild/Apprentice Arcanists/Apprentice Arcanist F/Kit II (No Hood, Spell & Grimoire)/Arcanist_Apprentice_F_(No_Hood).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Archanists Guild/Apprentice Arcanists/Apprentice Arcanist A/Kit I (Staff & Spell)/Apprentice_Spell_Arcane_Circle1__R_v2.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/A Light In the Shadow/All_32mm/Environments_32mm_NoSupports/Gate_32mm_NoSupports/32mm_Gate.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand",
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Bloodfiend Riders/Bloodfiend RIder B/Bloodfiend_B_(saddle) (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/Stroganoff/epic-scale-mars-warlord-titan/Mars_Warlord_Torso_Armour_C.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Adventurer Camp/Modular Tents/Triangular_Tent_C (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/FunghySkirmisher_32mm_NoSupports/32mm_FunghySkirmisher.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Eye of the Watcher/All_32mm/Objects_32mm_NoSupports/EWChest_32mm_NoSupports/32mm_EWChest.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal - Daemon Lord/Kit I (Daemon Lord)/Baal_the_Daemon_Lord.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Troubles in Taverns 10 Heroes/Troubles in Taverns 10 Heroes/Korg 2 Headed Dragon/Korg_Pistol_L (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Spacecraft-Crasher/All_Crew_Part1_V3/All_Crew_Part1_V2_/PowerLoaderV2/32mm/No Supports/32mm_PowerLoader_Empty.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Basing/Industrial Drums & Canisters/Metal_Drum.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand",
+    "label_expand3"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Eye of the Watcher/All_32mm/Objects_32mm_NoSupports/WatchersLair_32mm_NoSupports/32mm_WatchersLair_Pillar1.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Archanists Guild/Cornelius Greathat/Cornelius_Greathat.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Basing/Concrete Piles/Concrete Pile (3).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Troubles in Taverns 10 Heroes/Troubles in Taverns 10 Heroes/Gyros Shripwrecker/Gyros_Scimitar (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Weapon Racks/Weapon_rack_small__x2_ (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/RinArtPoke/lugia-in-the-lab-from-pokemon/lab size L part 1-1.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Adventurer Camp/Modular Tents/Log_Stool_4 (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Panshaw Under Siege/DownloadAll_32mm/3 - Environment/Cannon/Cannon_NoSupports/32mm_Cannon.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand",
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/DragonSullManor_32mm_NoSupports/32mm_DragonSkullManor_H.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider B/Kit I (Warlok Rider)/Baal's_Demonhound_Rider_B_(Hood).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Nuclear Wasteland/DownloadAll_32mm/4- Environment/Environment_NoSupport/Antenna_NoSupports/32mm_Antenna.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Pipes_32mm_NoSupports/32mm_Pipe3.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Nuclear Wasteland/DownloadAll_32mm/2- Enemies/Enemies_32mm_NoSupports/Enemies_32mm_NoSupports/MutantBehemoth_32mm_NoSupports/32mm_MutantBehemoth.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/DM Stash/DM Stash Jan '22 Brawn & Brains STLs - Unsupported/Tygrin - Unsupported/Unsupported/32_Unsupported_Tygrin_Body.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Archanists Guild/Cornelius Greathat/Cornelius_Staff_L.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/War for Humanity/DownloadAll_32/Objects_32mm_NoSuports/KC3900Zeus_32mm_NoSupports/KC3900Zeus_Upside_Part_06.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Order of the Labyrinth/34 Order of the Labyrinth - February 2022 AG/Platorus Sage of Time/Platorus_Staff_R (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/Warhammer_40k_Terrain_Kombination_of_Energy_bridge_and_turbine/files/Hauptblock_Doppelt_Turbine_eingebaut1.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Ship Ahoy/All_CordesPirateCrew_V3/ZombiePirate_V2/32mm/No Supports/32mm_ZombiePirate.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Depth Digger Riders/Depth Digger A/Kit I (Gauntlet Rider)/Gnomish_Hammer_R.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian B (m)/Dragonpeak_Barbarian_B_(m) (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome D/Kit I (Steamgauntlet and Pickaxe)/Gn.Female_Pickaxe_angle2_R.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Sandy Dunes of Lutba/All_Objects_Part2/WallGateDamaged/No Supports/32mm_WallGateDamaged_Gate.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/GrayRender_32mm_NoSupports/32mm_GrayRender.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Damn Nation/All_32mm/All_32mm/TheMisfits_32mm_NoSupported/Rafi_32mm_NoSupports/32mm_Rafi.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand",
+    "label_expand3"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/DM Stash/DM Stash Jan '22 Brawn & Brains STLs - Unsupported/Mammoth Rider - Unsupported/Unsupported/Mammoth Rider/32_Unsupported_Mammoth_Leg4.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Ship Ahoy/All_Objects/Barrel/No Supports/32mm_Barrel.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/The Demon King Spawn/The Demon King Spawn/Astaroth the Soulforged/Kit I (Fantasy)/Soulforged_DoubleAxe_L.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/DM Stash/Crimson Masquerade/Melancholy - Unsupported/32_Unsupported_Melancholy_BodyMask.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand",
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Nightmares of the Abyss/All_32mm/Objects_32mm_NoSupports/OdDracnesThrone_32mm_NoSupports/32mm_OdDracnesThrone_B.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Bloodfiend Riders/Bloodfiend Rider A/Bloodfiend_A_(no_saddle) (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Bestarium/Welcome Pack/Cultists/Cultist-Zealot.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Mezzalfiend Tricksters/Mezzalfiend Trickster A/Kit II (Hooded Assassin)/Trickster_Blade_R.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Mercs and Miners/All_32mm/Mercenaries_32mm_NoSupports/CoreRoboticEnvoy_32mm_NoSupports/32mm_RoboticEnvoy.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/Warhammer_40k_Terrain_Pipelines/files/Rohr_Gerade.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/The Demon King Spawn/Epic Boss 01 - Baalzrodan the Demon King/dk-l-hand-mace-repaired.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Maneaters Nagarots/31 Maneaters Nagarots - November 2021 AG/Nagarot Crawlers & Giant Snakes/Nagarot Crawler & Snake C/Nagarot_Crawler_C_(f) (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Basing/Bark Trees/Bark Trees/Bark Tree Feature (2).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian E (f)/Barbarian_Throwing_Axe_R_(f_size) (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Neon Street 3k/All_32mm/TheMachine_32mm_NoSupports/Roboxer_32mm_NoSupports/32mm_Roboxer.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Stinky Ancient Ruins/All_32mm/Enemies_32mm_NoSupports/DrillAutomaton_32mm_NoSupports/32mm_DrillAutomaton.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/A Light In the Shadow/All_32mm/NPCs_32mm_NoSupports/SolarFree_32mm_NoSupports/32mm_SolarFree_RWingV2.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome B/Kit I (Goggle, Steam Crossbow)/Gnomish_Steam_Crossbow.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Walls_32mm_NoSupports/32mm_Wall9.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Going Down the Drain/DownloadAll_32mm/3 - Environment/Objects_32mm_NoSupports/Sea Chest_32mm_NoSupport/32mm_SeaChest.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Going Down the Drain/DownloadAll_32mm/1 - Heroes/Heroes_32mm_NoSupports/Vanchu_32mm_NoSupports/32mm_Vanchu.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/The Demon King Spawn/The Demon King Spawn/Mezzalfiends of the Gorge/Mezzalfiend of the Gorge A/Kit I (Maul)/Mezzalfiend_Hand_L.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand",
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/3 - Environment/Objects_32mm_NoSupports/BoardwalkCurve_32mm_NoSupports/BoardwalkCurve_Front.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Loyalty Reward 6 Months/All_32mm/Loyalty6_V3_32mm_Nosupports/Grisara_32mm_NoSupports/Grisara_32mm.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/the-witch/hero-the-witch-the-witch-full.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Maneaters Nagarots/31 Maneaters Nagarots - November 2021 AG/Sethris Bloodhiss/Sethris_Blade_R (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Depth Digger Riders/Depth Digger B/Kit I (Crossbow Rider)/Gnome_Depth-Digger_Rider_B_(No_Hat).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Mylitta - Golemmar Pinup/Mylitta_Golemmar_Pinup.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Snowy Mountain Summit/DownloadAll_32mm/3 - Environment/Cave/Cave_NoSupports/32mm_Cave_A.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Drarven Ram Riders/Dwarven Ram Rider A (m)/Skutagaard_Ram_A_(saddle) (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/War for Humanity/DownloadAll_32/Objects_32mm_NoSuports/WFHCrate_32mm_NoSupports/32mm_WFHCrate.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider B/Kit II (Bard Rider)/Baal's_Demonhound_Rider_B.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/old-school-cool-retired-deer-with-gun20210525-2182-1nb6ipl/old-school-cool-retired-deer-with-gun/gun.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Basing/Industrial Pipes (Medium Size)/Medium Pipe S.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Nightmares of the Abyss/All_32mm/Objects_32mm_NoSupports/OdDracnesThrone_32mm_NoSupports/32mm_OdDracnesThrone_C.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Spacecraft-Crasher/All_Aliens_Part2/ProtoOsteotron2/32mm/No Supports/32mm_ProtoOsteotron2.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/sssss20211127-750-1r0pndp/sssss/spiderleg4.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Basing/Industrial Pipes (Medium Size)/Medium Pipe  Elbow 5x Sprue.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Spacecraft-Crasher/All_Busts/PetaloidScientist_Bust/No Supports/PetaloidScientist_Bust.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/3 - Environment/Objects_32mm_NoSupports/BoardWalk1_32mm_NoSupports/32mm_Boardwalk_1.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Krommir Stronghammer/Krommir_Stronghammer (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Damn Nation/All_32mm/All_32mm/Enviroment_32mm_NoSupports/TheLavaWeeper_32mm_NoSupported/TheLavaWeeper_Part5.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Pipes_32mm_NoSupports/32mm_Pipe2.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/mean-woman-flying-snek-bug-but-accually-not-potatoe20211223-751-1t61so/mean-woman-flying-snek-bug-but-accually-not-potatoe/gargoyle1.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Low-Poly_Pikachu/files/pikachu_1gen_flowalistik.STL": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/Warhammer_30K___40K_-_Container/files/Walls_complete.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome D/Kit I (Steamgauntlet and Pickaxe)/Golemmar_Gnome_D_(No_Hat).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Neon Street 3k/All_32mm/Objects_NoSupports/TrafficLights_NoSupports/32mm_TrafficLights.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Nuclear Wasteland/DownloadAll_32mm/6- Bonus/SonicCrusher_NoSupports/32mm_SonicCrusher_Chassis_Back.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Spacecraft-Crasher/All_Objects/AlienQueensNest/No Supports/32mm_AlienQueensNest_A.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Troubles in Taverns 10 Heroes/Troubles in Taverns 10 Heroes/Brent of Goobertown/Brent_of_Goobertown (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Basing/Bark Trees/Bark Trees Damaged/Broken Trunk Feature (2) Sprue.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Weapon Racks/Weapons/Dwarven_Axe (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Bloodfiend Riders/Bloodfiend Rider A/Bloodfiend_A_(saddle) (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Basing/Grass Tufts/Grass Tufts (1).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Dwarven Mountaineers/Dwarven Mountaineer E (f)/Dwarven_Mountaineer_E_(f) (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Troubles in Taverns 10 Heroes/Merrian Silverfinger/Merrian_Right_Dagger (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight A/Vampiric_Estoc_R (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Weapon Racks/Weapons/Dwarven_Broadsword (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/WerebatGoblin_32mm_NoSupports/32mm_WerebatGoblin.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Nightmares of the Abyss/All_32mm/Objects_32mm_NoSupports/ModularStoneArch_32mm_NoSupports/32mm_ModularStoneArch.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Fallout_4_Deathclaw/files/F4_Deathclaw.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Cult Of Hunger/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/GnollLordV2_32mm_NoSupports/32mm_GnollPackLord.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Nuclear Wasteland/DownloadAll_32mm/4- Environment/Environment_NoSupport/SonicCrusher_NoSupports/32mm_SonicCrusher_Suspension_L.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Drarven Ram Riders/Dwarven Ram Rider B (m)/Dwarven_Mountaineer_Pointing_Axe_L (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Lenora Drakenmiryan/Lenora_Drakenmiryan_(repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/DragonSullManor_32mm_NoSupports/32mm_DragonSkullManor_G.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/War for Humanity/DownloadAll_32/Objects_32mm_NoSuports/WFHLandingPad_32mm_NoSupports/32mm_WFHLandingPad_Part7.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Archanists Guild/Apprentice Arcanists/Apprentice Arcanist F/Kit I (Arcane Sword & Staff)/Arcanist_Apprentice_F_(Hood).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Krommir Stronghammer/Krommir_2H_Sword_(ground) (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome A/Kit I (Steamgauntlet and Pickaxe)/Gnomish_Steam_Gauntlet_L.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Archanists Guild/Apprentice Arcanists/Apprentice Arcanist D/Kit I (Grimoire & Spell)/Apprentice_Fireball_L.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Busts/Yoshigruzu Bust (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider C (f)/Dragonpeak_Smilodon_Rider_C_(f) (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Neon Street 3k/All_32mm/Objects_NoSupports/CreditMachine_NoSupports/32mm_CreditMachine.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Spacecraft-Crasher/All_Crew_Part1_V3/All_Crew_Part1_V2_/SpaceAviator_V2/SpaceAviator/32mm/No Supports/32mm_SpaceAviatorHelmet.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Battletech/kdk-prime4.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Slathaai of House Mora/28 Slathaai of House Mora - June 2022 AG/House Mora Slathaai/House Mora Slathaai E/House_Mora_Slathaai_E.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Assault Naga/Assault Naga Stendard Left.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Requiem Demon Hunters/41 Requiem Demon Hunters (Complete)/Requiem Demon Hunters/Requiem Demon Hunter C/Kit I (Heavy Crossbow)/Requiem_Heavy_Crossbow_R.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Nuclear Wasteland/DownloadAll_32mm/4- Environment/Environment_NoSupport/BunkerDoor_NoSupports/32mm_BunkerDoor_Plug_B.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/DragonSullManor_32mm_NoSupports/32mm_DragonSkullManor_C.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Order of the Labyrinth/34 Order of the Labyrinth - February 2022 AG/Sacred Bull Knossus/Knossus_Wing_L (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Sandy Dunes of Lutba/AncientWorm_Part1/32mm/32mm_AncientWorm_Head/No Supports/32mm_AncientWorm_Head.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Adventurer Camp/Modular Campfire/Campfire_Lit (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Eye of the Watcher/All_32mm/Objects_32mm_NoSupports/WatchersLair_32mm_NoSupports/32mm_WatchersLair_Floor2.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Neon Street 3k/All_32mm/TheWrench_32mm_NoSupports/BadassPI_32mm_NoSupports/32mm_BadassPI.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Snowy Mountain Summit/DownloadAll_32mm/3 - Environment/Igloo/Igloo_NoSupports/32mm_Igloo_A.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Damn Nation/All_32mm/All_32mm/TheAccursed_32mm_NoSupported/MechaLasher_32mm_NoSupports/32mm_MechaLasher.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Order of the Labyrinth/34 Order of the Labyrinth - February 2022 AG/Modular Labirynth Minocs/Labyrinth Minoc E/Labyrinth_Minoc_E_(f) (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Requiem Demon Hunters/41 Requiem Demon Hunters (Complete)/Requiem Demon Hunters/Requiem Demon Hunter B/Kit II (No Hat Estoc & Pistol)/Requiem_Pistol_L.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Enemies_32mm_NoSupports/Enemies_32mm_NoSuports/SlugorGoblinKing_32mm_NoSupports/32mm_GoblinKing_Throne.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Depth Digger Riders/Depth Digger B/Depth_Digger_B_(Saddle).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Bloodfiend Riders/Bloodfiend RIder C/Bloodfiend_C_(saddle)_(repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/PhysUdo/orktober-sneaky-orks/Ork6.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Goblin Mines/All_32mm/Objects_32mm_NoSuports/DragonSullManor_32mm_NoSupports/32mm_DragonSkullManor_Platform_B.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/Warhammer_40K_Outpost_-_smal/files/OutPost_Floor_rectangle_edgeposts.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/City of Portals/All_32mm/CityDenizens_32mm_NoSupports/CityDenizens_32mm_NoSupports/AdornedFireElemental_32mm_NoSupports/FN2205AC11_32mm_FireElemental.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Order of the Labyrinth/34 Order of the Labyrinth - February 2022 AG/Minoc Chariots/Minoc Chariot B/Minoc_Chariot_B (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/DM Stash/Crimson Masquerade/Theldranax - Unsupported/32_Unsupported_Theldranax_RWing.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Epic Bosses/Delani the Depths Dragon/delani_tail (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Maril Pureblood - Setrek Captain/Maril_Kriss_L.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/City of Portals/All_32mm/Objects_32mm_NoSupports/Objects_32mm_NoSupports/PortalTo9Hells_32mm_NoSupports/FN2205AO09_Portalto9Hells_2.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/halloween+cubone/files/Halloween_cubone.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Different_Power_Armor_from_Fallout_4_Loading_Screens (1)/files/X01_power_armor.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/DM Stash/Crimson Masquerade/Ferdinand Vandame - Unsupported/32_Unsupported_Ferdinand_BodyNoMask.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/City of Portals/All_32mm/CityDenizens_32mm_NoSupports/CityDenizens_32mm_NoSupports/Planetar_32mm_NoSupports/FN2205AC07_32mm_Planetar.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Ship Ahoy/All_Busts/Alejandro/No Supports/32mm_ Alejandro_Bust.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Troubles in Taverns 10 Heroes/Troubles in Taverns 10 Heroes/Korg 2 Headed Dragon/Korg_Pistols_R (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Drarven Ram Riders/Dwarven Ram Rider D (f)/Skutagaard_Ram_D_(no_saddle) (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Orconspiracy/Enemies_Part3/Troll/32mm/No Supports/32mm_TrollLarge.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Bestarium/Welcome Pack/Jailer/Jailer_Whip part2.STL": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Ship Ahoy/All_Objects/Table/No Supports/32mm_Table.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Ulfgar Runekeeper/Ulfgar_Maul_R (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/War for Humanity/DownloadAll_32/Objects_32mm_NoSuports/KC3900Zeus_32mm_NoSupports/KC3900Zeus_Upside_CabinCover.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Fear the Eternal Embrace/DownloadAll_32mm/3- Environment/Environment_NoSupport/Rover_NoSupports/32mm_RoverWheel.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Neon Street 3k/All_32mm/TheMachine_32mm_NoSupports/CreditMerchant_32mm_NoSupports/32mm_CreditMerchant_Character.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Sandy Dunes of Lutba/SacredObelisk_Part1/No Supports/32mm_SacredObelisk_L.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Archanists Guild/Apprentice Arcanists/Apprentice Arcanist F/Kit I (Arcane Sword & Staff)/Apprentice_Sword_R.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/The Demon King Spawn/The Demon King Spawn/Mezzalfiends of the Gorge/Mezzalfiend of the Gorge E/Kit II (Daemon Mask - Weapon & Shield)/Mezzalfiend_of_the_Gorge_E_(Daemon_Mask).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Savage Outbreak in Space/All_32mm/Enemies_32mm_NoSupports/ReaniAstro_V2_32mm_NoSupports/32mm_ReanimatedAstronaut.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Troubles in Taverns 10 Heroes/Korg 2 Headed Dragon/Old Korg (No Modular)/Korg_Not_Modular (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Nightmares of the Abyss/All_32mm/Enemies_32mm_NoSupports/BoneDemon_32mm_NoSupports/32mm_BoneDemon.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/DM Stash/Singles/Alpha Almenhier/Unsupported/32_Unsupported_AlphaAlm_LWing.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/War for Humanity/DownloadAll_32/Objects_32mm_NoSuports/WFHLandingPad_32mm_NoSupports/32mm_WFHLandingPad_Part2.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Spacecraft-Crasher/All_Objects/Crate/No Supports/32mm_Crate.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/The Demon King Spawn/The Demon King Spawn/Lilit the Matriarch/Lilith_the_Matriarch.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome E/Kit II (Hat, Spear & Shield)/Female_Spear_R.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/DM Stash/Singles/Alpha Almenhier/Unsupported/32_Unsupported_AlphaAlm_RWing.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Fear the Eternal Embrace/DownloadAll_32mm/3- Environment/Environment_NoSupport/PreciousRock1_NoSupports/32mm_PreciousRock1.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Damn Nation/All_32mm/All_32mm/TheHellRigandDrone'sChain_32mm_NoSupported/HellRig_32mm_NoSupports/HellRig_32mm_Part_11.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/RinArtPoke/lugia-in-the-lab-from-pokemon/lugia part 4.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Nuclear Wasteland/DownloadAll_32mm/2- Enemies/Enemies_32mm_NoSupports/Enemies_32mm_NoSupports/HalfMechaSpider_32mm_NoSupports/32mm_HalfMechaSpiderMan.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Order of the Labyrinth/34 Order of the Labyrinth - February 2022 AG/Modular Labirynth Minocs/Labyrinth Minoc C/Labyrinth_Minoc_C_(m) (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/City of Portals/All_32mm/CityDenizens_32mm_NoSupports/CityDenizens_32mm_NoSupports/GrofMortewielder_32mm_NoSupports/FN2205AC06_32mm_GrofMortewielder.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/dictator-of-the-anthill-extended-ver-supports-yet-t20210817-29354-1p15040/dictator-of-the-anthill-extended-ver-supports-yet-to-be-made/Swarmlord.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Snowy Mountain Summit/DownloadAll_32mm/2 - Enemies/Sabertooth/Sabertooth_32mm_NoSupports/32mm_Sabertooth.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Stinky Ancient Ruins/All_32mm/Enemies_32mm_NoSupports/ClawedZombie_32mm_NoSupports/32mm_ClawedZombie.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Weapon Racks/Weapon_rack_large__x6_ (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/Warhammer_40K_Outpost_-_smal/files/OutPost_Floor_rectangle_edgeposts_short.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Eye of the Watcher/All_32mm/Enemies_32mm_NoSupports/ChithinousWatcher_32mm_NoSupports/32mm_ChitinousWatcher.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Basing/Industrial Pipes (Medium Size)/Medium Pipe U Narrow.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Eye of the Watcher/All_32mm/Enemies_32mm_NoSupports/LampreyWatcher_32mm_NoSupports/32mm_LampreyWatcher_IndentedIris.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Final STL/tile0.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Sandy Dunes of Lutba/Ornithopter/No Supports/32mm_Ornithopter_LandingGearDown.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Smilodon Riders/Smilodon Rider D (f)/Barbarian_Throwing_Axe_L_(f_size) (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Adventurer Camp/Modular Tents/Tent_Extra_-_Potions_&_Scrolls (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Damn Nation/All_32mm/All_32mm/TheHellRigandDrone'sChain_32mm_NoSupported/HellRig_32mm_NoSupports/HellRig_32mm_Part_04.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/jimsbeanz/xeno-tyrant-guard/tyrant_guard_merged.STL": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/mean-woman-flying-snek-bug-but-accually-not-potatoe20211223-751-1t61so/mean-woman-flying-snek-bug-but-accually-not-potatoe/cannon1.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2",
+    "label_expand3"
+   ],
+   "export": [
+    "triage.json",
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Bestarium/Welcome Pack/Cultists/Cultist 1.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Dwarven Mountaineers/Dwarven Mountaineer A (m)/Dwarven_Mountaineer_Shield_L (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian D (f)/Barbarian_2H_Axe_(f_size) (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Walls_32mm_NoSupports/32mm_Wall5.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand2"
+   ],
+   "export": [
+    "triage.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Welcome Box/Welcome Box - AG/Welcome Box 2022/Adventurer Camp/Pack Mule/Pack Mule - Generic (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/Warhammer_40k_Terrain_Pipelines/files/Rohr_Adapter.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Mercs and Miners/All_32mm/Mercenaries_32mm_NoSupports/NimbusGunslinger_32mm_NoSupports/32mm_NimbusGunslinger.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/The Crimson Sand Arena/All_Objects/SpikeTrap_Desarmed/No Supports/32mm_SpikeTrap_Desarmed.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Sandy Dunes of Lutba/All_Part2_RoyalCourtOfLutba/RoyalPriestess/32mm/No Supports/32mm_RoyalPriestess.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/angry-dinosaur-with-guns-j4roid20211128-9271-lgjo3w/angry-dinosaur-with-guns-j4roid/legs4.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/little-dnaborrowers-kit20210724-29228-fsf3ga/little-dnaborrowers-kit/Mirfingerin2.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Modular Dragonpeak Barbarians/Dragonpeak Barbarian A (m)/Dragonpeak_Barbarian_A_(m_helmet) (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Pikachu_X_Kakashi.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/angry-dinosaur-with-guns-j4roid20211128-9271-lgjo3w/angry-dinosaur-with-guns-j4roid/legs2.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Stinky Ancient Ruins/All_32mm/Enemies_32mm_NoSupports/CarrionGolem_32mm_NoSupports/32mm_CarrionGolem.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Fear the Eternal Embrace/DownloadAll_32mm/3- Environment/Environment_NoSupport/PreciousRock2_NoSupports/32mm_PreciousRock2.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Me-262+Schwalbe+Kit+Card/files/Me262_Kit.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Requiem Demon Hunters/41 Requiem Demon Hunters (Complete)/Requiem Demon Hunters/Requiem Demon Hunter F/Kit II (No Hat Gun)/Requiem_Demon_Hunter_F_(No_Hat).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Floor_32mm_NoSupports/32MM_Floor2.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Damn Nation/All_32mm/All_32mm/TheMisfits_32mm_NoSupported/Cassandra_32mm_NoSupports/32mm_Cassandra_Hood.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Sandy Dunes of Lutba/All_Busts/MechGunslinger_Bust/No Supports/MechGunslinger_Bust_Arm.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider B/Baal's_Demonhound_(Saddle).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Bestarium/Welcome Pack/UndeadKnight_Welcome Pack/DK_Sword_Exclusive.STL": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Krommir Stronghammer/Krommir_2H_Sword (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Savage Outbreak in Space/All_32mm/Environment_NoSupport/ExperimentTank(New)_NoSupports/32mm_Experiment Tank (New)_Top.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/War for Humanity/DownloadAll_32/Heroes_32mm_NoSuports/StandardMarine2_32mm_NoSupports/32mm_StandardMarine_2.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Saurian Native Diplomacy/All 32mm/SaurianNAtive_Enemies_32mm_NoSupports/Salamanderian_32mm_NoSupports/32mm_Salamanderian.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Sandy Dunes of Lutba/EXTRA-Ornithopter Tail Landing Gear/No Supports/32mm_Ornithopter_Tail_LandingGear.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/City of Portals/All_32mm/Objects_32mm_NoSupports/Objects_32mm_NoSupports/PortalTo9Hells_32mm_NoSupports/FN2205AO09_Portalto9Hells_1.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Svartwood Trolls/35 Svartwood Trolls - March 2022 AG/Svartwood Troll Hunters/Svartwood Troll Hunter A/Svartwood_Troll_Hunter_A_(m)_(repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Dwarven Mountaineers of Skutagaard/36 Dwarven Mountaineers of Skutagaard - April 2022 AG/Dwarven Mountaineers/Dwarven Mountaineer F (f)/UMesh_Dwarven_Mountaineer_Quiver (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Neon Street 3k/All_32mm/Vehicles_32mm_NoSupports/MagestyCar2071_32mm_NoSupports/32mm_MajestyCar_Wheels1.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/War for Humanity/DownloadAll_32/Heroes_32mm_NoSuports/PowerArmosMarine_32mm_NoSupports/32mm_PowerArmorMarine_HeadSwitchOut.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/DM Stash/Crimson Masquerade/Theldranax - Unsupported/32_Unsupported_Theldranax_LWing.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Sandy Dunes of Lutba/All_Busts/BaronBartholomewRiberdani_Bust/No Supports/BartholomewRiberdani_Bust_Arm.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Walls_32mm_NoSupports/32mm_Wall4B.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/The Bloodhunt/33 The Bloodhunt - January 2022 AG/Modular Bloodhunt Knights/Bloodhunt Knight E/Bloodhunt_Knight_E_(f) (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Mercs and Miners/All_32mm/Mercenaries_32mm_NoSupports/GroozeTheMorphicOoze_32mm_NoSupports/32mm_Grooze.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Dragonpeak Barbarians/Dragonpeak Barbarians/Dragonpeak Totems/Dragonpeak_Totem (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Depth Digger Riders/Depth Digger B/Kit II (Spear Rider)/Gnomish_Spear_R+L.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Pipes_32mm_NoSupports/32mm_Pipe1.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Spacecraft-Crasher/All_Crew_Part2/Engineer/32mm/No Supports/32mm_Engineer.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Maneaters Nagarots/31 Maneaters Nagarots - November 2021 AG/Sethris Bloodhiss/Nagarot_Quiver (repaired).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Gathering in the Festering Swamp/DownloadAll_32mm/2 - Enemies/Enemies_32mm_NoSupports/FroggySpearman_32mm_NoSupports/32mm_FroggySpearman.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Savage Outbreak in Space/All_32mm/Environment_NoSupport/Chair_NoSupports/32mm_Chair.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Mercs and Miners/All_32mm/MechanicBay_32mm_NoSupports/MechanicBay_Generator.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Mezzalfiend Tricksters/Mezzalfiend Trickster F/Kit I (Monk)/Mezzalfiend_Trickster_F.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Neon Street 3k/All_32mm/TheMachine_32mm_NoSupports/Drone_32mm_NoSupports/32mm_Drone.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Epic Bosses/Epic Boss 12 - Trollking Drungvandel on his Throne/Trollking_Throne_of_Svartwood (repaired).stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Panshaw Under Siege/DownloadAll_32mm/1 - Heroes/AlkaMyastan/AlkaMyastan_32mm_NoSupports/32mm_AlkaMyastan.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Artisan Guild/Darkness of the Lich Lord/37 Darkness of the Lich Lord - May 2022 AG/Skutagaard Wraiths/Skutagaard Wraith B/Skutagaard_Wraith_B.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Sandy Dunes of Lutba/Ornithopter/No Supports/32mm_Ornithopter_CanopyFrame.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Bestarium/Welcome Pack/UndeadKnight_Welcome Pack/Cloak.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/DM Stash/Crimson Masquerade/Aimar - Unsupported/32_Unsupported_Aimar_BodyMask.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Stinky Ancient Ruins/All_32mm/Environment_32mm_NoSupports/Walls_32mm_NoSupports/32mm_Wall4A.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Ship Ahoy/All_DangersOfTheSea_Part2/HunterShark/32mm/No Supports/32mm_HunterShark.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/Ship Ahoy/All_Objects/ShipCannon/No Supports/32mm_ShipCannonCar.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/The Rebels Strike Back/DownloadAll_32mm/1- Rebels/Rebels_32mm_NoSupports/BazookaMeowzer_32mm_NoSupports/32mm_Meowzer.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/DM Stash/Crimson Masquerade/Theldranax - Unsupported/32_Unsupported_Theldranax_BodyWhole.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/Warhammer_30K___40K_-_Container/files/Back.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/City of Portals/All_32mm/CityDenizens_32mm_NoSupports/CityDenizens_32mm_NoSupports/Succubus_32mm_NoSupports/FN2205AC05_32mm_Succubus.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/a-certain-catasftophical-event-that-led-to-destruct20210704-25771-14t7if0/a-certain-catasftophical-event-that-led-to-destruction-of-certain-space-ship-with-cool-name-ww1-soldier-not-included/body-posed.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/DM Stash/DM Stash Jan '22 Brawn & Brains STLs - Unsupported/Argulug - Unsupported/Unsupported/32_Unsupported_Argulug_Body.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Loot Studios/City of Portals/All_32mm/Objects_32mm_NoSupports/Objects_32mm_NoSupports/PropTimePortal_32mm_NoSupports/FN2205AO10_TimePortal_1.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Bestarium/2022_02_Man Eaters Part 2/Release Files STL/Manhunter/Manhunter P2.stl": {
+   "triage": "keep",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Basing/Debris Scatter/Damaged Roofing (2).stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  },
+  "run/media/masa/STLLibrary/Warhammer/space smurf nightmare/body.stl": {
+   "triage": "undefined",
+   "draws": [
+    "label_expand3"
+   ],
+   "export": [
+    "triage3.json"
+   ]
+  }
+ },
+ "ambiguous": {
+  "tail1": [
+   "run/media/masa/STLLibrary/Warhammer/space-flying-snek-bug20210531-4833-1j6izl3/space-flying-snek-bug/tail1.stl",
+   "run/media/masa/STLLibrary/Warhammer/sssss20211127-750-1r0pndp/sssss/tail1.stl"
+  ],
+  "tile7": [
+   "run/media/masa/STLLibrary/Final STL/tile7.stl",
+   "run/media/masa/STLLibrary/Spell Tracker STL/Final STL/tile7.stl"
+  ],
+  "Naga_Blade_R (repaired)": [
+   "run/media/masa/STLLibrary/Artisan Guild/Maneaters Nagarots/31 Maneaters Nagarots - November 2021 AG/Nagarot Thralls/Nagarot Thrall A/Naga_Blade_R (repaired).stl",
+   "run/media/masa/STLLibrary/Artisan Guild/Maneaters Nagarots/31 Maneaters Nagarots - November 2021 AG/Nagarot Thralls/Nagarot Thrall D/Naga_Blade_R (repaired).stl"
+  ],
+  "head": [
+   "run/media/masa/STLLibrary/Warhammer/mean-woman-flying-snek-bug-but-accually-not-potatoe20211223-751-1t61so/mean-woman-flying-snek-bug-but-accually-not-potatoe/head.stl",
+   "run/media/masa/STLLibrary/Warhammer/old-school-cool-retired-deer-with-gun20210525-2182-1nb6ipl/old-school-cool-retired-deer-with-gun/head.stl"
+  ],
+  "Minoc_Shield_L_(side_grip) (repaired)": [
+   "run/media/masa/STLLibrary/Artisan Guild/Order of the Labyrinth/34 Order of the Labyrinth - February 2022 AG/Minoc Chariots/Minoc Chariot B/Chariot Riders B/Labyrinth Minoc D/Minoc_Shield_L_(side_grip) (repaired).stl",
+   "run/media/masa/STLLibrary/Artisan Guild/Order of the Labyrinth/34 Order of the Labyrinth - February 2022 AG/Modular Labirynth Minocs/Labyrinth Minoc D/Minoc_Shield_L_(side_grip) (repaired).stl"
+  ],
+  "Gnomish_Miner_Backpack": [
+   "run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome A/Kit II (Hat, Pickaxe and Lantern)/Gnomish_Miner_Backpack.stl",
+   "run/media/masa/STLLibrary/Artisan Guild/Gnomes of Golemmar/43 Gnomes of Golemmar - November 2022 AG/Golemmar Gnomes/Golemmar Gnome E/Kit II (Hat, Spear & Shield)/Gnomish_Miner_Backpack.stl"
+  ]
+ }
+}

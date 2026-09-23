@@ -15,6 +15,8 @@ mid-session once and the same seed stopped drawing the same models.
 | `up_axis_labels.json` | 219 up-axis labels in six sets, plus `collection_root`, per-set `sets` notes and a `history` array of every correction made to the file. The only pose ground truth in the repo. |
 | `part_classes.json` | The raw browser export of the part-class pass, **keyed by stem**, exactly as it left the page. Kept unedited as provenance. |
 | `part_classes_by_path.json` | The same 148 decisions **keyed by path**, which is the one to read. |
+| `triage.json`, `triage3.json` | The raw browser exports of the model-or-part triage (247 and 66 answers), **keyed by stem**, unedited. `keep` means a model; `undefined` means a loose part. |
+| `triage_by_path.json` | The same answers **keyed by path**, resolved through the draw manifests (`draws`), plus each draw's seed and whether it was part-filtered. Six stems named two files and are listed under `ambiguous` rather than guessed. Read it through `common.load_triage()`. |
 
 ## The sets are not interchangeable
 
@@ -35,6 +37,18 @@ version, because pooling them wrongly has already produced two bad numbers:
 
 `eval/backbone_sweep.py` derives its rows from the file rather than a hardcoded
 list, and excludes `hard` from both pooled rows.
+
+## The triage is not the last word on part-ness
+
+The part-class pass read the triage's parts again and sent 16 back as
+`undefined`: those are models, and `common.load_triage()` applies that
+correction. It also marked one triage `keep`, `32mm_OdDracnesThrone_C`, as a
+`component`. Two human answers disagree there, so the loader leaves it out
+rather than pick one.
+
+`label_expand3` was drawn with the name-based part filter on, so its parts are
+the ones the filter *missed*. Any rule measured on it looks worse than it is
+on the collection; quote the unfiltered draws for a collection-wide rate.
 
 ## What the part classes mean
 
