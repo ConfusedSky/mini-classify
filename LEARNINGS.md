@@ -291,6 +291,17 @@ notes at the bottom are amended in place. Open work is tracked separately in
   the wrong tower (now `common.production_model()`), and the table reported 47
   of 214 models. Third hardcoded-set-list bug in eight days.
 
+- [Jev as a part filter](docs/learnings/2026-09-22-jev-part-judge-on-the-triage.md)
+  — names only, no cache, on 304 triage rows (128 parts / 176 models). **On its
+  own, Jev is worse than the regex filter at a strict threshold** (47–50 against
+  62 parts caught, for one model cut). **OR'd with the regex, it catches 79 of
+  128 at the same one model cut**, +17. That threshold was fitted to the rows it
+  scores, so +17 is an upper bound until a fresh draw is scored. "Separate
+  piece" is the wrong question: saddles, hats and wall sections are separate
+  pieces that stand one way up, and the triage kept them. $0.01 per run through
+  OpenRouter. The triage labels moved from gitignored `eval/out/` into
+  `labels/`.
+
 ## Evergreen notes
 
 - [Queries and filters](docs/learnings/queries-and-filters.md) — open-set

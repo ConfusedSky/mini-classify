@@ -72,6 +72,15 @@ never pool `hard` into an accuracy.
 
 ## Open questions — genuinely unknown
 
+- **Does Jev's +17 parts beside the regex survive a fresh draw?** (LEARNINGS,
+  Jev as a part filter.) Regex OR `no_upright` ≥ 0.85 catches 79 of 128 triage
+  parts against the regex's 62, at the same one model cut. That threshold was
+  fitted to the rows it scores. To test it: triage a new unfiltered draw by hand,
+  fix the threshold first, then run `eval/part_judge.py`. Still open alongside
+  it: whether modular wall sections count as parts, since the two label passes
+  disagree on them (`32mm_Wall4A`/`4B` against `32mm_Wall5`/`9`, and
+  `OdDracnesThrone_B`/`_C`).
+
 - **Does the ensemble actually help?** (→ #11) Pooled over 44 models geometry and the
   ensemble differ on only **6**, where the ensemble is right 4 and geometry 1.
   Sign test p≈0.375. It survived the holdout as "probably helps, unproven".
