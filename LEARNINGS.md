@@ -302,6 +302,18 @@ notes at the bottom are amended in place. Open work is tracked separately in
   OpenRouter. The triage labels moved from gitignored `eval/out/` into
   `labels/`.
 
+- [OpenAI's Decisions API as the pose arbiter](docs/learnings/2026-10-10-openai-decisions-api-as-pose-arbiter.md)
+  — no embedding cache, on all 219 labels.
+  **Rejected: every configuration makes the pipeline worse than no arbiter.**
+  On the 201 labels outside `hard` and `reclaim`, Luna scores 167–181 against
+  the ensemble's 183 and gemini's 189. As the arbiter on the 50 gated models
+  it is −2 at best, against gemini's +6. A `predicate` per cropped tile
+  (−11/−16) does worse than a `choice` over the sheet. Confidence does
+  separate right from wrong (AUROC 0.85 for `choice`@512), but gating on it
+  only reaches 184, one model above the ensemble, at a threshold fitted on the
+  rows it scores. It needs a Platform API key; a ChatGPT/Codex login does not
+  work. $0.02–0.09 per collection run.
+
 ## Evergreen notes
 
 - [Queries and filters](docs/learnings/queries-and-filters.md) — open-set

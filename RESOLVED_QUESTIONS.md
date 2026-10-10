@@ -25,6 +25,10 @@ this is the quick "what did we decide about X" index. A question graduates here
 - **Do newer Gemini models beat the arbiter default?** — no; gemini-3.6-flash
   ties, 3.1-pro is worse and dearer, all rescue the same four models. Default
   unchanged. (`eval/gemini_vlm.py`)
+- **Can OpenAI's Decisions API (`gpt-6-luna`) be the arbiter?** — no; net
+  negative in every question shape on all 219 labels, and its best gated
+  configuration is 184/201 against the ensemble's 183 and gemini's 189.
+  [2026-10-10 Decisions API](docs/learnings/2026-10-10-openai-decisions-api-as-pose-arbiter.md)
 - **Raise the contact sheet to `thumb=512`** — done; a large gain for weak
   arbiters (sonnet +10), barely moves gemini-3.5-flash.
   [2026-08-12 the 7-hour run](docs/learnings/2026-08-12-where-a-7-hour-run-went.md)
