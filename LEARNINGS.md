@@ -314,6 +314,19 @@ notes at the bottom are amended in place. Open work is tracked separately in
   rows it scores. It needs a Platform API key; a ChatGPT/Codex login does not
   work. $0.02–0.09 per collection run.
 
+- [Jev as the pose arbiter](docs/learnings/2026-10-20-jev-as-pose-arbiter.md)
+  — `jev-1.14.0` with images, no embedding cache, on all 219 labels.
+  **OpenRouter drops Jev's image assets without saying so** (290 input tokens
+  with or without the image), so image work needs the direct TypeSafe API.
+  The best shape is a Choice whose options are the cropped tiles with the
+  numerals painted out. It is **+4 as the arbiter and 187/201 on both runs**,
+  with no fitted threshold: GLM's score, two short of gemini's 189. Reading a
+  numeral off the sheet costs 18 models standalone, and the numerals alone
+  double what it breaks. Its rescues and breaks are a subset of gemini's
+  (flat slabs and cylinders again), so it is a weaker gemini rather than a
+  complement. Not deterministic: 6–8 of 219 answers change between runs.
+  $0.07 per collection run.
+
 ## Evergreen notes
 
 - [Queries and filters](docs/learnings/queries-and-filters.md) — open-set

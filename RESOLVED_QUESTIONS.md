@@ -29,6 +29,11 @@ this is the quick "what did we decide about X" index. A question graduates here
   negative in every question shape on all 219 labels, and its best gated
   configuration is 184/201 against the ensemble's 183 and gemini's 189.
   [2026-10-10 Decisions API](docs/learnings/2026-10-10-openai-decisions-api-as-pose-arbiter.md)
+- **Can Jev 1.14, now that it takes images, be the arbiter?** — not over
+  gemini. With the tiles as Choice options and their numerals painted out it
+  is +4 and 187/201, tying GLM, against gemini's +6 and 189; it fails on the
+  same shapes. Default unchanged.
+  [2026-10-20 Jev as the pose arbiter](docs/learnings/2026-10-20-jev-as-pose-arbiter.md)
 - **Raise the contact sheet to `thumb=512`** — done; a large gain for weak
   arbiters (sonnet +10), barely moves gemini-3.5-flash.
   [2026-08-12 the 7-hour run](docs/learnings/2026-08-12-where-a-7-hour-run-went.md)
