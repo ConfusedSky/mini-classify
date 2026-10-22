@@ -75,9 +75,40 @@ pass should be. The real tile cost, ~52 ms per tile, is in line with
 exist.** Pose-embed is ~1176 → ~620 ms/model, which is the tile halving and
 nothing more.
 
-Any `--instrument` table since the actor refactor under-reports `pose-embed` in
-the same way. Read it together with the unattributed remainder, or add the
-gap to the stage.
+Every `--instrument` table from the actor refactor until this fix
+under-reports `pose-embed` in the same way. For those tables, add the
+unattributed remainder to the stage.
+
+### Fixed, and re-measured
+
+`drain` now calls `on_tile_embeds` inside `stage("pose-embed")`.
+`tests/test_driver.py::test_pose_embed_times_the_poser_pull` checks that, and
+it failed against the old code before passing against the new. The same 40
+STLLibrary models were rerun at 8 views, performance profile, fresh scratch
+caches:
+
+| stage | where | fixed, compile off | fixed, compile on |
+|---|---|---|---|
+| wall | | 77.2 s | 82.3 s |
+| mesh-load | child | 161 | 129 |
+| pose-render | child | 419 | 442 |
+| pose-geometry | child | 15 | 17 |
+| view-render | child | 566 | 591 |
+| **pose-embed** | parent | **676** | 742 |
+| `cache-save` | parent | 371 | 358 |
+| `embed` | parent | 65 | 144 |
+| `results-wait` total | parent | 27.2 s | 25.5 s |
+| unattributed main-thread time | parent | **1.4 s** | 1.1 s |
+
+The unattributed time fell from ~23 s to ~1.4 s, and `pose-embed` now reads
+676 ms, matching the direct measurement. Posing is 419 + 676 + 15 ≈ **1.11
+s/model** against 566 + 371 + 65 ≈ **1.0 s** for the views, so the corrected
+estimates below hold.
+
+The compile arm's wall clock was 82.3 s this time against 116.7 s in run 5.
+Most of the ~42 s of warmup did not recur, presumably because torch's
+on-disk compile cache was warm from run 5 (not verified). It was still slower
+than compile off, with no stage meaningfully faster.
 
 ## Posing costs as much as the views
 
@@ -117,8 +148,10 @@ batches are different shapes. That was read off the instrument's ~100 ms
 sampling timeline, so the steady-state figures are approximate. After warmup the
 forwards barely move: `cache-save` 372 → 349 ms, unattributed time 23.3 → 22.7
 s. `results-wait` is unchanged (26.3 s vs 25.3 s). Without the warmup, run 5's
-wall clock is about 75 s against run 4's 77.7 s. On this card, compile is a
-few percent on the forward and break-even on a run.
+wall clock is about 75 s against run 4's 77.7 s. With the instrument fixed
+and the compile cache warm, the compile arm was still 5 s slower (82.3 s vs
+77.2 s). On this card, compile is a few percent on the forward at best and
+break-even or worse on a run.
 
 ## Performance mode: within noise
 

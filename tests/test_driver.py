@@ -22,6 +22,7 @@ is pinned is the calling convention the whole refactor rests on:
 """
 import signal
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -320,6 +321,34 @@ def test_pose_tiles_walks_poser_embedder_poser(monkeypatch):
             ("on_tiles", "embed_tiles", "on_tile_embeds")] == \
         ["on_tiles", "embed_tiles", "on_tile_embeds"]
     assert isinstance(rig.tasks.sent[-2], EmbedRenderTask)
+
+
+def test_pose_embed_times_the_poser_pull(monkeypatch):
+    """embed_tiles returns at the async launch; the forward's wait lands at
+    on_tile_embeds' `.cpu()`, so that call must run inside `pose-embed` or the
+    stage reports the launch alone."""
+    open_stages = []
+
+    @contextmanager
+    def stage(name):
+        open_stages.append(name)
+        try:
+            yield
+        finally:
+            open_stages.pop()
+
+    monkeypatch.setattr(driver, "stage", stage)
+    rig = Rig(monkeypatch, files=1,
+              routes={(0, True): EmbedRenderTask(f(0), 0, POSE, needs_embed=False)},
+              script=[PoseTiles(f(0), 0, np.zeros(6), [[np.zeros((2, 2, 3))]]),
+                      Rendered(f(0), 0)],
+              answers={0: Resolved(f(0), 0, pose_changed=True)})
+    seen = []
+    pull = rig.poser.on_tile_embeds
+    monkeypatch.setattr(rig.poser, "on_tile_embeds",
+                        lambda m: seen.append(list(open_stages)) or pull(m))
+    rig.run()
+    assert seen == [["pose-embed"]]
 
 
 def test_resolved_reroutes_with_pose_changed_verbatim(monkeypatch):

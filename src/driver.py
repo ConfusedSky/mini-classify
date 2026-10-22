@@ -318,9 +318,11 @@ def run(cfg: DriverConfig) -> None:
             try:
                 match m:
                     case PoseTiles():
+                        # embed_tiles returns at the async launch; the
+                        # forward's wait is on_tile_embeds' `.cpu()`
                         with stage("pose-embed"):
                             embeds = embedder.embed_tiles(poser.on_tiles(m))
-                        out = poser.on_tile_embeds(embeds)
+                            out = poser.on_tile_embeds(embeds)
                         if out is not None:         # None: parked on the arbiter
                             dispatch(out)
                     case EmbedViews():

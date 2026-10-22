@@ -191,13 +191,17 @@ never pool `hard` into an accuracy.
   project has solved.
 - **Would a much *smaller* tower do for the pose ensemble?** (→ #19) The backbone work
   above asks whether a bigger tower helps. Pose is the place to ask the
-  opposite, and it is now the most expensive thing in the run. Instrumented
-  full-collection pass, 602 models at 384px: `pose-embed` is **29.3% of wall**
-  (1176 ms/model), and after the STL parser landed it is **41.7%** on a subset —
-  the single largest line item, costing 1.6× what embedding the actual
-  classification views costs. All of it is SigLIP over 24 up-candidate tiles
-  (6 candidates × `UP_TILE_AZIMUTHS`), on `so400m-patch14-384`: 1.1B params, the
-  same tower used for fine-grained category probes.
+  opposite, and it is still the most expensive thing in a cold run. Re-measured
+  2026-10-22 (STLLibrary sample of 40 from the `embed-cache512` walk, 8 views,
+  `siglip2-so400m-patch16-512`, scratch cache): `pose-embed` is **676 ms/model,
+  35% of wall** — the largest stage on the parent, and 1.5× the 8-view forward
+  (~436 ms). It is SigLIP over 12 up-candidate tiles (6 candidates ×
+  `UP_TILE_AZIMUTHS = 2`) on a 1.1B-param tower, the same one used for
+  fine-grained category probes. Until 2026-10-22 the instrument reported only
+  the async launch (~130 ms) for this stage, so `--instrument` tables between
+  the actor refactor and that date understate it ~5×. ~~1176 ms/model, 29.3% of
+  wall~~ was the 2026-08-13 figure at 24 tiles on `patch14-384`. See LEARNINGS,
+  "What posing costs, re-measured".
 
   The tiles are near-silhouettes with no detail to resolve — LEARNINGS says so
   explicitly when explaining why a *stronger* tower buys resolution invariance
