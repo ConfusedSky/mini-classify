@@ -327,6 +327,20 @@ notes at the bottom are amended in place. Open work is tracked separately in
   complement. Not deterministic: 6–8 of 219 answers change between runs.
   $0.07 per collection run.
 
+- [What posing costs, re-measured](docs/learnings/2026-10-22-what-posing-costs.md)
+  — five `--instrument` runs of 40 models, scratch caches, arbiter off.
+  **`pose-embed` times only the async launch**: the tile forward's GPU wait
+  lands at `Poser.on_tile_embeds`'s `.cpu()`, outside every stage, so the
+  instrument reports ~130 ms where the real cost is ~620 (measured directly:
+  58 + 560 ms). The apparent 10× gain since 2026-08-13 is the tile halving
+  plus a sync in the wrong place. Corrected, on a STLLibrary sample at 8 views,
+  **posing is ~1.09 s/model against ~1.07 s for the views**, with the iGPU
+  child and the 4060 parent near balance. A cold index projects ~1.6 h for
+  3,070 files, and the 2026-09-01 warm-pose run's ~47 min over 3,380
+  reconciles. **`--compile` is break-even** (~42 s warmup, a few percent
+  after). Performance mode: −4.6% on one run each, within noise. The test
+  collection understates rendering 3.7×, so measure on the volume.
+
 ## Evergreen notes
 
 - [Queries and filters](docs/learnings/queries-and-filters.md) — open-set
