@@ -34,6 +34,12 @@ this is the quick "what did we decide about X" index. A question graduates here
   is +4 and 187/201, tying GLM, against gemini's +6 and 189; it fails on the
   same shapes. Default unchanged.
   [2026-10-20 Jev as the pose arbiter](docs/learnings/2026-10-20-jev-as-pose-arbiter.md)
+- **Should the arbiter only override when it is confident?** — no; neither
+  token logprobs nor a self-reported confidence gains a strong arbiter more
+  than one model on the 50 gated, even at a threshold fitted on them, and
+  logprobs saturate.
+  Always trust the arbiter.
+  [2026-10-22 arbiter confidence](docs/learnings/2026-10-22-arbiter-confidence.md)
 - **Raise the contact sheet to `thumb=512`** — done; a large gain for weak
   arbiters (sonnet +10), barely moves gemini-3.5-flash.
   [2026-08-12 the 7-hour run](docs/learnings/2026-08-12-where-a-7-hour-run-went.md)

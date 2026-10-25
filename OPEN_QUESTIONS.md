@@ -174,6 +174,16 @@ never pool `hard` into an accuracy.
   one model is inside the noise this file keeps warning about, and the 23
   minutes is not. Blocked on the same thing as everything else: at n=44 the
   accuracy difference is one model, so more labels would decide it.
+- **Should the gemini arbiter see six painted-out tiles instead of the
+  numbered sheet?** On the 201 poolable labels against `pose_baseline.json`
+  (embed-cache512's ensemble, 183/201, 50 gated), the `solo` presentation
+  reaches +8 and 191/201 on both gemini-3.5-flash and 3.6-flash, against +6
+  and 189 for production's sheet. Two models is inside the noise at 50 gated,
+  and the 2026-08-30 sweep found ±1 for gemini on 44 labels. Against it:
+  six images bill 6,690 prompt tokens per arbitration on Gemini 3 against
+  1,212 for the sheet, 5.5×. Measured with a `confidence` field in the
+  schema, so the production prompt in `solo` form is unmeasured; that run,
+  repeated, is what would decide it. LEARNINGS, "Arbiter confidence".
 - **Is `Floor` the new `tile9`?** `gemini-3.6-flash` and
   `gemini-3.1-pro-preview` both fail `Floor` (truth `-Z`) at both sheet sizes
   while gemini-3.5-flash gets it. Every remaining error at this tier is

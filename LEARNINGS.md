@@ -342,6 +342,22 @@ notes at the bottom are amended in place. Open work is tracked separately in
   after). Performance mode: −4.6% on one run each, within noise. The test
   collection understates rendering 3.7×, so measure on the volume.
 
+- [Arbiter confidence](docs/learnings/2026-10-22-arbiter-confidence.md)
+  — no embedding cache read; the 201 poolable labels against embed-cache512's
+  ensemble via `pose_baseline.json` (183, 50 gated), on the 512 px sheets.
+  Gemini 2.5/3.5/3.6, Claude Haiku/Sonnet/Opus 5.5 and GLM-5.3-Flash, asked
+  for token logprobs or a self-reported confidence. **Gating a strong
+  arbiter on either buys nothing**: a threshold fitted on the scored rows
+  adds 0–1 model, because they break only 3–4 gated models. **Logprobs saturate**
+  at 1.00 for right and wrong answers alike, and Vertex refuses them for
+  3.5/3.6-flash, DeepInfra for GLM. Self-reported confidence ranks (gated
+  AUROC 0.63–0.89), and Claude's has the widest spread. **Six separate
+  painted-out tiles match or beat the sheet** for every model but GLM
+  logprob: gemini-3.5- and 3.6-flash reach +8 and 191/201, against
+  production's +6 and 189, at 5.5× the prompt tokens on Gemini 3. One call
+  per tile is worse on the 38-model pilot, and 122 s per arbitration for
+  3.5-flash.
+
 ## Evergreen notes
 
 - [Queries and filters](docs/learnings/queries-and-filters.md) — open-set
