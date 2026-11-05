@@ -184,6 +184,11 @@ never pool `hard` into an accuracy.
   1,212 for the sheet, 5.5×. Measured with a `confidence` field in the
   schema, so the production prompt in `solo` form is unmeasured; that run,
   repeated, is what would decide it. LEARNINGS, "Arbiter confidence".
+- **Should the gemini arbiter get a thinking cap?** 11 of 512 gated calls ran
+  to about 62,910 thinking tokens at about 200 s each, 2.1% of calls and 41% of
+  the $15.08. Production sets no `thinkingConfig`. Unknown: whether a cap
+  changes answers, and whether a runaway's answer is any good, since saved usage
+  rows name no model. LEARNINGS, "Jev fused into the ensemble".
 - **Could the arbiter also say a model has no upright?** Two extra questions,
   part and ambiguous, were asked of gemini at about $0.0065 a call. On the 24
   blind labels gemini flagged 13 of the 16 with no upright and 3 of the 8 with

@@ -12,7 +12,7 @@ the September run; its tile answers on the 1,000-model sample are new.*
 
 The [Jev write-up](2026-10-20-jev-as-pose-arbiter.md) left one variant untested:
 feeding Jev's per-tile probabilities into the ensemble instead of letting it
-override. Fusion ties gemini on the 201 poolable labels and costs about 150×
+override. Fusion ties gemini on the 201 poolable labels and costs about 90–150×
 less. On the only hand labels drawn from outside that set it goes 0 for 8
 against gemini's 4. **Gemini stays the arbiter.**
 
@@ -71,11 +71,29 @@ Of the 512, gemini agrees with fused Jev on 270 (53%), with Jev alone on 244
 | gemini-3.5-flash | 11.2 s | 29.2 s | 267 s | $10.43 |
 | Jev | 1.1 s | 4.1 s | 22 s | $0.07 |
 
-Gemini averaged 3,079 thinking-plus-output tokens per call here, against 638
-thinking tokens on the 2026-08-12 run ($2.68 per run), and $3.42 per run was
-measured on the labels on 2026-09-10. The sample cost $15.08, about 2.5× the estimate made
-from a 4-call smoke run. The models are harder and thinking is billed as output, so a run on the full
-collection should be budgeted from this figure, not the earlier ones.
+The sample cost $15.08, about 2.5× the estimate made from a 4-call smoke run.
+Gemini averaged 3,072 thinking tokens per call, against 872 on the labels on
+2026-09-09 ($3.42 per run). `gemini_thinking_drift.py` reran production's prompt
+on fresh draws to see whether gemini had started thinking more.
+
+| thinking tokens | n | mean | median | p90 | max |
+|---|---|---|---|---|---|
+| labels, 2026-09-09 | 206 | 872 | 374 | 1,238 | 62,913 |
+| labels, 2026-11-04 | 30 | 500 | 385 | 1,101 | 1,812 |
+| gated sample, 2026-10-27 | 512 | 3,072 | 1,287 | 3,941 | 62,914 |
+| gated sample, 2026-11-04 | 20 | 1,178 | 950 | 2,922 | 2,923 |
+
+- **No drift.** The labels' median has not moved. Saved usage names no model,
+  so this compares draws, not models.
+- **The sample is harder:** its median is about three times the labels'.
+- **The mean is set by a runaway tail.** 11 of 512 calls (2.1%) ran to about
+  62,910 thinking tokens, taking about 200 s each, and cost $6.25 of the $15.08.
+  One of the 206 label calls did the same. Without those calls the sample costs
+  $0.0176 a call, or $6.24 per 354 calls, and the labels $2.46.
+- The 20 and 30 model reruns hit no runaway, so they cannot say how often one
+  occurs. Budget a full collection run from $6–10 per 354 calls.
+- The 2026-09-01 rebuild's ~$11.5 is an estimate from August's per-call usage,
+  not a bill, so it says nothing about what those calls cost.
 
 ## Two more questions
 

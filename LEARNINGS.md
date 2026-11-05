@@ -372,7 +372,8 @@ notes at the bottom are amended in place. Open work is tracked separately in
   — embed-cache512's ensemble over the 219 labels and a 1,000-model unlabelled
   sample, STLLibrary. **Fusing `0.35 · log(p + 0.01)` into the ensemble scores
   188–191/201 over ten Jev runs, mean 189.4**, against override's 186.3 and
-  gemini's 189, at about 1/150th of gemini's $10.43 per run on hard models. **On
+  gemini's 189, at $0.07 per run against gemini's $6–10 on hard models, where 2.1% of calls
+  run away to ~62,900 thinking tokens and take 41% of the bill. **On
   the blind split it loses**: of 24 labelled disagreements, 16 have no upright,
   and on the other 8 gemini is right on 4 and fused Jev on none, so gemini
   stays. Gemini and fused Jev agree on only 53% of 512 gated models, mostly
