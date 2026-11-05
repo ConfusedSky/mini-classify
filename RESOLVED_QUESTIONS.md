@@ -40,6 +40,10 @@ this is the quick "what did we decide about X" index. A question graduates here
   logprobs saturate.
   Always trust the arbiter.
   [2026-10-22 arbiter confidence](docs/learnings/2026-10-22-arbiter-confidence.md)
+- **Can Haiku 5.5 be the arbiter?** — not over gemini. On production's prompt
+  it is +2 to +4 and 185–187/201 against gemini's +6 and 189, with no gain from
+  effort, and `max` does not finish. Default unchanged.
+  [2026-11-04 Haiku 5.5 as the pose arbiter](docs/learnings/2026-11-04-haiku-5-5-as-pose-arbiter.md)
 - **Raise the contact sheet to `thumb=512`** — done; a large gain for weak
   arbiters (sonnet +10), barely moves gemini-3.5-flash.
   [2026-08-12 the 7-hour run](docs/learnings/2026-08-12-where-a-7-hour-run-went.md)

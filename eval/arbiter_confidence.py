@@ -9,7 +9,10 @@ Confidence arms:
            flash) and GLM pinned to Parasail (DeepInfra, production's pin,
            does not return them; Wafer returns a broken top-k list).
   self     the schema gains a `confidence` field the model fills in. Every
-           model. Claude only has this arm: the API exposes no logprobs.
+           model. Claude has no logprob arm: the API exposes none.
+  plain    the production prompt and schema with no confidence at all, for
+           scoring a model as production would run it. Not per-tile, whose
+           pick needs a probability.
 Presentations:
   sheet    the production contact sheet, one call, pick a numbered tile.
   solo     the six tiles as separate captioned images, numerals painted out,
@@ -19,9 +22,10 @@ Presentations:
 
   .venv/bin/python eval/arbiter_confidence.py --labels published
   .venv/bin/python eval/arbiter_confidence.py --labels gated --models claude-opus-5-5 --present tile
+  .venv/bin/python eval/arbiter_confidence.py --labels gated --models claude-haiku-5-5@high --arms plain --present sheet
   .venv/bin/python eval/arbiter_confidence.py --report-only
 
-Answers accumulate in out/arbiter_confidence-<tag>.json, keyed by model, arm
+A Claude model may carry `@<effort>`, which becomes its own cell. Answers accumulate in out/arbiter_confidence-<tag>.json, keyed by model, arm
 and presentation per stem; a rerun skips any cell answered under any tag, and
 the report merges every tag. Claude goes through the `claude` CLI on the
 subscription (OAuth, no API key), isolated from settings, tools and CLAUDE.md;
@@ -207,6 +211,7 @@ def call_claude(model, imgs, text, sch):
     """One `claude -p` turn with the images inline. `--setting-sources ''` and
     no tools keep the user's hooks, CLAUDE.md and plugins' context out of the
     judgment; `--bare` would too, but it refuses OAuth, i.e. the subscription."""
+    model, _, effort = model.partition("@")
     content = []
     for cap, png in imgs:
         if cap:
@@ -216,7 +221,8 @@ def call_claude(model, imgs, text, sch):
     msg = {"type": "user", "message": {"role": "user", "content": content + [{"type": "text", "text": text}]}}
     t0 = time.time()
     out = subprocess.run(
-        ["claude", "-p", "--model", model, "--input-format", "stream-json",
+        ["claude", "-p", "--model", model, *(["--effort", effort] if effort else []),
+         "--input-format", "stream-json",
          "--output-format", "stream-json", "--verbose", "--json-schema", json.dumps(sch),
          "--tools", "", "--setting-sources", "", "--strict-mcp-config",
          "--no-session-persistence", "--system-prompt",
@@ -309,6 +315,8 @@ def ask(model, arm, present, stem, usage):
     if arm == "logprob":
         probs = [dist[str(i)] for i in range(1, N + 1)]
         return {"pick": AX[tile - 1], "conf": probs[tile - 1], "probs": probs}
+    if arm == "plain":
+        return {"pick": AX[tile - 1], "conf": None, "probs": None}
     return {"pick": AX[tile - 1], "conf": min(1.0, max(0.0, float(a["confidence"]))), "probs": None}
 
 
@@ -336,7 +344,7 @@ def load_items(which):
 
 def cells(models, arms, presents):
     return [(m, a, p) for m in models for a in arms for p in presents
-            if a == "self" or m in LOGPROB_MODELS]
+            if a == "self" or (a == "plain" and p != "tile") or m in LOGPROB_MODELS]
 
 
 def results_file(tag):
@@ -381,7 +389,7 @@ def run(items, todo, workers, saved, path, answered):
                     if next(done) % 10 == 0:            # cheap checkpoint against a crash
                         save(saved, path)
                 print(f"  {it['stem'][:34]:34} {(r or {}).get('pick', '--'):>3} "
-                      f"{'' if r is None else format(r['conf'], '.2f'):>5} "
+                      f"{'' if r is None or r['conf'] is None else format(r['conf'], '.2f'):>5} "
                       f"gold {it['up']}  {time.time() - t0:5.0f}s", flush=True)
 
         w = min(workers, 4) if model.startswith("claude") else workers
@@ -418,21 +426,23 @@ def report(items, saved, detail):
                 ties += c.endswith("|tile") and sorted(a["probs"])[-2] >= a["conf"] - 1e-6
         if not rows:
             continue
-        right = sorted(r[f"{c}_conf"] for r in rows if r[c] == r["up"])
-        wrong = sorted(r[f"{c}_conf"] for r in rows if r[c] != r["up"])
+        hits = sum(r[c] == r["up"] for r in rows)
+        scored = [r for r in rows if r[f"{c}_conf"] is not None]
+        right = sorted(r[f"{c}_conf"] for r in scored if r[c] == r["up"])
+        wrong = sorted(r[f"{c}_conf"] for r in scored if r[c] != r["up"])
         net = sum((r[c] == r["up"]) - (r["ens"] == r["up"]) for r in rows if r["arb"])
         pipe = sum((r[c] if r["arb"] else r["ens"]) == r["up"] for r in rows)
         med = lambda s: f"{s[len(s) // 2]:.2f}" if s else "--"
         auc = auroc(right, wrong)
         us = saved["usage"].get(c) or [{"thoughts": 0, "secs": 0}]
         calls = 6 if c.endswith("|tile") else 1
-        print(f"{c:40} {len(rows):>4} {len(right):>4}/{len(rows):<3} {net:>+4} "
+        print(f"{c:40} {len(rows):>4} {hits:>4}/{len(rows):<3} {net:>+4} "
               f"{pipe:>5}/{len(rows):<3} {med(right):>6} {med(wrong):>6} "
               f"{'--' if auc is None else format(auc, '.2f'):>6} {ties:>5} "
               f"{calls * sum(u['thoughts'] for u in us) / len(us):>6.0f} "
               f"{calls * sum(u['secs'] for u in us) / len(us):>5.1f}")
-        if detail:
-            decisions_vlm.calibration(rows, c)
+        if detail and scored:
+            decisions_vlm.calibration(scored, c)
     print("\nacc: standalone on models it answered. net: rescued - broke as the arbiter "
           "tier, on gate-fired models.\nmed R/W: median confidence when right/wrong. "
           "ties: answers whose top probability was shared, so the pick was list order.\n"
@@ -443,7 +453,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--labels", choices=["published", "poolable", "gated"], default="published")
     ap.add_argument("--models", default=",".join(GEMINI + [GLM] + CLAUDE))
-    ap.add_argument("--arms", default="logprob,self")
+    ap.add_argument("--arms", default="logprob,self", help="logprob, self, plain")
     ap.add_argument("--present", default="sheet,solo,tile")
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--tag", default="main",

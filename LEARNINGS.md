@@ -358,6 +358,16 @@ notes at the bottom are amended in place. Open work is tracked separately in
   per tile is worse on the 38-model pilot, and 122 s per arbitration for
   3.5-flash.
 
+- [Haiku 5.5 as the pose arbiter](docs/learnings/2026-11-04-haiku-5-5-as-pose-arbiter.md)
+  — no embedding cache read; the 201 poolable labels against embed-cache512's
+  ensemble via `pose_baseline.json` (183, 50 gated), on the 512 px sheets,
+  with production's prompt and no confidence field. **Not a replacement**: +2
+  to +4 and 185–187/201 against gemini-3.5-flash's +6 and 189, though that gap
+  is near the noise (two runs of one effort differ on 4 of 50). `low`,
+  `medium` and `high` all net +4. **`max` does not finish**: 35 calls hit the
+  300 s timeout and four models gave up, so sweeps stop at `high`. A large
+  step up from old Haiku's −4, and CLI latency is 3.6–5.7 s per call.
+
 ## Evergreen notes
 
 - [Queries and filters](docs/learnings/queries-and-filters.md) — open-set
