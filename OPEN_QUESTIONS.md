@@ -184,6 +184,12 @@ never pool `hard` into an accuracy.
   1,212 for the sheet, 5.5×. Measured with a `confidence` field in the
   schema, so the production prompt in `solo` form is unmeasured; that run,
   repeated, is what would decide it. LEARNINGS, "Arbiter confidence".
+- **Could the arbiter also say a model has no upright?** Two extra questions,
+  part and ambiguous, were asked of gemini at about $0.0065 a call. On the 24
+  blind labels gemini flagged 13 of the 16 with no upright and 3 of the 8 with
+  one. Nothing reads the answers yet. Unknown: whether that holds on a
+  draw selected on neither model's answers, and what the pipeline should do
+  with a flagged model. LEARNINGS, "Jev fused into the ensemble".
 - **Is `Floor` the new `tile9`?** `gemini-3.6-flash` and
   `gemini-3.1-pro-preview` both fail `Floor` (truth `-Z`) at both sheet sizes
   while gemini-3.5-flash gets it. Every remaining error at this tier is

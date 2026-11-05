@@ -79,6 +79,7 @@ LABELS_DIR = REPO / "labels"
 LABELS_FILE = LABELS_DIR / "up_axis_labels.json"
 PART_CLASSES_FILE = LABELS_DIR / "part_classes_by_path.json"
 TRIAGE_FILE = LABELS_DIR / "triage_by_path.json"
+ARBITER_SPLIT_FILE = LABELS_DIR / "arbiter_split.json"
 
 
 def load_triage():

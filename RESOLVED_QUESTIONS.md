@@ -34,6 +34,11 @@ this is the quick "what did we decide about X" index. A question graduates here
   is +4 and 187/201, tying GLM, against gemini's +6 and 189; it fails on the
   same shapes. Default unchanged.
   [2026-10-20 Jev as the pose arbiter](docs/learnings/2026-10-20-jev-as-pose-arbiter.md)
+- **Should Jev's probabilities feed the ensemble instead of overriding it?** —
+  not over gemini. Fused it ties gemini on the 201 poolable labels (mean 189.4
+  over ten runs against 189), but on blind labels from outside them gemini won
+  4–0 on the 8 models with an upright. Default unchanged.
+  [2026-11-04 Jev fused into the ensemble](docs/learnings/2026-11-04-jev-fused-into-the-ensemble.md)
 - **Should the arbiter only override when it is confident?** — no; neither
   token logprobs nor a self-reported confidence gains a strong arbiter more
   than one model on the 50 gated, even at a threshold fitted on them, and

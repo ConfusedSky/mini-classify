@@ -17,6 +17,7 @@ mid-session once and the same seed stopped drawing the same models.
 | `part_classes_by_path.json` | The same 148 decisions **keyed by path**, which is the one to read. |
 | `triage.json`, `triage3.json` | The raw browser exports of the model-or-part triage (247 and 66 answers), **keyed by stem**, unedited. `keep` means a model; `undefined` means a loose part. |
 | `triage_by_path.json` | The same answers **keyed by path**, resolved through the draw manifests (`draws`), plus each draw's seed and whether it was part-filtered. Six stems named two files and are listed under `ambiguous` rather than guessed. Read it through `common.load_triage()`. |
+| `arbiter_split.json` | The raw browser export of 24 blind labels from `eval/arbiter_split_page.py`, keyed by path: an axis, or `undefined` for no upright. **A sample of nothing**: these are only models where gemini and fused Jev disagreed, further selected on Jev's own part and ambiguity answers. Never pool it. |
 
 ## The sets are not interchangeable
 

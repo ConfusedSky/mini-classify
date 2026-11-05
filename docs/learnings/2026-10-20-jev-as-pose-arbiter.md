@@ -125,3 +125,4 @@ the 256 sheet, at $0.042/M input and no output charge. That is $0.07 for a
   probabilities into the ensemble instead of letting it override.
   `pose_baseline.json` stores the ensemble's pick and margin but not its
   per-axis scores, so this needs `pose_baseline.py` to save them first.
+  [Run on 2026-11-04](2026-11-04-jev-fused-into-the-ensemble.md).

@@ -1,0 +1,29 @@
+{
+ "run": "arbiter-split",
+ "picks": {
+  "Loot Studios/Panshaw Under Siege/DownloadAll_32mm/3 - Environment/TowerSiege/TowerSiege_NoSupports/32mm_TowerSiege_L.stl": "+Y",
+  "Artisan Guild/Archanists Guild/Apprentice Arcanists/Apprentice Arcanist A/Kit II (No Hood, Wand & Grimoire)/Apprentice_Grimoire_L.stl": "undefined",
+  "Loot Studios/War for Humanity/DownloadAll_32/Objects_32mm_NoSuports/ThunderLTV_32mm_UnSupported/ThunderLTV_32mm_ThunderLTV_Body.stl": "undefined",
+  "Basing/Industrial Drums & Canisters/Damaged_Propane_Tank.stl": "+Y",
+  "Artisan Guild/Slathaai of House Mora/28 Slathaai of House Mora - June 2022 AG/Hive Colossi/Hive Colossus C/Hive_Colossus_C.stl": "+Z",
+  "Loot Studios/Neon Street 3k/All_32mm/TheMachine_32mm_NoSupports/JeffMusk_32mm_NoSupports/32mm_JeffMusk_MoneyFolder.stl": "undefined",
+  "Warhammer/space smurf nightmare/body.stl": "undefined",
+  "Warhammer/old-school-cool-retired-deer-with-gun20210525-2182-1nb6ipl/old-school-cool-retired-deer-with-gun/head.stl": "+Z",
+  "Loot Studios/Fear the Eternal Embrace/DownloadAll_32mm/3- Environment/Environment_NoSupport/Crater_NoSupports/32mm_Crater.stl": "+Y",
+  "Artisan Guild/Darkness of the Lich Lord/37 Darkness of the Lich Lord - May 2022 AG/Standalone Weapons & Hands/Standalone_Draugr_Shield.stl": "undefined",
+  "Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Baal's Demonhound Riders/Baal's Demonhound Rider A/Kit I (Bard Rider)/Trickster_Lute_L.stl": "undefined",
+  "Warhammer/little-dnaborrowers-kit20210724-29228-fsf3ga/little-dnaborrowers-kit/torso.stl": "undefined",
+  "Artisan Guild/City of Intrigues/40 City of Intrigues (Complete)/Mezzalfiend Tricksters/Mezzalfiend Trickster E/Kit II (Bard)/Trickster_Lute_(lady)_L.stl": "undefined",
+  "Warhammer/Stroganoff/epic-scale-mars-warlord-titan/Shin_Right_Leaning_In.stl": "undefined",
+  "Artisan Guild/Order of the Labyrinth/34 Order of the Labyrinth - February 2022 AG/Minoc Standalone Weapons/Standalone_Tavros_Maul (repaired).stl": "undefined",
+  "Warhammer/Stroganoff/epic-scale-mars-warlord-titan/Shin_Leaning_straight_backward.stl": "undefined",
+  "Loot Studios/Eye of the Watcher/All_32mm/Enemies_32mm_NoSupports/LampreyWatcher_32mm_NoSupports/32mm_LampreyWatcher.stl": "+Y",
+  "Warhammer/statistical cat/torso.stl": "undefined",
+  "Loot Studios/Panshaw Under Siege/DownloadAll_32mm/4 - NPCs/Ashgex/Ashgex_32mm_NoSupports/32mm_Ashgex_Body.stl": "undefined",
+  "Loot Studios/Snowy Mountain Summit/DownloadAll_32mm/2 - Enemies/IceGolem/IceGolem_32mm_NoSupports/32mm_IceGolem.stl": "+Y",
+  "DM Stash/DM Stash Jan '22 Brawn & Brains STLs - Unsupported/Mammoth Rider - Unsupported/Unsupported/Mammoth Rider/32_Unsupported_Mammoth_Head.stl": "undefined",
+  "Artisan Guild/Archanists Guild/Standalone Weapons and Hands/Casting_Skull.stl": "undefined",
+  "Loot Studios/Nuclear Wasteland/DownloadAll_32mm/4- Environment/Environment_NoSupport/SonicCrusher_NoSupports/32mm_SonicCrusher_Chassis_Back.stl": "undefined",
+  "Loot Studios/Nuclear Wasteland/DownloadAll_32mm/2- Enemies/Enemies_32mm_NoSupports/Enemies_32mm_NoSupports/CyclingRaider_32mm_NoSupports/32mm_CyclingRaider.stl": "+Z"
+ }
+}

@@ -3,8 +3,9 @@
     python pose_baseline.py                       # every label in the file
     python pose_baseline.py --set holdout
 
-Writes `{stem: {geometry, ensemble, margin, needs_arbiter}}` — axis *names*,
-the margin, and whether the gate fires — to `OUT/pose_baseline.json`, which
+Writes `{stem: {geometry, ensemble, margin, needs_arbiter, geo_scores,
+siglip_scores}}` — axis *names*, the margin, whether the gate fires, and the
+two per-axis vectors `pose.combine_up` fuses — to `OUT/pose_baseline.json`, which
 `gemini_vlm.py --baselines` reads in place of the published 2026-08-12 file.
 
 It exists because that published file covers 44 models and the arbiter
@@ -71,6 +72,8 @@ def main() -> None:
         out[stem] = {"geometry": AX[int(gi)], "ensemble": AX[int(idx)],
                      "siglip": AX[int(sig.argmax())],
                      "margin": round(float(margin), 4), "needs_arbiter": bool(gate),
+                     "geo_scores": [float(x) for x in geo_scores],
+                     "siglip_scores": [float(x) for x in sig],
                      "set": l["set"], "gold": l["up"]}
 
     path = OUT / args.out

@@ -368,6 +368,19 @@ notes at the bottom are amended in place. Open work is tracked separately in
   300 s timeout and four models gave up, so sweeps stop at `high`. A large
   step up from old Haiku's −4, and CLI latency is 3.6–5.7 s per call.
 
+- [Jev fused into the ensemble](docs/learnings/2026-11-04-jev-fused-into-the-ensemble.md)
+  — embed-cache512's ensemble over the 219 labels and a 1,000-model unlabelled
+  sample, STLLibrary. **Fusing `0.35 · log(p + 0.01)` into the ensemble scores
+  188–191/201 over ten Jev runs, mean 189.4**, against override's 186.3 and
+  gemini's 189, at about 1/150th of gemini's $10.43 per run on hard models. **On
+  the blind split it loses**: of 24 labelled disagreements, 16 have no upright,
+  and on the other 8 gemini is right on 4 and fused Jev on none, so gemini
+  stays. Gemini and fused Jev agree on only 53% of 512 gated models, mostly
+  because 76–95% of the disagreements are parts. Asked directly, gemini catches
+  27/27 triaged parts at 17% false alarms, and Jev 25/27 at 13% with a 0.35
+  cutoff; Jev's ambiguity answer needs 0.60–0.75, not 0.5. Confidence sd per
+  model is 0.022, and 19 of 219 answers change over ten runs.
+
 ## Evergreen notes
 
 - [Queries and filters](docs/learnings/queries-and-filters.md) — open-set
